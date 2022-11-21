@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Post-processing data &mdash; STREAmS 2.0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Gallery of STREAmS results" href="gallery.html" />
+    <link rel="prev" title="Understading output files" href="output.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> STREAmS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
+<li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS flow cases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input.html">Setting input file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understading output files</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Post-processing data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#plotting-3d-data">Plotting 3D data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#post-processing-flow-statistics">Post-processing flow statistics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#channel-flow">Channel flow</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#channinfo-dat">channinfo.dat</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#channstat-prof">channstat.prof</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#boundary-layer">Boundary layer</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#cf-dat">cf.dat</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#stat-nnnnn-dat">stat_nnnnn.dat</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">STREAmS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">Post-processing data</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/manual/postprocessing.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="post-processing-data">
+<h1>Post-processing data<a class="headerlink" href="#post-processing-data" title="Permalink to this heading"></a></h1>
+<section id="plotting-3d-data">
+<h2>Plotting 3D data<a class="headerlink" href="#plotting-3d-data" title="Permalink to this heading"></a></h2>
+<p>Three dimensional flow fields are stored in Plot3D and/or VTK format and can be visualized
+using Paraview, or Tecplot.</p>
+</section>
+<section id="post-processing-flow-statistics">
+<h2>Post-processing flow statistics<a class="headerlink" href="#post-processing-flow-statistics" title="Permalink to this heading"></a></h2>
+<p>Mean flow statics are stored in raw format in the file <cite>stat.bin</cite>.
+To post-process this, use the post-processing program available in the folder <code class="docutils literal notranslate"><span class="pre">tools/postpro</span></code>.
+Compile the tool by typing,</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>make
+</pre></div>
+</div>
+<p>This will produce the executable <cite>postpro.exe</cite>.</p>
+<p>Different files will be printed depending on the flow case that has been run.</p>
+<section id="channel-flow">
+<h3>Channel flow<a class="headerlink" href="#channel-flow" title="Permalink to this heading"></a></h3>
+<p>Copy the executable <cite>postpro.exe</cite> to the case folder you want to post-process and run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>./postpro.exe
+</pre></div>
+</div>
+<p>This will print the post-processed flow statistics in the folder <code class="docutils literal notranslate"><span class="pre">POSTPRO/</span></code>,
+which will contain the files <code class="docutils literal notranslate"><span class="pre">channinfo.dat</span></code> and <code class="docutils literal notranslate"><span class="pre">channstat.prof</span></code></p>
+<section id="channinfo-dat">
+<h4>channinfo.dat<a class="headerlink" href="#channinfo-dat" title="Permalink to this heading"></a></h4>
+<p>The file <code class="docutils literal notranslate"><span class="pre">channinfo.dat</span></code> contains</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(Re_\tau=u_\tau h/\nu_w\)</span>, friction Reynolds number, where <span class="math notranslate nohighlight">\(h\)</span> is the channel half width and <span class="math notranslate nohighlight">\(\nu_w\)</span> the kinematic viscosity at the wall</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho}_w\)</span> mean wall density</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_\tau/u_b\)</span>, ratio between friction and bulk flow velocity</p></li>
+<li><p><span class="math notranslate nohighlight">\(C_f=2\overline{\tau}_w/(\rho_b u_b^2)\)</span> skin-friction coefficient based on the mean wall shear stress, bulk flow velocity and bulk fluid density</p></li>
+</ul>
+</section>
+<section id="channstat-prof">
+<h4>channstat.prof<a class="headerlink" href="#channstat-prof" title="Permalink to this heading"></a></h4>
+<p>The file <code class="docutils literal notranslate"><span class="pre">channstat.prof</span></code> contains mean profiles of channel flow in the following format:</p>
+<ol class="arabic simple">
+<li><p><span class="math notranslate nohighlight">\(y/h,\quad\)</span> wall-normal coordinate normalized with the channel half width</p></li>
+<li><p><span class="math notranslate nohighlight">\(y^+,\quad\)</span> wall-normal coordinate in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{TL}^+,\quad\)</span> wall-normal coordinate transformed according to Trettel and Larsson [???] in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\widetilde{u}/u_b,\quad\)</span> mean streamwise velocity normalized by the bulk flow velocity</p></li>
+<li><p><span class="math notranslate nohighlight">\(u^+,\quad\)</span> mean streamwise velocity in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{VD}^+,\quad\)</span> mean streamwise velocity transformed according to van Driest [???] in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{TL}^+,\quad\)</span> mean streamwise velocity transformed according to Trettel &amp; Larsson [???] in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho}/\overline{\rho}_w,\quad\)</span> mean density normalized by the mean wall density</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{11}/\tau_w,\quad\)</span> normal Reynolds stress component 11, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{22}/\tau_w,\quad\)</span> normal Reynolds stress component 22, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{33}/\tau_w,\quad\)</span> normal Reynolds stress component 33, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{12}/\tau_w,\quad\)</span> Reynolds shear stress component 12, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{T}/T_w,\quad\)</span> mean temperature normalized by the wall temperature</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho_w}/\rho_w,\quad\)</span> mean density normalized by wall density</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{T^{'2}}/T_w^2,\quad\)</span> temperature fluctuations normalized by the wall temperature</p></li>
+<li><p><span class="math notranslate nohighlight">\((\overline{T}-T_w)/T_\tau,\quad\)</span> mean temperature in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{T^{'2}}/T_\tau^2,\quad\)</span> temperature fluctuations in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{V}^+,\quad\)</span> wall-normal coordinate transformed according to Volpiani et al. [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{V}^+,\quad\)</span> mean streamwise velocity transformed according to Volpiani et al. [???], in viscous units</p></li>
+</ol>
+</section>
+</section>
+<section id="boundary-layer">
+<h3>Boundary layer<a class="headerlink" href="#boundary-layer" title="Permalink to this heading"></a></h3>
+<p>Copy the executable <cite>postpro.exe</cite> to the case folder you want to post-process.
+Create an ASCII file named <code class="docutils literal notranslate"><span class="pre">bl_profiles.dat</span></code>. The file should contain two lines: report the number
+of profiles you want to extract on the first line, and the corresponding indices of the <cite>x</cite> coordinate on the second line.
+For instance, the following file</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">2</span>
+<span class="go">500 1000</span>
+</pre></div>
+</div>
+<p>will extract boundary layer statistics at two locations, corresponding to locations <span class="math notranslate nohighlight">\(x_{i=500}\)</span> and <span class="math notranslate nohighlight">\(x_{i=1000}\)</span>.</p>
+<p>Run the post-processing tool by typing:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>./postpro.exe
+</pre></div>
+</div>
+<p>The post-processing routine will create the folder <code class="docutils literal notranslate"><span class="pre">POSTPRO</span></code>, containing the files <code class="docutils literal notranslate"><span class="pre">cf.dat</span></code> and <code class="docutils literal notranslate"><span class="pre">stat_nnnnn.dat</span></code>,
+where <code class="docutils literal notranslate"><span class="pre">nnnnn</span></code> is the number of profiles.</p>
+<section id="cf-dat">
+<h4>cf.dat<a class="headerlink" href="#cf-dat" title="Permalink to this heading"></a></h4>
+<p>The file <code class="docutils literal notranslate"><span class="pre">cf.dat</span></code> contains the boundary layer characteristics as a function of the streamwise direction:</p>
+<ol class="arabic simple">
+<li><p><span class="math notranslate nohighlight">\(x/\delta_0,\quad\)</span> streamwise coordinate normalized by inflow boundary layer thickness</p></li>
+<li><p><span class="math notranslate nohighlight">\(Cf=\overline{\tau}_w/(\rho_w U_\infty^2),\quad\)</span> skin friction coefficient</p></li>
+<li><p><span class="math notranslate nohighlight">\(Re_\tau=\delta_{99}/\delta_v,\quad\)</span> friction Reynolds number</p></li>
+<li><p><span class="math notranslate nohighlight">\(H,\quad\)</span> shape factor</p></li>
+<li><p><span class="math notranslate nohighlight">\(H_{inc},\quad\)</span> incompressible shape factor</p></li>
+<li><p><span class="math notranslate nohighlight">\(\delta_{99},\quad\)</span> boundary layer thickness</p></li>
+<li><p><span class="math notranslate nohighlight">\(\delta^*,\quad\)</span> displacement thickness</p></li>
+<li><p><span class="math notranslate nohighlight">\(\theta^*,\quad\)</span> momentum thickness</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_\tau/U_\infty,\quad\)</span> friction velocity normalized by free stream velocity</p></li>
+<li><p><span class="math notranslate nohighlight">\({Re_\theta}_{inc}=\rho_\infty U_\infty\theta_{inc}/\mu_\infty,\quad\)</span> Reynolds number based on incompressible momentum thickness</p></li>
+<li><p><span class="math notranslate nohighlight">\({C_f}_{inc},\quad\)</span> Skin friction coefficient transformed according to van Driest II transformation [???]</p></li>
+<li><p><span class="math notranslate nohighlight">\({Re_\theta}=\rho_\infty u_\infty\theta/\mu_w\quad\)</span>, Reynolds number based on momentum thickness, and viscosity at the wall</p></li>
+<li><p><span class="math notranslate nohighlight">\(p_{rms}/\tau_w\)</span> Pressure rms at the wall in viscous units</p></li>
+</ol>
+</section>
+<section id="stat-nnnnn-dat">
+<h4>stat_nnnnn.dat<a class="headerlink" href="#stat-nnnnn-dat" title="Permalink to this heading"></a></h4>
+<p>The files <code class="docutils literal notranslate"><span class="pre">stat_nnnnn.dat</span></code> contain the boundary layer profiles in the following format:</p>
+<ol class="arabic simple">
+<li><p><span class="math notranslate nohighlight">\(y/\delta_{99},\quad\)</span> wall-distance normalized by local boundary layer thickness</p></li>
+<li><p><span class="math notranslate nohighlight">\(y^+,\quad\)</span> wall-distance in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\widetilde{u}^+,\quad\)</span> streamwise velocity in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{VD}^+,\quad\)</span> streamwise velocity transformed according to van Driest [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{11}/\tau_w,\quad\)</span> normal Reynolds stress component 11, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{22}/\tau_w,\quad\)</span> normal Reynolds stress component 22, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{33}/\tau_w,\quad\)</span> normal Reynolds stress component 33, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{12}/\tau_w,\quad\)</span> Reynolds shear stress component 12, scaled by density, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho}/\overline{\rho}_w,\quad\)</span> mean density scaled by the wall density</p></li>
+<li><p><span class="math notranslate nohighlight">\(\overline{p^{'2}}/\tau_w,\quad\)</span> pressure fluctuations in wall units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{TL}^+,\quad\)</span> wall-normal coordinate transformed according to Trettel and Larsson [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{TL}^+,\quad\)</span> mean streamwise velocity transformed according to Trettel and Larsson [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{V}^+,\quad\)</span> wall-normal coordinate transformed according to Volpiani et al. [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{V}^+,\quad\)</span> mean streamwise velocity transformed according to Volpiani et al. [???], in viscous units</p></li>
+</ol>
+</section>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="output.html" class="btn btn-neutral float-left" title="Understading output files" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="gallery.html" class="btn btn-neutral float-right" title="Gallery of STREAmS results" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matteo Bernardini, Davide Modesti, Francesco Salvadore, Segio Pirozzoli.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

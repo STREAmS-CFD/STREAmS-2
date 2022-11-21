@@ -1,0 +1,208 @@
+=========================================
+Converting STREAmS for different purposes
+=========================================
+
+PyconvertSTREAmS is a converter tool written in Python3 to convert the main development branch of STEAmS solver to different backends. The converter also supports the removal of
+external plugins. The converter only requires Python3 and uses native Python libraries for the implementation. To look at the default options of the converter, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py -h
+
+   usage: pyconvertstreams.py [-h] {hip,cpu,ext} ...
+
+   PyconvertSTREAmS: STREAmS CUDA Fortran to other backends
+   
+   positional arguments:
+     {hip,cpu,ext}  Sub-commands help
+       hip          Convert to hipfort
+       cpu          Convert to CPU code
+       ext          Remove added plugins
+   
+   options:
+     -h, --help     show this help message and exit
+   
+   See '<command> --help' to read about a specific sub-command.
+
+-------------------------------------
+File structure
+-------------------------------------
+
+Below tree represents the file organisation of the converter. pyconvertstreams.py contains the main program and utils.py has common utility functions used in the code. The other three modes are
+separated into their directories.
+
+|  ├── README.md
+|  ├── cpu
+|  │   └── cpu.py
+|  ├── external
+|  │   ├── external_libraries.py
+|  │   └── external_vars_procedures.json
+|  ├── hipfort
+|  │   ├── debug_kernels.json
+|  │   ├── gpu_vars.json
+|  │   ├── hipfort.py
+|  │   ├── hipfort_utils.py
+|  │   ├── interface_wrapper.py
+|  │   ├── kernel_extract.py
+|  │   └── kernels.json
+|  ├── pyconvertstreams.py
+|  └── utils.py
+
+
+-------------------------------------
+Conversion modes
+-------------------------------------
+
+The converter currently supports three modes:
+
+* :ref:`Hipfort <hipfortl>`
+* :ref:`CPU <cpul>`
+* :ref:`Ext <extl>`
+
+^^^^^^^
+Hipfort
+^^^^^^^
+.. _hipfortl:
+
+This mode converts STREAmS CUDA Fortran version to Hipfort version. To look into the avilable options, run:
+
+bla bla
+bla bla
+
+^^^^^^^
+CPU
+^^^^^^^
+.. _cpul:
+
+This mode converts STREAmS CUDA Fortran version to CPU version. To look into the avilable options, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py cpu -h
+   
+   usage: pyconvertstreams.py cpu [-h] [-i INPUT]
+
+   options:
+     -h, --help            show this help message and exit
+     -i INPUT, --input INPUT
+                           Input code folder (default: ../../code/)   
+
+
+
+&&&&&&&&&
+Work flow
+&&&&&&&&&
+
+1. Go to ``tools/streams-convert`` directory. Always run from here.
+2. Run the code in cpu mode. Find examples :ref:`here <cpuex>`.
+3. By default, This will create the CPU code in ``code/`` instead ``code_ext``. Read :ref:`here <extwf>` to know more about ``code_ext``
+
+.. Note::
+   In this mode, both input and output path are the same locations. For example, if you want to convert the full STREAmS code (including ibm/insitu) from ``code/``, you run
+   this in default mode and the output will also be in ``code/``. 
+
+&&&&&&&&
+Examples
+&&&&&&&&
+.. _cpuex:
+
+
+1. To obtain STREAmS CPU version in ``code/``, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py cpu
+
+2. To obtain STREAmS CPU without ibm and insitu, run:
+
+  * First generate :ref:`ibm/insitu conversion <extex>`
+  * After the generation of ``code_ext/``, run:
+
+  .. code-block:: console
+
+    $ python3 pyconvertstreams.py cpu -i ../../code_ext/
+
+^^^^^^^
+Ext
+^^^^^^^
+.. _extl:
+
+This mode currently supports the removal IBM, Insitu or both from the code. To look into the avilable options, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py ext -h
+
+   usage: pyconvertstreams.py ext [-h] [-i INPUT] [-o OUTPUT] [-l] -m {ibm,insitu} [{ibm,insitu} ...]
+
+   options:
+     -h, --help            show this help message and exit
+     -i INPUT, --input INPUT
+                           Input code folder (default: ../../code/)
+     -o OUTPUT, --output OUTPUT
+                           Path to output converted files (default: ../../code_ext/)
+     -l, --log             Log all the changes (default: False)
+   
+   required arguments:
+     -m {ibm,insitu} [{ibm,insitu} ...], --mode {ibm,insitu} [{ibm,insitu} ...]
+                           Specify the plugins (default: None)
+
+&&&&&&&&&
+Work flow
+&&&&&&&&&
+
+1. Go to ``tools/streams-convert`` directory. Always run from here.
+2. Prepare the input file ``external/external_vars_procedures.json``. See :ref:`here <extinp>`.
+3. Run the code in ext mode. Find examples :ref:`here <extex>`.
+4. This will create a copy of ``code/`` directory called the ``code_ext``.
+
+.. _extwf:
+
+.. Note::
+  The directory code_ext should be removed everytime you rerun the converter. This is to make sure that we get a fresh copy of the original code everytime and to avoid any overwriting.
+  Eventhough there is an option to specify both input/output directory, it is recommended to use the default values. 
+
+5. There is an option to log the process. This will generate a log file (``streams-convert/log_external_data.json``).
+
+&&&&&&&&&&
+Input file
+&&&&&&&&&&
+.. _extinp:
+
+The input values can be found in ``external/external_vars_procedures.json``. Generally, the input file will remain unchanged. However, if there are any new procedure additions, the values must be 
+updated here. The input file is shown below:
+
+.. literalinclude:: ../../../tools/streams-convert/external/external_vars_procedures.json
+   :language: json
+   :linenos:
+   :caption: Input file for external conversions
+
+Currently, it can handle only the ``singleideal`` equations which is specified in line 2. For this equation, we have two removal modes. In the first, IBM mode (line 4) is specified.
+For this, three files are required: ``singleideal.F90`` (line 6), ``singleideal_gpu.F90`` (line 10) and ``kernels_gpu.F90`` (line 14). For each file, we specify the corresponding ``procedures``.
+This information must be updated as and when there is a change in the main branch. There is an optional fourth value, ``skip_vars``. This is needed to specify if any variables should be retained 
+after the conversion. This can be seen used for the insitu input where we specify ``time_is_freezed`` (line 34) which is required even if insitu is not enabled. Similar inputs are provided for insitu
+removal (lines 20-34).
+
+&&&&&&&&
+Examples
+&&&&&&&&
+.. _extex:
+
+1. To obtain STREAmS without ibm, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py ext -m ibm
+
+2. To obtain STREAmS without ibm and insitu, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py ext -m ibm insitu
+
+3. To obtain STREAmS without insitu and log the removal, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py ext -m insitu -l
+

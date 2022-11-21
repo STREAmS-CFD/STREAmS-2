@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setting input file &mdash; STREAmS 2.0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Understading output files" href="output.html" />
+    <link rel="prev" title="STREAmS flow cases" href="flow_cases.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> STREAmS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
+<li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS flow cases</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Setting input file</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#file-structure-of-singleideal-ini">File structure of <cite>singleideal.ini</cite></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#grid">[grid]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mpi">[mpi]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bc">[bc]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#controls">[controls]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#numerics">[numerics]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#flow">[flow]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fluid">[fluid]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#output">[output]</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understading output files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">STREAmS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">Setting input file</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/manual/input.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="setting-input-file">
+<h1>Setting input file<a class="headerlink" href="#setting-input-file" title="Permalink to this heading"></a></h1>
+<p id="inputfile">Here we provide an explanation of the various input parameters that can be edited for a typical STREAmS run.
+All the parameters are reported in a single file, named <cite>singleideal.ini</cite>, organized in different sections and using
+the classical .ini format. Some ready-to-use input examples are provided in the folder <code class="docutils literal notranslate"><span class="pre">examples</span></code>.</p>
+<section id="file-structure-of-singleideal-ini">
+<h2>File structure of <cite>singleideal.ini</cite><a class="headerlink" href="#file-structure-of-singleideal-ini" title="Permalink to this heading"></a></h2>
+<section id="grid">
+<h3>[grid]<a class="headerlink" href="#grid" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify parameters to define the computational domain and its discretization.
+When the grid is directly generated in STREAmS, nodes in the x and z directions are always equally spaced.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">domain_size_x</span></code> =&gt; real, domain size in x direction</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">domain_size_y</span></code> =&gt; real, domain size in y direction</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">domain_size_z</span></code> =&gt; real, domain size in z direction</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nxmax</span></code>         =&gt; integer, total number of grid nodes in x direction (must be multiple of x_split)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nymax</span></code>         =&gt; integer, total number of grid nodes in y direction</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nzmax</span></code>         =&gt; integer, total number of grid nodes in z direction (must be multiple of z_split)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ng</span></code>            =&gt; integer, total number of ghost nodes (must be &gt;= max(<code class="docutils literal notranslate"><span class="pre">ep_order</span></code>, <code class="docutils literal notranslate"><span class="pre">visc_order</span></code>)/2)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">metrics_order</span></code> =&gt; integer, order of accuracy for metrics computation (suggested value: 2* <code class="docutils literal notranslate"><span class="pre">ng</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">grid_type</span></code>     =&gt; integer, specifiy mesh type</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>1 =&gt; Read grid from files</p></li>
+<li><p>2 =&gt; Uniform grid</p></li>
+<li><p>3 =&gt; Channel type grid</p></li>
+<li><p>4 =&gt; Boundary layer type grid</p></li>
+<li><p>5 =&gt; Shock wave boundary layer interaction type grid</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dyptarget</span></code>     =&gt; real, active for <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">3,4,5</span></code>, y spacing at the wall in wall-units</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jbgrid</span></code>        =&gt; integer, active for <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">3,4,5</span></code>, used to control transition from the inner and outer layer resolution
+(suggested values: 16,24,32)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nywr</span></code>          =&gt; integer, active for <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">4,5</span></code>, number of nodes in the well-resolved region between the wall (y=0) and y = <code class="docutils literal notranslate"><span class="pre">lywr</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lywr</span></code>          =&gt; real, active for <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">4,5</span></code>, size of the well-resolved region</p></li>
+</ul>
+<p>Notes:</p>
+<p>A non-uniform distribution of nodes is needed in the wall-normal direction (y) for the simulation of wall-bounded flows.
+In this case, STREAmS adopts the “natural” grid stretching proposed in <span id="id1">[<a class="reference internal" href="references.html#id7" title="S. Pirozzoli and P. Orlandi. Natural grid stretching for DNS of wall-bounded flows. Journal of Computational Physics, 439:110408, August 2021. URL: https://doi.org/10.1016/j.jcp.2021.110408, doi:10.1016/j.jcp.2021.110408.">6</a>]</span>,
+hereinafter denoted as <cite>Pirozzoli mapping</cite> function.
+Depending on the particular flow case under investigation, the following strategies are followed:</p>
+<ul class="simple">
+<li><p>channel flow =&gt; <cite>Pirozzoli mapping</cite> function applied to distribute nodes between the two walls (located at <span class="math notranslate nohighlight">\(y = \pm 1\)</span>).
+To avoid odd behavior in the node distribution, the user shold use a total number of nodes in the wall-normal direction (<code class="docutils literal notranslate"><span class="pre">nymax</span></code>) close to
+<span class="math notranslate nohighlight">\(N_y = \frac{8}{3} \, Re_{\tau}^{3/4}\)</span></p></li>
+<li><p>boundary layer and shock boundary layer interaction =&gt; <cite>Pirozzoli mapping</cite> function applied to distribute nodes in the well-resolved region,
+between y = 0 (lower wall) and <code class="docutils literal notranslate"><span class="pre">y</span> <span class="pre">=</span> <span class="pre">lywr</span></code>, discretized with <code class="docutils literal notranslate"><span class="pre">nywr</span></code> nodes. To avoid odd behavior in the node distribution, the user should use a number of nodes in the
+well-resolved region (<code class="docutils literal notranslate"><span class="pre">nywr</span></code>) close to <span class="math notranslate nohighlight">\({N_y}_{wr} = \frac{4}{3} \, \left (Re_{\tau} \, {L_y}_{wr}\right)^{3/4}\)</span>. The remaining part of the computational
+domain (from y = <code class="docutils literal notranslate"><span class="pre">lywr</span></code> up to y = <code class="docutils literal notranslate"><span class="pre">domain_size_y</span></code>) is discretized using <code class="docutils literal notranslate"><span class="pre">nymax</span> <span class="pre">-</span> <span class="pre">nywr</span></code> grid nodes, distributed according to a geometric progression.</p></li>
+</ul>
+<p>When <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">1</span></code>, the grid is generated in pre-processing, and so the user must provide the code with 3 ASCII files named <cite>x.dat</cite>, <cite>y.dat</cite>, <cite>z.dat</cite> of size <code class="docutils literal notranslate"><span class="pre">nxmax</span></code>,
+<code class="docutils literal notranslate"><span class="pre">nymax</span></code>, <code class="docutils literal notranslate"><span class="pre">nzmax</span></code> respectively, each containing one column with the node coordinates in the corresponding Cartesian direction.</p>
+</section>
+<section id="mpi">
+<h3>[mpi]<a class="headerlink" href="#mpi" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify parameters for the MPI decomposition.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">x_split</span></code> =&gt; integer, MPI partitions in x direction</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">y_split</span></code> =&gt; integer, MPI partitions in y direction (should be always 1)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">z_split</span></code> =&gt; integer, MPI partitions in z direction</p></li>
+</ul>
+<p>Notes:</p>
+<p>The product <code class="docutils literal notranslate"><span class="pre">x_split</span> <span class="pre">*</span> <span class="pre">y_split</span> <span class="pre">*</span> <span class="pre">z_split</span></code> must be equal to the total number of MPI tasks.</p>
+</section>
+<section id="bc">
+<h3>[bc]<a class="headerlink" href="#bc" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify flags to impose boundary conditions.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">xmin</span></code>    =&gt; integer, flag for static boundary condition on side xmin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">xmax</span></code>    =&gt; integer, flag for static boundary condition on side xmax</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ymin</span></code>    =&gt; integer, flag for static boundary condition on side ymin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ymax</span></code>    =&gt; integer, flag for static boundary condition on side ymax</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zmin</span></code>    =&gt; integer, flag for static boundary condition on side zmin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zmax</span></code>    =&gt; integer, flag for static boundary condition on side zmax</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">xmin_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side xmin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">xmax_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side xmax</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ymin_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side ymin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ymax_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side ymax</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zmin_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side zmin</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">zmax_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side zmax</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">x_recyc</span></code> =&gt; real, specify recycling location in x direction</p></li>
+</ul>
+<p>Notes:</p>
+<p>The following flags can be specified for the static boundary condition:</p>
+<ul class="simple">
+<li><p>0  ==&gt; periodicity (available for all sides)</p></li>
+<li><p>1  ==&gt; free-stream (available for xmin)</p></li>
+<li><p>2  ==&gt; extrapolation (available for all sides)</p></li>
+<li><p>5  ==&gt; symmetry (available for ymin)</p></li>
+<li><p>6  ==&gt; viscous wall (available for ymin, ymax)</p></li>
+<li><p>7  ==&gt; oblique shock entering the domain (available for ymax)</p></li>
+<li><p>10 ==&gt; recycling-rescaling for turbulent inflow (available for xmin).</p></li>
+</ul>
+<p>Concerning the characteristic treatment, the following options are available for all sides:</p>
+<ul class="simple">
+<li><p>0 ==&gt; characteristic treatment is not applied</p></li>
+<li><p>1 ==&gt; pure non-reflecting</p></li>
+<li><p>2 ==&gt; relaxation, see <span id="id2">[<a class="reference internal" href="references.html#id8" title="S. Pirozzoli and T. Colonius. Generalized characteristic relaxation boundary conditions for unsteady compressible flow simulations. Journal of Computational Physics, 248:109–126, September 2013. URL: https://doi.org/10.1016/j.jcp.2013.04.021, doi:10.1016/j.jcp.2013.04.021.">5</a>]</span></p></li>
+<li><p>6 ==&gt; reflective wall</p></li>
+</ul>
+</section>
+<section id="controls">
+<h3>[controls]<a class="headerlink" href="#controls" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify parameters to control time integration and restart options.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">restart_type</span></code> =&gt; integer,  0-&gt; new run from scratch, 1-&gt; continue previous run, 2-&gt; continue previous run and statistics collection</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cfl</span></code> =&gt; real, Courant number for time step selection</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">iter_dt_recompute</span></code> =&gt; integer, active when <code class="docutils literal notranslate"><span class="pre">cfl</span> <span class="pre">&gt;</span> <span class="pre">0</span></code>, frequency (number of RK steps, i.e. time iterations) for re-computation of time step</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">num_iter</span></code> =&gt; integer, number of RK steps</p></li>
+</ul>
+<p>Notes:</p>
+<p>When <code class="docutils literal notranslate"><span class="pre">cfl</span> <span class="pre">&gt;</span> <span class="pre">0</span></code>, the Courant number is constant, and the time step is computed every <code class="docutils literal notranslate"><span class="pre">iter_dt_recompute</span></code> cycles.
+Alternatively, the time step of the simulation can be directly specified using a negative value of <code class="docutils literal notranslate"><span class="pre">cfl</span></code>.
+In the latter case, the time step is equal to abs(<code class="docutils literal notranslate"><span class="pre">cfl</span></code>).</p>
+</section>
+<section id="numerics">
+<h3>[numerics]<a class="headerlink" href="#numerics" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify parameters to control numerical methods.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ep_order</span></code> =&gt; integer, order of accuracy for the discretization of convective terms</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nkeep</span></code> =&gt; integer, KEEP(n) scheme selection (default: 0, suggested: 1 or 2) [???]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> =&gt; integer, parameter for WENO (order of accuracy is 2 * <code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> - 1) [???]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">visc_order</span></code> =&gt; integer, order of accuracy for the discretization of viscous terms</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sensor_threshold</span></code> =&gt; real, threshold value for shock sensor [???]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rk_type</span></code> =&gt; integer, specify Runge-Kutta type, 1 -&gt; WRAY RK [???].</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rand_type</span></code> =&gt; integer, specify random behavior, &lt; 0 not reproducible, &gt;=0 reproducible</p></li>
+</ul>
+<p>Notes:</p>
+<p>The discretization of the convective terms of the Navier-Stokes equations is based on the implementation of the family
+of kinetic energy and entropy preserving schemes KEEP(n), described in <span id="id3">[<a class="reference internal" href="references.html#id9" title="Y. Tamaki, Y. Kuya, and S. Kawai. Comprehensive analysis of entropy conservation property of non-dissipative schemes for compressible flows: KEEP scheme redefined. Journal of Computational Physics, 468:111494, November 2022. URL: https://doi.org/10.1016/j.jcp.2022.111494, doi:10.1016/j.jcp.2022.111494.">7</a>]</span>.
+The available orders of accuracy for <code class="docutils literal notranslate"><span class="pre">ep_order</span></code> and <code class="docutils literal notranslate"><span class="pre">visc_order</span></code> are 2,4,6,8.
+The shock capturing flux is based on the classic WENO schemes by <span id="id4">[]</span>. Admissible values for <code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> are 1,2,3,4,
+corresponding to first-, third-, fifth- and seventh-order schemes, respectively.</p>
+</section>
+<section id="flow">
+<h3>[flow]<a class="headerlink" href="#flow" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify parameters to control the flow configuration under investigation.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">flow_init</span></code> =&gt; integer, specify flow initialization</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>0  =&gt; Channel flow</p></li>
+<li><p>1  =&gt; Boundary layer (also used for SBLI)</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mach</span></code> =&gt; real, Mach number</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Reynolds</span></code> =&gt; real, Reynolds number</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">theta_wall</span></code> =&gt; real, wall-temperature condition</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">xshock_imp</span></code> =&gt; real, oblique shock impingment location</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shock_angle</span></code> =&gt; real, oblique shock angle</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">T_ref</span></code> =&gt; real, reference dimensional temperature</p></li>
+</ul>
+<p>Notes:</p>
+<p>For the channel flow configuration, the input Reynolds number is the (estimated) friction Reynolds number <span class="math notranslate nohighlight">\(Re_\tau\)</span>.
+Simulations are performed at constant flow rate. The bulk temperature <span class="math notranslate nohighlight">\(T_b\)</span> can be specified providing a value for
+<code class="docutils literal notranslate"><span class="pre">theta_wall</span></code>, defined as <span class="math notranslate nohighlight">\(\Theta = \frac{T_w - T_b}{T_r - T_b}\)</span>, where <span class="math notranslate nohighlight">\(T_r\)</span> is the recovery
+temperature based on <span class="math notranslate nohighlight">\(T_b\)</span> and the Mach number.
+When <span class="math notranslate nohighlight">\(\Theta \ge -1\)</span>, a bulk cooling term is added to the total energy equation to keep the bulk temperature constant.
+For this type of simulation, <code class="docutils literal notranslate"><span class="pre">Mach</span></code>  is the Mach number based on the bulk velocity and on the speed of sound evaluated at bulk temperature,
+see <span id="id5">[<a class="reference internal" href="references.html#id4" title="D. Modesti, S. Sathyanarayana, F. Salvadore, and M. Bernardini. Direct numerical simulation of supersonic turbulent flows over rough surfaces. Journal of Fluid Mechanics, May 2022. URL: https://doi.org/10.1017/jfm.2022.393, doi:10.1017/jfm.2022.393.">4</a>]</span>.
+Alternatively, when <span class="math notranslate nohighlight">\(\Theta &lt; -1\)</span>, the bulk temperature is not constant and is free to evolve.
+In this case, the setup is similar to that reported in <span id="id6">[<a class="reference internal" href="references.html#id5" title="D. Modesti and S. Pirozzoli. Reynolds and Mach number effects in compressible turbulent channel flow. International Journal of Heat and Fluid Flow, 59:33–49, June 2016. URL: https://doi.org/10.1016/j.ijheatfluidflow.2016.01.007, doi:10.1016/j.ijheatfluidflow.2016.01.007.">3</a>]</span>,
+with <code class="docutils literal notranslate"><span class="pre">Mach</span></code> based on the bulk velocity and on the speed of sound evaluated at wall temperature.</p>
+<p>For boundary layer and SBLI configurations, the input Reynolds number is the friction Reynolds number at the inflow station <span class="math notranslate nohighlight">\(Re_{\tau}\)</span>,
+whereas <code class="docutils literal notranslate"><span class="pre">Mach</span></code> is the free-stream Mach number. Moreover, in this case <span class="math notranslate nohighlight">\(\Theta = \frac{T_w - T_{\infty}}{T_r - T_{\infty}}\)</span>,
+where <span class="math notranslate nohighlight">\(T_r\)</span> is the recovery temperature based on the free-stream temperature <span class="math notranslate nohighlight">\(T_{\infty}\)</span> and Mach number.</p>
+</section>
+<section id="fluid">
+<h3>[fluid]<a class="headerlink" href="#fluid" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify fluid properties.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">gam</span></code> =&gt; real, specific heat ratio (for calorically-perfect gases)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Prandtl</span></code> =&gt; real, (molecular) Prandtl number</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">visc_model</span></code> =&gt; integer, viscosity-temperature relation</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>0  =&gt; Inviscid flow</p></li>
+<li><p>1  =&gt; Power law</p></li>
+<li><p>2  =&gt; Sutherland law</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">vt_exp</span></code> =&gt; real, exponent for power law viscosity-temperature relation</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">s_suth</span></code> =&gt; real, Sutherland constant (dimensional temperature value, 110.4 K for air)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">calorically_perfect</span></code> =&gt; integer, flag to specify perfect gas properties</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>0  =&gt; thermally perfect gas, variable specific heats</p></li>
+<li><p>1  =&gt; calorically perfect gas, constant specific heats</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">indx_cp_l</span></code>, integer, exponent low limit of <span class="math notranslate nohighlight">\(C_p (T)\)</span> polynomial</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">indx_cp_r</span></code>, integer, exponent high limit of <span class="math notranslate nohighlight">\(C_p (T)\)</span> polynomial</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cp_coeff</span></code>, real, list of coefficients for <span class="math notranslate nohighlight">\(C_p (T)\)</span> polynomial (from lowest to highest power), see <span id="id7">[<a class="reference internal" href="references.html#id10" title="B. J. McBride, M. J. Zehe, and S. Gordon. NASA Glenn coefficients for calculating thermodynamic properties of individual species. NASA/TP 211556, NASA, 2002.">2</a>]</span>.
+If <span class="math notranslate nohighlight">\(T^*\)</span> is the dimensional temperature, the dimensional specific heat at constant pressure is expressed as</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[C_p^* = \textnormal{cp_coeff}(0) + \sum_{i = \textnormal{indx_cp_l}}^\textnormal{indx_cp_r} \textnormal{cp_coeff}(i) \cdot \left({T^*}\right)^i\]</div>
+</section>
+<section id="output">
+<h3>[output]<a class="headerlink" href="#output" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify parameters to control the solver output.
+Frequencies are indicated in terms of number of cycles, i.e. RK steps or time iterations.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">print_control</span></code> =&gt; integer, frequency for printing output file progress.out</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dtsave_restart</span></code> =&gt; real, frequency for saving restart files</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dtsave</span></code>  =&gt; real, frequency for saving plot3d and vtk files</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dtstat</span></code>  =&gt; real, frequency for computing statistics (2D and 3D)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dtslice</span></code> =&gt; real, frequency for writing slices</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enable_stat_3d</span></code> =&gt; integer, enable computation of 3D statistics (0 -&gt; No, 1 -&gt; Yes)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enable_plot3d</span></code> =&gt; integer, enable writing of plot3d files (0 -&gt; No, 1 -&gt; Yes)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enable_vtk</span></code> =&gt; integer, enable writing of vtr files (0 -&gt; No, 1 -&gt; Yes)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">igslice</span></code> =&gt; integer, list of (global) indices for yz-slices, between 1 and <code class="docutils literal notranslate"><span class="pre">nxmax</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jgslice</span></code> =&gt; integer, list of (global) indices for xz-slices, between 1 and <code class="docutils literal notranslate"><span class="pre">nymax</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">kgslice</span></code> =&gt; integer, list of (global) indices for xy-slices, between 1 and <code class="docutils literal notranslate"><span class="pre">nzmax</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">debug</span> <span class="pre">memory</span></code> =&gt; integer, flag to activate CPU and GPU memory checks (0 -&gt; No, 1 -&gt; Yes)</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="flow_cases.html" class="btn btn-neutral float-left" title="STREAmS flow cases" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="output.html" class="btn btn-neutral float-right" title="Understading output files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matteo Bernardini, Davide Modesti, Francesco Salvadore, Segio Pirozzoli.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

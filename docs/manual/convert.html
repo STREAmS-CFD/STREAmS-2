@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Converting STREAmS for different purposes &mdash; STREAmS 2.0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> STREAmS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
+<li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS flow cases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input.html">Setting input file</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understading output files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">STREAmS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">Converting STREAmS for different purposes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/manual/convert.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="converting-streams-for-different-purposes">
+<h1>Converting STREAmS for different purposes<a class="headerlink" href="#converting-streams-for-different-purposes" title="Permalink to this heading"></a></h1>
+<p>PyconvertSTREAmS is a converter tool written in Python3 to convert the main development branch of STEAmS solver to different backends. The converter also supports the removal of
+external plugins. The converter only requires Python3 and uses native Python libraries for the implementation. To look at the default options of the converter, run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py -h
+
+<span class="go">usage: pyconvertstreams.py [-h] {hip,cpu,ext} ...</span>
+
+<span class="go">PyconvertSTREAmS: STREAmS CUDA Fortran to other backends</span>
+
+<span class="go">positional arguments:</span>
+<span class="go">  {hip,cpu,ext}  Sub-commands help</span>
+<span class="go">    hip          Convert to hipfort</span>
+<span class="go">    cpu          Convert to CPU code</span>
+<span class="go">    ext          Remove added plugins</span>
+
+<span class="go">options:</span>
+<span class="go">  -h, --help     show this help message and exit</span>
+
+<span class="go">See &#39;&lt;command&gt; --help&#39; to read about a specific sub-command.</span>
+</pre></div>
+</div>
+<section id="file-structure">
+<h2>File structure<a class="headerlink" href="#file-structure" title="Permalink to this heading"></a></h2>
+<p>Below tree represents the file organisation of the converter. pyconvertstreams.py contains the main program and utils.py has common utility functions used in the code. The other three modes are
+separated into their directories.</p>
+<div class="line-block">
+<div class="line">├── README.md</div>
+<div class="line">├── cpu</div>
+<div class="line">│   └── cpu.py</div>
+<div class="line">├── external</div>
+<div class="line">│   ├── external_libraries.py</div>
+<div class="line">│   └── external_vars_procedures.json</div>
+<div class="line">├── hipfort</div>
+<div class="line">│   ├── debug_kernels.json</div>
+<div class="line">│   ├── gpu_vars.json</div>
+<div class="line">│   ├── hipfort.py</div>
+<div class="line">│   ├── hipfort_utils.py</div>
+<div class="line">│   ├── interface_wrapper.py</div>
+<div class="line">│   ├── kernel_extract.py</div>
+<div class="line">│   └── kernels.json</div>
+<div class="line">├── pyconvertstreams.py</div>
+<div class="line">└── utils.py</div>
+</div>
+</section>
+<section id="conversion-modes">
+<h2>Conversion modes<a class="headerlink" href="#conversion-modes" title="Permalink to this heading"></a></h2>
+<p>The converter currently supports three modes:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#hipfortl"><span class="std std-ref">Hipfort</span></a></p></li>
+<li><p><a class="reference internal" href="#cpul"><span class="std std-ref">CPU</span></a></p></li>
+<li><p><a class="reference internal" href="#extl"><span class="std std-ref">Ext</span></a></p></li>
+</ul>
+<section id="hipfort">
+<h3>Hipfort<a class="headerlink" href="#hipfort" title="Permalink to this heading"></a></h3>
+<p id="hipfortl">This mode converts STREAmS CUDA Fortran version to Hipfort version. To look into the avilable options, run:</p>
+<p>bla bla
+bla bla</p>
+</section>
+<section id="cpu">
+<h3>CPU<a class="headerlink" href="#cpu" title="Permalink to this heading"></a></h3>
+<p id="cpul">This mode converts STREAmS CUDA Fortran version to CPU version. To look into the avilable options, run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py cpu -h
+
+<span class="go">usage: pyconvertstreams.py cpu [-h] [-i INPUT]</span>
+
+<span class="go">options:</span>
+<span class="go">  -h, --help            show this help message and exit</span>
+<span class="go">  -i INPUT, --input INPUT</span>
+<span class="go">                        Input code folder (default: ../../code/)</span>
+</pre></div>
+</div>
+<section id="work-flow">
+<h4>Work flow<a class="headerlink" href="#work-flow" title="Permalink to this heading"></a></h4>
+<ol class="arabic simple">
+<li><p>Go to <code class="docutils literal notranslate"><span class="pre">tools/streams-convert</span></code> directory. Always run from here.</p></li>
+<li><p>Run the code in cpu mode. Find examples <a class="reference internal" href="#cpuex"><span class="std std-ref">here</span></a>.</p></li>
+<li><p>By default, This will create the CPU code in <code class="docutils literal notranslate"><span class="pre">code/</span></code> instead <code class="docutils literal notranslate"><span class="pre">code_ext</span></code>. Read <a class="reference internal" href="#extwf"><span class="std std-ref">here</span></a> to know more about <code class="docutils literal notranslate"><span class="pre">code_ext</span></code></p></li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In this mode, both input and output path are the same locations. For example, if you want to convert the full STREAmS code (including ibm/insitu) from <code class="docutils literal notranslate"><span class="pre">code/</span></code>, you run
+this in default mode and the output will also be in <code class="docutils literal notranslate"><span class="pre">code/</span></code>.</p>
+</div>
+</section>
+<section id="examples">
+<h4>Examples<a class="headerlink" href="#examples" title="Permalink to this heading"></a></h4>
+<ol class="arabic simple" id="cpuex">
+<li><p>To obtain STREAmS CPU version in <code class="docutils literal notranslate"><span class="pre">code/</span></code>, run:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py cpu
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>To obtain STREAmS CPU without ibm and insitu, run:</p></li>
+</ol>
+<blockquote>
+<div><ul class="simple">
+<li><p>First generate <a class="reference internal" href="#extex"><span class="std std-ref">ibm/insitu conversion</span></a></p></li>
+<li><p>After the generation of <code class="docutils literal notranslate"><span class="pre">code_ext/</span></code>, run:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py cpu -i ../../code_ext/
+</pre></div>
+</div>
+</div></blockquote>
+</section>
+</section>
+<section id="ext">
+<h3>Ext<a class="headerlink" href="#ext" title="Permalink to this heading"></a></h3>
+<p id="extl">This mode currently supports the removal IBM, Insitu or both from the code. To look into the avilable options, run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -h
+
+<span class="go">usage: pyconvertstreams.py ext [-h] [-i INPUT] [-o OUTPUT] [-l] -m {ibm,insitu} [{ibm,insitu} ...]</span>
+
+<span class="go">options:</span>
+<span class="go">  -h, --help            show this help message and exit</span>
+<span class="go">  -i INPUT, --input INPUT</span>
+<span class="go">                        Input code folder (default: ../../code/)</span>
+<span class="go">  -o OUTPUT, --output OUTPUT</span>
+<span class="go">                        Path to output converted files (default: ../../code_ext/)</span>
+<span class="go">  -l, --log             Log all the changes (default: False)</span>
+
+<span class="go">required arguments:</span>
+<span class="go">  -m {ibm,insitu} [{ibm,insitu} ...], --mode {ibm,insitu} [{ibm,insitu} ...]</span>
+<span class="go">                        Specify the plugins (default: None)</span>
+</pre></div>
+</div>
+<section id="id1">
+<h4>Work flow<a class="headerlink" href="#id1" title="Permalink to this heading"></a></h4>
+<ol class="arabic simple">
+<li><p>Go to <code class="docutils literal notranslate"><span class="pre">tools/streams-convert</span></code> directory. Always run from here.</p></li>
+<li><p>Prepare the input file <code class="docutils literal notranslate"><span class="pre">external/external_vars_procedures.json</span></code>. See <a class="reference internal" href="#extinp"><span class="std std-ref">here</span></a>.</p></li>
+<li><p>Run the code in ext mode. Find examples <a class="reference internal" href="#extex"><span class="std std-ref">here</span></a>.</p></li>
+<li><p>This will create a copy of <code class="docutils literal notranslate"><span class="pre">code/</span></code> directory called the <code class="docutils literal notranslate"><span class="pre">code_ext</span></code>.</p></li>
+</ol>
+<div class="admonition note" id="extwf">
+<p class="admonition-title">Note</p>
+<p>The directory code_ext should be removed everytime you rerun the converter. This is to make sure that we get a fresh copy of the original code everytime and to avoid any overwriting.
+Eventhough there is an option to specify both input/output directory, it is recommended to use the default values.</p>
+</div>
+<ol class="arabic simple" start="5">
+<li><p>There is an option to log the process. This will generate a log file (<code class="docutils literal notranslate"><span class="pre">streams-convert/log_external_data.json</span></code>).</p></li>
+</ol>
+</section>
+<section id="input-file">
+<h4>Input file<a class="headerlink" href="#input-file" title="Permalink to this heading"></a></h4>
+<p id="extinp">The input values can be found in <code class="docutils literal notranslate"><span class="pre">external/external_vars_procedures.json</span></code>. Generally, the input file will remain unchanged. However, if there are any new procedure additions, the values must be
+updated here. The input file is shown below:</p>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">Input file for external conversions</span><a class="headerlink" href="#id3" title="Permalink to this code"></a></div>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="p">{</span><span class="w"></span>
+<span class="linenos"> 2</span><span class="w">	</span><span class="nt">&quot;singleideal&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos"> 3</span><span class="w">	</span><span class="p">{</span><span class="w"></span>
+<span class="linenos"> 4</span><span class="w">        </span><span class="nt">&quot;ibm&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos"> 5</span><span class="w">        </span><span class="p">{</span><span class="w"></span>
+<span class="linenos"> 6</span><span class="w">        	</span><span class="nt">&quot;singleideal.F90&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos"> 7</span><span class="w">        	</span><span class="p">{</span><span class="w"></span>
+<span class="linenos"> 8</span><span class="w">	        	</span><span class="nt">&quot;procedures&quot;</span><span class="p">:[</span><span class="s2">&quot;ibm_initialize&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_readoff&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_alloc&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_raytracing&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_raytracing_write&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_raytracing_read&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_compute_geo&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_read_geo&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_correct_fields&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_setup_computation&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_bc_prepare&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_coeff_setup&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="linenos"> 9</span><span class="w">          </span><span class="p">},</span><span class="w"></span>
+<span class="linenos">10</span><span class="w">	        </span><span class="nt">&quot;singleideal_gpu.F90&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos">11</span><span class="w">	        </span><span class="p">{</span><span class="w"></span>
+<span class="linenos">12</span><span class="w">	        	</span><span class="nt">&quot;procedures&quot;</span><span class="p">:[</span><span class="s2">&quot;ibm_apply&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_compute_force&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_alloc_gpu&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="linenos">13</span><span class="w">	        </span><span class="p">},</span><span class="w"></span>
+<span class="linenos">14</span><span class="w">	        </span><span class="nt">&quot;kernels_gpu.F90&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos">15</span><span class="w">	        </span><span class="p">{</span><span class="w"></span>
+<span class="linenos">16</span><span class="w">	        	</span><span class="nt">&quot;procedures&quot;</span><span class="p">:[</span><span class="s2">&quot;ibm_interpolation_cuf&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_forcing_cuf&quot;</span><span class="p">,</span><span class="s2">&quot;ibm_compute_force_cuf&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="linenos">17</span><span class="w">	        </span><span class="p">},</span><span class="w"></span>
+<span class="linenos">18</span><span class="w">          </span><span class="nt">&quot;skip_vars&quot;</span><span class="p">:[]</span><span class="w"></span>
+<span class="linenos">19</span><span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="linenos">20</span><span class="w">	    </span><span class="nt">&quot;insitu&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos">21</span><span class="w">        </span><span class="p">{</span><span class="w"></span>
+<span class="linenos">22</span><span class="w">        	</span><span class="nt">&quot;singleideal.F90&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos">23</span><span class="w">          </span><span class="p">{</span><span class="w"></span>
+<span class="linenos">24</span><span class="w">	        	</span><span class="nt">&quot;procedures&quot;</span><span class="p">:[</span><span class="s2">&quot;insitu_initialize&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_finalize&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_allocate&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_define_limits&quot;</span><span class="p">,</span><span class="s2">&quot;time_is_freezed_fun&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="linenos">25</span><span class="w">	        </span><span class="p">},</span><span class="w"></span>
+<span class="linenos">26</span><span class="w">          </span><span class="nt">&quot;singleideal_gpu.F90&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos">27</span><span class="w">          </span><span class="p">{</span><span class="w"></span>
+<span class="linenos">28</span><span class="w">	        	</span><span class="nt">&quot;procedures&quot;</span><span class="p">:[</span><span class="s2">&quot;insitu_alloc_gpu&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_coprocess&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_compute_psi&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="linenos">29</span><span class="w">	        </span><span class="p">},</span><span class="w"></span>
+<span class="linenos">30</span><span class="w">          </span><span class="nt">&quot;kernels_gpu.F90&quot;</span><span class="p">:</span><span class="w"></span>
+<span class="linenos">31</span><span class="w">          </span><span class="p">{</span><span class="w"></span>
+<span class="linenos">32</span><span class="w">	        	</span><span class="nt">&quot;procedures&quot;</span><span class="p">:[</span><span class="s2">&quot;insitu_div_cuf&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_omega_cuf&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_ducros_cuf&quot;</span><span class="p">,</span><span class="s2">&quot;insitu_swirling_kernel&quot;</span><span class="p">,</span><span class="s2">&quot;eigs33&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="linenos">33</span><span class="w">	        </span><span class="p">},</span><span class="w"></span>
+<span class="linenos">34</span><span class="w">          </span><span class="nt">&quot;skip_vars&quot;</span><span class="p">:[</span><span class="s2">&quot;time_is_freezed&quot;</span><span class="p">]</span><span class="w"></span>
+<span class="linenos">35</span><span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="linenos">36</span><span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="linenos">37</span><span class="p">}</span><span class="w"></span>
+</pre></div>
+</div>
+</div>
+<p>Currently, it can handle only the <code class="docutils literal notranslate"><span class="pre">singleideal</span></code> equations which is specified in line 2. For this equation, we have two removal modes. In the first, IBM mode (line 4) is specified.
+For this, three files are required: <code class="docutils literal notranslate"><span class="pre">singleideal.F90</span></code> (line 6), <code class="docutils literal notranslate"><span class="pre">singleideal_gpu.F90</span></code> (line 10) and <code class="docutils literal notranslate"><span class="pre">kernels_gpu.F90</span></code> (line 14). For each file, we specify the corresponding <code class="docutils literal notranslate"><span class="pre">procedures</span></code>.
+This information must be updated as and when there is a change in the main branch. There is an optional fourth value, <code class="docutils literal notranslate"><span class="pre">skip_vars</span></code>. This is needed to specify if any variables should be retained
+after the conversion. This can be seen used for the insitu input where we specify <code class="docutils literal notranslate"><span class="pre">time_is_freezed</span></code> (line 34) which is required even if insitu is not enabled. Similar inputs are provided for insitu
+removal (lines 20-34).</p>
+</section>
+<section id="id2">
+<h4>Examples<a class="headerlink" href="#id2" title="Permalink to this heading"></a></h4>
+<ol class="arabic simple" id="extex">
+<li><p>To obtain STREAmS without ibm, run:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -m ibm
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>To obtain STREAmS without ibm and insitu, run:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -m ibm insitu
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>To obtain STREAmS without insitu and log the removal, run:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -m insitu -l
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matteo Bernardini, Davide Modesti, Francesco Salvadore, Segio Pirozzoli.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

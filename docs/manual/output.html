@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Understading output files &mdash; STREAmS 2.0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Post-processing data" href="postprocessing.html" />
+    <link rel="prev" title="Setting input file" href="input.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> STREAmS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
+<li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS flow cases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input.html">Setting input file</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Understading output files</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#restart-files">Restart files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#flow-fields">Flow fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#mean-flow-statistics">Mean flow statistics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#progress-out">progress.out</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">STREAmS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">Understading output files</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/manual/output.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="understading-output-files">
+<h1>Understading output files<a class="headerlink" href="#understading-output-files" title="Permalink to this heading"></a></h1>
+<section id="restart-files">
+<h2>Restart files<a class="headerlink" href="#restart-files" title="Permalink to this heading"></a></h2>
+<div class="line-block">
+<div class="line">In order to restart a simulation, STREAmS needs at least two files, <cite>rst.bin</cite> and <cite>field_info.dat</cite>.</div>
+</div>
+<p>The file <cite>rst.bin</cite> contains the flow field of the conserved variables.
+For a single-species, ideal gas, these are <span class="math notranslate nohighlight">\(\rho\)</span>, <span class="math notranslate nohighlight">\(\rho\,u\)</span>, <span class="math notranslate nohighlight">\(\rho\,v\)</span>, <span class="math notranslate nohighlight">\(\rho\,w\)</span>, and <span class="math notranslate nohighlight">\(\rho\,E\)</span>,
+where <span class="math notranslate nohighlight">\(\rho\)</span> is the density, <span class="math notranslate nohighlight">\(u,v,w\)</span> are the streamwise, wall-normal and spanwise velocity components,
+and <span class="math notranslate nohighlight">\(E\)</span> is the total energy.</p>
+<p>The file <cite>field_info.dat</cite> contains the following information needed for restart:</p>
+<ul class="simple">
+<li><p>current step number</p></li>
+<li><p>current time</p></li>
+<li><p>running index for runtime averaging</p></li>
+<li><p>time interval from when last restart file was written</p></li>
+<li><p>time interval from when last statistics file was written</p></li>
+<li><p>time interval from when last slices where written</p></li>
+<li><p>number of flow samples that have been stored in VTK or Plot3D format</p></li>
+</ul>
+<p>The frequency with which <cite>rst.bin</cite> and <cite>field_info.dat</cite> are written is controlled by the input parameter <cite>dtsave_restart</cite>. At each restart, after reading the two files, STREAmS automatically renames them into <cite>rst.bak</cite> and <cite>field_info.bak</cite>.</p>
+</section>
+<section id="flow-fields">
+<h2>Flow fields<a class="headerlink" href="#flow-fields" title="Permalink to this heading"></a></h2>
+<p>Flow fields can be stored in standard VTK and/or Plot3D formats.
+Plot3D files are made of the mesh, stored in <cite>plot3dgrid.xyz</cite>, and the flow fields, stored
+in files <cite>flow_nnnn.q</cite>.
+VTK files are stored in <cite>flow_nnnn.vtr</cite>, which contains both the mesh and the solution.
+<cite>nnnn</cite> is the file number.
+Both Plot3d and VTK files contain the same primitive variables, namely <span class="math notranslate nohighlight">\(\rho\)</span>, <span class="math notranslate nohighlight">\(u\)</span>,
+<span class="math notranslate nohighlight">\(v\)</span>, <span class="math notranslate nohighlight">\(w\)</span> and <span class="math notranslate nohighlight">\(T\)</span>.</p>
+<p>Solutions is VTK format are printed only if the input flag <cite>enable_vtk=1</cite>, whereas
+Plot3D files are printed only if <cite>enable_plot3d=1</cite>.
+The frequency with which these solutions are stored is controlled by the variable <cite>dtsave</cite> in the input file.</p>
+</section>
+<section id="mean-flow-statistics">
+<h2>Mean flow statistics<a class="headerlink" href="#mean-flow-statistics" title="Permalink to this heading"></a></h2>
+<p>Flow statistics are collected at runtime and stored in <cite>stat.bin</cite> and <cite>stat3d.bin</cite>.
+The file <cite>stat.bin</cite> contains statistics averaged in time and in the spanwise direction, for a total of 68 variables:</p>
+<table class="colwidths-given docutils align-default" id="id1">
+<caption><span class="caption-text">Mean flow statistics</span><a class="headerlink" href="#id1" title="Permalink to this table"></a></caption>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><ol class="arabic simple">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="21">
+<li><p><span class="math notranslate nohighlight">\(\overline{\nu}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="41">
+<li><p><span class="math notranslate nohighlight">\(\overline{p u}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="61">
+<li><p><span class="math notranslate nohighlight">\(\overline{pu_x}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="2">
+<li><p><span class="math notranslate nohighlight">\(\overline{u}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="22">
+<li><p><span class="math notranslate nohighlight">\(\overline{\omega_x^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="42">
+<li><p><span class="math notranslate nohighlight">\(\overline{p v}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="62">
+<li><p><span class="math notranslate nohighlight">\(\overline{pv_y}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="3">
+<li><p><span class="math notranslate nohighlight">\(\overline{v}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="23">
+<li><p><span class="math notranslate nohighlight">\(\overline{\omega_y^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="43">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{11}}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="63">
+<li><p><span class="math notranslate nohighlight">\(\overline{pw_z}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="4">
+<li><p><span class="math notranslate nohighlight">\(\overline{w}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="24">
+<li><p><span class="math notranslate nohighlight">\(\overline{\omega_z^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="44">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{12}}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="64">
+<li><p><span class="math notranslate nohighlight">\(\overline{u_y+v_x}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="5">
+<li><p><span class="math notranslate nohighlight">\(\overline{p}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="25">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho T}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="45">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{13}}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="65">
+<li><p><span class="math notranslate nohighlight">\(\overline{(\boldsymbol\nabla\cdot\mathbf{U})^2}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="6">
+<li><p><span class="math notranslate nohighlight">\(\overline{T}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="26">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho T^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="46">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{22}}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="66">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho T^3}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="7">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="27">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="47">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{23}}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="67">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho T^4}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="8">
+<li><p><span class="math notranslate nohighlight">\(\overline{u^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="28">
+<li><p><span class="math notranslate nohighlight">\(\overline{T_0}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="48">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{33}}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="68">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho u^4}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="9">
+<li><p><span class="math notranslate nohighlight">\(\overline{v^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="29">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho T_0}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="49">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{11}u}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="69">
+<li><p><span class="math notranslate nohighlight">\(\overline{C_p}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="10">
+<li><p><span class="math notranslate nohighlight">\(\overline{w^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="30">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho u T}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="50">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{12}u}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="70">
+<li><p><span class="math notranslate nohighlight">\(\overline{\gamma}\)</span></p></li>
+</ol>
+</td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="11">
+<li><p><span class="math notranslate nohighlight">\(\overline{p^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="31">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho v T}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="51">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{21}v}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="12">
+<li><p><span class="math notranslate nohighlight">\(\overline{T^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="32">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho w T}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="52">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{22}v}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="13">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho u}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="33">
+<li><p><span class="math notranslate nohighlight">\(\overline{M}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="53">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{31}w}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="14">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho v}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="34">
+<li><p><span class="math notranslate nohighlight">\(\overline{M^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="54">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{32}w}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="15">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho w}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="35">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho u^3}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="55">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{11}v+\sigma_{21}u}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="16">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho u^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="36">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho v u^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="56">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{12}v+\sigma_{22}u}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="17">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho v^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="37">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho u v^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="57">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{11}u_x+\sigma_{12}u_y + \sigma_{13}u_z}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="18">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho w^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="38">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho v^3}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="58">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{21}v_x+\sigma_{22}v_y + \sigma_{23}v_z}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><ol class="arabic simple" start="19">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho uv}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="39">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho u w^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="59">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{31}w_x+\sigma_{32}w_y + \sigma_{33}w_z}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+<tr class="row-even"><td><ol class="arabic simple" start="20">
+<li><p><span class="math notranslate nohighlight">\(\overline{\mu}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="40">
+<li><p><span class="math notranslate nohighlight">\(\overline{\rho v w^2}\quad\quad\)</span></p></li>
+</ol>
+</td>
+<td><ol class="arabic simple" start="60">
+<li><p><span class="math notranslate nohighlight">\(\overline{\sigma_{31}v_x+\sigma_{12}(u_x+v_y) + \sigma_{22}u_y+\sigma_{13}v_z+\sigma_{23}u_z}\)</span></p></li>
+</ol>
+</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The symbol <span class="math notranslate nohighlight">\(\overline{(\cdot)}\)</span> indicates averaging in time and spanwise direction.</p>
+<p>The file stat3d.bin contains 3D flow statistics averaged in time, for a total of 14 variables:</p>
+<ol class="arabic simple">
+<li><p><span class="math notranslate nohighlight">\(\langle\rho\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho u\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho v\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho w\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle p\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho^2\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho u^2\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho v^2\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho w^2\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho u v\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho u w\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho v w\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle\rho T^2\rangle\quad\quad\)</span></p></li>
+<li><p><span class="math notranslate nohighlight">\(\langle p^2\rangle\quad\quad\)</span></p></li>
+</ol>
+<p>The output frequency of the statistics files is controlled by the input parameter <cite>dtsave_restart</cite>. If <cite>restart_type=0</cite>, <cite>stat.bin</cite> and
+<cite>stat3d.bin</cite> are read and renamed as <cite>stat.bak</cite> and <cite>stat3d.bak</cite>.</p>
+</section>
+<section id="progress-out">
+<h2>progress.out<a class="headerlink" href="#progress-out" title="Permalink to this heading"></a></h2>
+<p>The file <cite>progress.out</cite> is written and updated at runtime and contains different quantities depending on the initial flow condition.</p>
+<p>For channel flow cases, it contains the following quantities:</p>
+<ul class="simple">
+<li><p>step number</p></li>
+<li><p>time step</p></li>
+<li><p>time</p></li>
+<li><p>residual of :math: rho u</p></li>
+<li><p>pressure gradient :math:Pi</p></li>
+<li><p>bulk density</p></li>
+<li><p>bulk velocity</p></li>
+<li><p>bulk temperature</p></li>
+</ul>
+<p>For boundary layer and shock wave/boundary layer interaction flow cases, it contains the following quantities:</p>
+<ul class="simple">
+<li><p>step number</p></li>
+<li><p>time step</p></li>
+<li><p>time</p></li>
+<li><p>residual of <span class="math notranslate nohighlight">\(\rho u\)</span></p></li>
+</ul>
+<p>The same variables printed in <cite>progress.out</cite> are also printed on screen while the solver is running.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="input.html" class="btn btn-neutral float-left" title="Setting input file" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="postprocessing.html" class="btn btn-neutral float-right" title="Post-processing data" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matteo Bernardini, Davide Modesti, Francesco Salvadore, Segio Pirozzoli.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

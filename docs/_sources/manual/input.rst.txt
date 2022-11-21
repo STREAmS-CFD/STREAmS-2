@@ -1,0 +1,239 @@
+===================================
+Setting input file
+===================================
+
+.. _inputfile:
+
+Here we provide an explanation of the various input parameters that can be edited for a typical STREAmS run.
+All the parameters are reported in a single file, named `singleideal.ini`, organized in different sections and using
+the classical .ini format. Some ready-to-use input examples are provided in the folder ``examples``.
+
+-------------------------------------
+File structure of `singleideal.ini`
+-------------------------------------
+
+&&&&&&&&&&&&&&&&&&&&&
+[grid]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify parameters to define the computational domain and its discretization.
+When the grid is directly generated in STREAmS, nodes in the x and z directions are always equally spaced.
+
+- ``domain_size_x`` => real, domain size in x direction
+- ``domain_size_y`` => real, domain size in y direction
+- ``domain_size_z`` => real, domain size in z direction
+- ``nxmax``         => integer, total number of grid nodes in x direction (must be multiple of x_split)
+- ``nymax``         => integer, total number of grid nodes in y direction
+- ``nzmax``         => integer, total number of grid nodes in z direction (must be multiple of z_split)
+- ``ng``            => integer, total number of ghost nodes (must be >= max(``ep_order``, ``visc_order``)/2)
+- ``metrics_order`` => integer, order of accuracy for metrics computation (suggested value: 2* ``ng``)
+- ``grid_type``     => integer, specifiy mesh type
+
+    - 1 => Read grid from files
+    - 2 => Uniform grid
+    - 3 => Channel type grid
+    - 4 => Boundary layer type grid
+    - 5 => Shock wave boundary layer interaction type grid
+
+- ``dyptarget``     => real, active for ``grid_type = 3,4,5``, y spacing at the wall in wall-units
+- ``jbgrid``        => integer, active for ``grid_type = 3,4,5``, used to control transition from the inner and outer layer resolution 
+  (suggested values: 16,24,32)
+- ``nywr``          => integer, active for ``grid_type = 4,5``, number of nodes in the well-resolved region between the wall (y=0) and y = ``lywr``
+- ``lywr``          => real, active for ``grid_type = 4,5``, size of the well-resolved region
+ 
+Notes:
+
+
+A non-uniform distribution of nodes is needed in the wall-normal direction (y) for the simulation of wall-bounded flows.
+In this case, STREAmS adopts the "natural" grid stretching proposed in :cite:p:`Pirozzoli2021`,
+hereinafter denoted as `Pirozzoli mapping` function.
+Depending on the particular flow case under investigation, the following strategies are followed:
+
+- channel flow => `Pirozzoli mapping` function applied to distribute nodes between the two walls (located at :math:`y = \pm 1`).
+  To avoid odd behavior in the node distribution, the user shold use a total number of nodes in the wall-normal direction (``nymax``) close to
+  :math:`N_y = \frac{8}{3} \, Re_{\tau}^{3/4}`
+- boundary layer and shock boundary layer interaction => `Pirozzoli mapping` function applied to distribute nodes in the well-resolved region,
+  between y = 0 (lower wall) and ``y = lywr``, discretized with ``nywr`` nodes. To avoid odd behavior in the node distribution, the user should use a number of nodes in the
+  well-resolved region (``nywr``) close to :math:`{N_y}_{wr} = \frac{4}{3} \, \left (Re_{\tau} \, {L_y}_{wr}\right)^{3/4}`. The remaining part of the computational
+  domain (from y = ``lywr`` up to y = ``domain_size_y``) is discretized using ``nymax - nywr`` grid nodes, distributed according to a geometric progression.
+ 
+When ``grid_type = 1``, the grid is generated in pre-processing, and so the user must provide the code with 3 ASCII files named `x.dat`, `y.dat`, `z.dat` of size ``nxmax``, 
+``nymax``, ``nzmax`` respectively, each containing one column with the node coordinates in the corresponding Cartesian direction.
+
+&&&&&&&&&&&&&&&&&&&&&
+[mpi]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify parameters for the MPI decomposition.
+
+- ``x_split`` => integer, MPI partitions in x direction
+- ``y_split`` => integer, MPI partitions in y direction (should be always 1)
+- ``z_split`` => integer, MPI partitions in z direction
+
+Notes:
+
+The product ``x_split * y_split * z_split`` must be equal to the total number of MPI tasks.
+
+&&&&&&&&&&&&&&&&&&&&&
+[bc]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify flags to impose boundary conditions.
+
+- ``xmin``    => integer, flag for static boundary condition on side xmin
+- ``xmax``    => integer, flag for static boundary condition on side xmax
+- ``ymin``    => integer, flag for static boundary condition on side ymin
+- ``ymax``    => integer, flag for static boundary condition on side ymax
+- ``zmin``    => integer, flag for static boundary condition on side zmin
+- ``zmax``    => integer, flag for static boundary condition on side zmax
+- ``xmin_nr`` => integer, flag for bc treatment based on characteristic decomposition on side xmin
+- ``xmax_nr`` => integer, flag for bc treatment based on characteristic decomposition on side xmax
+- ``ymin_nr`` => integer, flag for bc treatment based on characteristic decomposition on side ymin
+- ``ymax_nr`` => integer, flag for bc treatment based on characteristic decomposition on side ymax
+- ``zmin_nr`` => integer, flag for bc treatment based on characteristic decomposition on side zmin
+- ``zmax_nr`` => integer, flag for bc treatment based on characteristic decomposition on side zmax
+- ``x_recyc`` => real, specify recycling location in x direction
+
+Notes:
+
+The following flags can be specified for the static boundary condition:
+
+- 0  ==> periodicity (available for all sides)
+- 1  ==> free-stream (available for xmin)
+- 2  ==> extrapolation (available for all sides)
+- 5  ==> symmetry (available for ymin)
+- 6  ==> viscous wall (available for ymin, ymax)
+- 7  ==> oblique shock entering the domain (available for ymax)
+- 10 ==> recycling-rescaling for turbulent inflow (available for xmin).
+
+Concerning the characteristic treatment, the following options are available for all sides:
+
+- 0 ==> characteristic treatment is not applied
+- 1 ==> pure non-reflecting
+- 2 ==> relaxation, see :cite:p:`Pirozzoli2013`
+- 6 ==> reflective wall
+
+&&&&&&&&&&&&&&&&&&&&&
+[controls]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify parameters to control time integration and restart options.
+
+- ``restart_type`` => integer,  0-> new run from scratch, 1-> continue previous run, 2-> continue previous run and statistics collection
+- ``cfl`` => real, Courant number for time step selection
+- ``iter_dt_recompute`` => integer, active when ``cfl > 0``, frequency (number of RK steps, i.e. time iterations) for re-computation of time step 
+- ``num_iter`` => integer, number of RK steps
+
+Notes:
+
+When ``cfl > 0``, the Courant number is constant, and the time step is computed every ``iter_dt_recompute`` cycles.
+Alternatively, the time step of the simulation can be directly specified using a negative value of ``cfl``.
+In the latter case, the time step is equal to abs(``cfl``).
+
+&&&&&&&&&&&&&&&&&&&&&
+[numerics]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify parameters to control numerical methods.
+
+- ``ep_order`` => integer, order of accuracy for the discretization of convective terms
+- ``nkeep`` => integer, KEEP(n) scheme selection (default: 0, suggested: 1 or 2) [???]
+- ``weno_scheme`` => integer, parameter for WENO (order of accuracy is 2 * ``weno_scheme`` - 1) [???]
+- ``visc_order`` => integer, order of accuracy for the discretization of viscous terms
+- ``sensor_threshold`` => real, threshold value for shock sensor [???]
+- ``rk_type`` => integer, specify Runge-Kutta type, 1 -> WRAY RK [???].
+- ``rand_type`` => integer, specify random behavior, < 0 not reproducible, >=0 reproducible
+
+Notes:
+
+The discretization of the convective terms of the Navier-Stokes equations is based on the implementation of the family
+of kinetic energy and entropy preserving schemes KEEP(n), described in :cite:p:`Tamaki2022`.
+The available orders of accuracy for ``ep_order`` and ``visc_order`` are 2,4,6,8.
+The shock capturing flux is based on the classic WENO schemes by :cite:p:`Shu1996`. Admissible values for ``weno_scheme`` are 1,2,3,4,
+corresponding to first-, third-, fifth- and seventh-order schemes, respectively. 
+
+&&&&&&&&&&&&&&&&&&&&&
+[flow]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify parameters to control the flow configuration under investigation.
+
+- ``flow_init`` => integer, specify flow initialization
+
+    - 0  => Channel flow
+    - 1  => Boundary layer (also used for SBLI)
+
+- ``Mach`` => real, Mach number
+- ``Reynolds`` => real, Reynolds number
+- ``theta_wall`` => real, wall-temperature condition
+- ``xshock_imp`` => real, oblique shock impingment location
+- ``shock_angle`` => real, oblique shock angle
+- ``T_ref`` => real, reference dimensional temperature
+
+Notes: 
+
+For the channel flow configuration, the input Reynolds number is the (estimated) friction Reynolds number :math:`Re_\tau`.
+Simulations are performed at constant flow rate. The bulk temperature :math:`T_b` can be specified providing a value for
+``theta_wall``, defined as :math:`\Theta = \frac{T_w - T_b}{T_r - T_b}`, where :math:`T_r` is the recovery
+temperature based on :math:`T_b` and the Mach number. 
+When :math:`\Theta \ge -1`, a bulk cooling term is added to the total energy equation to keep the bulk temperature constant.
+For this type of simulation, ``Mach``  is the Mach number based on the bulk velocity and on the speed of sound evaluated at bulk temperature,
+see :cite:p:`Modesti2022`.
+Alternatively, when :math:`\Theta < -1`, the bulk temperature is not constant and is free to evolve.
+In this case, the setup is similar to that reported in :cite:p:`Modesti2016`,
+with ``Mach`` based on the bulk velocity and on the speed of sound evaluated at wall temperature.
+
+For boundary layer and SBLI configurations, the input Reynolds number is the friction Reynolds number at the inflow station :math:`Re_{\tau}`,
+whereas ``Mach`` is the free-stream Mach number. Moreover, in this case :math:`\Theta = \frac{T_w - T_{\infty}}{T_r - T_{\infty}}`,
+where :math:`T_r` is the recovery temperature based on the free-stream temperature :math:`T_{\infty}` and Mach number.
+
+&&&&&&&&&&&&&&&&&&&&&
+[fluid]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify fluid properties.
+
+- ``gam`` => real, specific heat ratio (for calorically-perfect gases)
+- ``Prandtl`` => real, (molecular) Prandtl number
+- ``visc_model`` => integer, viscosity-temperature relation
+
+    - 0  => Inviscid flow
+    - 1  => Power law
+    - 2  => Sutherland law
+
+- ``vt_exp`` => real, exponent for power law viscosity-temperature relation
+- ``s_suth`` => real, Sutherland constant (dimensional temperature value, 110.4 K for air) 
+- ``calorically_perfect`` => integer, flag to specify perfect gas properties
+
+    - 0  => thermally perfect gas, variable specific heats
+    - 1  => calorically perfect gas, constant specific heats
+
+- ``indx_cp_l``, integer, exponent low limit of :math:`C_p (T)` polynomial
+- ``indx_cp_r``, integer, exponent high limit of :math:`C_p (T)` polynomial
+- ``cp_coeff``, real, list of coefficients for :math:`C_p (T)` polynomial (from lowest to highest power), see :cite:p:`McBride2002`.
+  If :math:`T^*` is the dimensional temperature, the dimensional specific heat at constant pressure is expressed as 
+
+.. math::
+
+   C_p^* = \textnormal{cp_coeff}(0) + \sum_{i = \textnormal{indx_cp_l}}^\textnormal{indx_cp_r} \textnormal{cp_coeff}(i) \cdot \left({T^*}\right)^i
+
+&&&&&&&&&&&&&&&&&&&&&
+[output]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify parameters to control the solver output.
+Frequencies are indicated in terms of number of cycles, i.e. RK steps or time iterations.
+
+- ``print_control`` => integer, frequency for printing output file progress.out 
+- ``dtsave_restart`` => real, frequency for saving restart files
+- ``dtsave``  => real, frequency for saving plot3d and vtk files
+- ``dtstat``  => real, frequency for computing statistics (2D and 3D)
+- ``dtslice`` => real, frequency for writing slices
+- ``enable_stat_3d`` => integer, enable computation of 3D statistics (0 -> No, 1 -> Yes)
+- ``enable_plot3d`` => integer, enable writing of plot3d files (0 -> No, 1 -> Yes)
+- ``enable_vtk`` => integer, enable writing of vtr files (0 -> No, 1 -> Yes)
+- ``igslice`` => integer, list of (global) indices for yz-slices, between 1 and ``nxmax``
+- ``jgslice`` => integer, list of (global) indices for xz-slices, between 1 and ``nymax``
+- ``kgslice`` => integer, list of (global) indices for xy-slices, between 1 and ``nzmax``
+- ``debug memory`` => integer, flag to activate CPU and GPU memory checks (0 -> No, 1 -> Yes)
+

@@ -1,0 +1,137 @@
+===================================
+Post-processing data
+===================================
+
+-------------------------------------
+Plotting 3D data
+-------------------------------------
+
+Three dimensional flow fields are stored in Plot3D and/or VTK format and can be visualized
+using Paraview, or Tecplot.
+
+-------------------------------------
+Post-processing flow statistics
+-------------------------------------
+Mean flow statics are stored in raw format in the file `stat.bin`.
+To post-process this, use the post-processing program available in the folder ``tools/postpro``.
+Compile the tool by typing,
+
+.. code-block:: console
+
+   $ make
+
+This will produce the executable `postpro.exe`. 
+
+Different files will be printed depending on the flow case that has been run. 
+
+&&&&&&&&&&&&&&&&
+Channel flow
+&&&&&&&&&&&&&&&&
+
+Copy the executable `postpro.exe` to the case folder you want to post-process and run: 
+
+.. code-block:: console
+
+   $ ./postpro.exe
+
+This will print the post-processed flow statistics in the folder ``POSTPRO/``, 
+which will contain the files ``channinfo.dat`` and ``channstat.prof``
+
+^^^^^^^^^^^^^^^^
+channinfo.dat
+^^^^^^^^^^^^^^^^
+The file ``channinfo.dat`` contains 
+
+- :math:`Re_\tau=u_\tau h/\nu_w`, friction Reynolds number, where :math:`h` is the channel half width and :math:`\nu_w` the kinematic viscosity at the wall
+- :math:`\overline{\rho}_w` mean wall density
+- :math:`u_\tau/u_b`, ratio between friction and bulk flow velocity
+- :math:`C_f=2\overline{\tau}_w/(\rho_b u_b^2)` skin-friction coefficient based on the mean wall shear stress, bulk flow velocity and bulk fluid density
+
+^^^^^^^^^^^^^^^^
+channstat.prof
+^^^^^^^^^^^^^^^^
+The file ``channstat.prof`` contains mean profiles of channel flow in the following format:
+
+1. :math:`y/h,\quad` wall-normal coordinate normalized with the channel half width
+2. :math:`y^+,\quad` wall-normal coordinate in viscous units
+3. :math:`y_{TL}^+,\quad` wall-normal coordinate transformed according to Trettel and Larsson [???] in viscous units
+4. :math:`\widetilde{u}/u_b,\quad` mean streamwise velocity normalized by the bulk flow velocity
+5. :math:`u^+,\quad` mean streamwise velocity in viscous units
+6. :math:`u_{VD}^+,\quad` mean streamwise velocity transformed according to van Driest [???] in viscous units
+7. :math:`u_{TL}^+,\quad` mean streamwise velocity transformed according to Trettel & Larsson [???] in viscous units
+8. :math:`\overline{\rho}/\overline{\rho}_w,\quad` mean density normalized by the mean wall density 
+9. :math:`\overline{\tau}_{11}/\tau_w,\quad` normal Reynolds stress component 11, scaled by density, in viscous units
+10. :math:`\overline{\tau}_{22}/\tau_w,\quad` normal Reynolds stress component 22, scaled by density, in viscous units 
+11. :math:`\overline{\tau}_{33}/\tau_w,\quad` normal Reynolds stress component 33, scaled by density, in viscous units
+12. :math:`\overline{\tau}_{12}/\tau_w,\quad` Reynolds shear stress component 12, scaled by density, in viscous units
+13. :math:`\overline{T}/T_w,\quad` mean temperature normalized by the wall temperature
+14. :math:`\overline{\rho_w}/\rho_w,\quad` mean density normalized by wall density 
+15. :math:`\overline{T^{'2}}/T_w^2,\quad` temperature fluctuations normalized by the wall temperature
+16. :math:`(\overline{T}-T_w)/T_\tau,\quad` mean temperature in viscous units
+17. :math:`\overline{T^{'2}}/T_\tau^2,\quad` temperature fluctuations in viscous units 
+18. :math:`y_{V}^+,\quad` wall-normal coordinate transformed according to Volpiani et al. [???], in viscous units
+19. :math:`u_{V}^+,\quad` mean streamwise velocity transformed according to Volpiani et al. [???], in viscous units
+
+
+&&&&&&&&&&&&&&&&
+Boundary layer
+&&&&&&&&&&&&&&&&
+Copy the executable `postpro.exe` to the case folder you want to post-process.
+Create an ASCII file named ``bl_profiles.dat``. The file should contain two lines: report the number
+of profiles you want to extract on the first line, and the corresponding indices of the `x` coordinate on the second line.
+For instance, the following file
+
+.. code-block:: console
+
+   2
+   500 1000
+
+will extract boundary layer statistics at two locations, corresponding to locations :math:`x_{i=500}` and :math:`x_{i=1000}`.
+
+Run the post-processing tool by typing: 
+
+.. code-block:: console
+
+   $ ./postpro.exe
+
+The post-processing routine will create the folder ``POSTPRO``, containing the files ``cf.dat`` and ``stat_nnnnn.dat``,
+where ``nnnnn`` is the number of profiles.
+
+^^^^^^^^^^^^^^^^
+cf.dat
+^^^^^^^^^^^^^^^^
+The file ``cf.dat`` contains the boundary layer characteristics as a function of the streamwise direction:
+
+1. :math:`x/\delta_0,\quad` streamwise coordinate normalized by inflow boundary layer thickness
+2. :math:`Cf=\overline{\tau}_w/(\rho_w U_\infty^2),\quad` skin friction coefficient
+3. :math:`Re_\tau=\delta_{99}/\delta_v,\quad` friction Reynolds number
+4. :math:`H,\quad` shape factor
+5. :math:`H_{inc},\quad` incompressible shape factor
+6. :math:`\delta_{99},\quad` boundary layer thickness
+7. :math:`\delta^*,\quad` displacement thickness
+8. :math:`\theta^*,\quad` momentum thickness
+9. :math:`u_\tau/U_\infty,\quad` friction velocity normalized by free stream velocity 
+10. :math:`{Re_\theta}_{inc}=\rho_\infty U_\infty\theta_{inc}/\mu_\infty,\quad` Reynolds number based on incompressible momentum thickness
+11. :math:`{C_f}_{inc},\quad` Skin friction coefficient transformed according to van Driest II transformation [???]
+12. :math:`{Re_\theta}=\rho_\infty u_\infty\theta/\mu_w\quad`, Reynolds number based on momentum thickness, and viscosity at the wall 
+13. :math:`p_{rms}/\tau_w` Pressure rms at the wall in viscous units 
+
+^^^^^^^^^^^^^^^^
+stat_nnnnn.dat
+^^^^^^^^^^^^^^^^
+The files ``stat_nnnnn.dat`` contain the boundary layer profiles in the following format:
+
+1. :math:`y/\delta_{99},\quad` wall-distance normalized by local boundary layer thickness
+2. :math:`y^+,\quad` wall-distance in viscous units
+3. :math:`\widetilde{u}^+,\quad` streamwise velocity in viscous units
+4. :math:`u_{VD}^+,\quad` streamwise velocity transformed according to van Driest [???], in viscous units
+5. :math:`\overline{\tau}_{11}/\tau_w,\quad` normal Reynolds stress component 11, scaled by density, in viscous units
+6. :math:`\overline{\tau}_{22}/\tau_w,\quad` normal Reynolds stress component 22, scaled by density, in viscous units 
+7. :math:`\overline{\tau}_{33}/\tau_w,\quad` normal Reynolds stress component 33, scaled by density, in viscous units
+8. :math:`\overline{\tau}_{12}/\tau_w,\quad` Reynolds shear stress component 12, scaled by density, in viscous units
+9. :math:`\overline{\rho}/\overline{\rho}_w,\quad` mean density scaled by the wall density 
+10. :math:`\overline{p^{'2}}/\tau_w,\quad` pressure fluctuations in wall units 
+11. :math:`y_{TL}^+,\quad` wall-normal coordinate transformed according to Trettel and Larsson [???], in viscous units
+12. :math:`u_{TL}^+,\quad` mean streamwise velocity transformed according to Trettel and Larsson [???], in viscous units
+13. :math:`y_{V}^+,\quad` wall-normal coordinate transformed according to Volpiani et al. [???], in viscous units
+14. :math:`u_{V}^+,\quad` mean streamwise velocity transformed according to Volpiani et al. [???], in viscous units

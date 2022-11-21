@@ -1,0 +1,23 @@
+=====================================
+Gallery of STREAmS results
+=====================================
+
+* Supersonic turbulent boundary layer over a micro-ramp
+
+.. raw:: html
+
+    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; height: auto; margin-bottom: 1em;">
+        <iframe src="//www.youtube.com/embed/o8olmjiWSl8" frameborder="0" allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe>
+    </div>
+
+* Turbulent channel flow over acoustic liners
+
+.. raw:: html
+
+    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; height: auto; margin-bottom: 1em;">
+        <iframe src="//www.youtube.com/embed/sCXYOq-3hv4" frameborder="0" allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe>
+    </div>
+
+.. .. image:: https://img.youtube.com/vi/o8olmjiWSl8/maxresdefault.jpg
+       :alt: alternative text to define
+       :target: https://www.youtube.com/watch?v=o8olmjiWSl8
