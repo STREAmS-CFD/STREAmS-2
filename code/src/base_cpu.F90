@@ -4,8 +4,6 @@ module streams_base_cpu_object
     use streams_field_object, only : field_object
     use streams_parameters
     use MPI
-    use cpumem_mod
-    use, intrinsic :: iso_fortran_env
 
     implicit none
     private
@@ -45,7 +43,7 @@ module streams_base_cpu_object
         procedure, pass(self) :: bcswap_var       
         procedure, pass(self) :: bcswap_corner       
         procedure, pass(self) :: bcswap_corner_var       
-    endtype base_cpu_object
+            endtype base_cpu_object
 
     !interface assign_allocatable_cpu
     !    !< Safe assign allocatable arrays (CPU), generic interface.

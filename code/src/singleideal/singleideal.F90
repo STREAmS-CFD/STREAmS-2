@@ -56,9 +56,9 @@ module streams_equation_singleideal_object
     integer                   :: num_iter
     integer                   :: icyc0, icyc
 !
-    integer(ikind)            :: visc_order
+    integer(ikind)            :: visc_order, conservative_viscous
     integer(ikind)            :: ep_order, nkeep
-    integer(ikind)            :: weno_scheme
+    integer(ikind)            :: weno_scheme, weno_version
     real(rkind)               :: sensor_threshold
     real(rkind)               :: xshock_imp, shock_angle, tanhfacs
     integer                   :: rand_type
@@ -94,7 +94,7 @@ module streams_equation_singleideal_object
     real(rkind)               :: powerlaw_vtexp, T_ref_dim, sutherland_S
     integer                   :: visc_model
     real(rkind)               :: dpdx,rhobulk,ubulk,tbulk,volchan   ! for channel flow
-    logical                   :: channel_case, bl_case
+    logical                   :: channel_case, bl_case, bl_laminar
     real(rkind)               :: x_recyc
     logical                   :: recyc
     integer                   :: i_recyc, ib_recyc
@@ -103,8 +103,9 @@ module streams_equation_singleideal_object
     real(rkind), dimension(:,:,:,:), allocatable :: w_aux
     real(rkind), dimension(:,:,:), allocatable   :: wmean
     integer, dimension(:,:,:), allocatable       :: fluid_mask
-    integer, dimension(:,:,:,:), allocatable     :: order_modify
-    integer, dimension(:,:,:), allocatable       :: order_modify_x
+    integer, dimension(:,:,:,:), allocatable     :: ep_ord_change
+    integer, dimension(:,:,:), allocatable       :: ep_ord_change_x
+    integer :: correct_bound_ord
 !
     real(rkind), dimension(:,:,:), allocatable   :: w_stat
     real(rkind), dimension(:,:,:,:), allocatable :: w_stat_3d
@@ -131,6 +132,7 @@ module streams_equation_singleideal_object
     integer, dimension(:,:), allocatable :: ijk_probe
 !
     integer :: debug_memory = 0
+    integer :: mode_async = 0
 !   
 !
 !
@@ -152,6 +154,7 @@ module streams_equation_singleideal_object
     procedure, pass(self) :: init_channel
     procedure, pass(self) :: init_wind_tunnel
     procedure, pass(self) :: init_bl
+    procedure, pass(self) :: init_bl_lam
     procedure, pass(self) :: init_tgv
     procedure, pass(self) :: alloc
     procedure, pass(self) :: bc_preproc
@@ -164,6 +167,7 @@ module streams_equation_singleideal_object
     procedure, pass(self) :: recyc_prepare
     procedure, pass(self) :: add_synthetic_perturbations
     procedure, pass(self) :: sliceprobe_prepare
+    procedure, pass(self) :: correct_bc_order
 !
 !
 !   
@@ -197,6 +201,9 @@ contains
 !   Enable memory debugger
     if (self%cfg%has_key("output","debug_memory")) call self%cfg%get("output","debug_memory",self%debug_memory)
 !
+!   Enable async pattern
+    if (self%cfg%has_key("numerics","mode_async")) call self%cfg%get("numerics","mode_async",self%mode_async)
+!
 !   Random numbers' configuration
     call self%cfg%get("numerics","rand_type",self%rand_type)
     if(self%rand_type < 0) then
@@ -213,13 +220,17 @@ contains
     self%channel_case = .false.
     if (self%flow_init == 0) self%channel_case = .true.
     self%bl_case = .false.
-    if (self%flow_init == 1) self%bl_case = .true.
+    if (self%flow_init == 1) then
+      self%bl_case    = .true.
+      self%bl_laminar = .false. ! Default is turbulent BL
+    endif
 !
     ystaggering = .false.
     if (self%channel_case) ystaggering = .true.
 !
 !   Boundary conditions
     call self%cfg%get("bc","xmin",bctag_temp) ; self%bctags(1) = bctag_temp
+    if (self%bctags(1)==9) self%bl_laminar = .true.
     call self%cfg%get("bc","xmax",bctag_temp) ; self%bctags(2) = bctag_temp
     call self%cfg%get("bc","ymin",bctag_temp) ; self%bctags(3) = bctag_temp
     call self%cfg%get("bc","ymax",bctag_temp) ; self%bctags(4) = bctag_temp
@@ -301,7 +312,9 @@ contains
       self%nkeep = 0
     endif
     call self%cfg%get("numerics","weno_scheme",self%weno_scheme)
+    call self%cfg%get("numerics","weno_version",self%weno_version)
     call self%cfg%get("numerics","visc_order",self%visc_order)
+    call self%cfg%get("numerics","conservative_viscous",self%conservative_viscous)
     allocate(self%supported_orders(1:4))
     self%supported_orders = [2,4,6,8]
     do i=1,size(self%supported_orders)
@@ -401,6 +414,13 @@ contains
     call self%cfg%get("output","print_control",self%print_control)
     call self%cfg%get("controls","iter_dt_recompute",self%iter_dt_recompute)
 !
+!   Correct order of accuracy at the borders
+    self%correct_bound_ord = 0
+    if (self%cfg%has_key("bc","correct_bound_ord")) then
+      call self%cfg%get("bc","correct_bound_ord",self%correct_bound_ord)
+    endif
+    if (self%correct_bound_ord>0) call self%correct_bc_order()
+!
 !
 !
 !   oldelse
@@ -412,6 +432,70 @@ contains
 !   put as type default self%i_freeze = 0
 !
   endsubroutine initialize
+!
+  subroutine correct_bc_order(self)
+    class(equation_singleideal_object), intent(inout) :: self
+!   
+    integer :: i,j,k
+    integer :: stencil_size
+!   
+    associate(nx => self%field%nx, ny => self%field%ny,nz => self%field%nz, &
+      ng => self%grid%ng, ep_order => self%ep_order, weno_scheme => self%weno_scheme, &
+      ncoords => self%field%ncoords, bctags => self%bctags, nblocks => self%field%nblocks)
+!
+      stencil_size = max(ep_order/2, weno_scheme)
+!     
+!     IMIN
+      if ((ncoords(1)==0).and.(any(bctags(1:2)/=0))) then
+        self%ep_ord_change_x(:,0,:)  = -stencil_size+1
+        do i=1,stencil_size-1
+          self%ep_ord_change_x(:,i,:) = -stencil_size+i
+        enddo
+      endif
+!     
+!     IMAX
+      if ((ncoords(1)==(nblocks(1)-1)).and.(any(bctags(1:2)/=0))) then
+        self%ep_ord_change_x(:,nx,:) = -stencil_size+1
+        do i=1,stencil_size-1
+          self%ep_ord_change_x(:,nx-i,:) = -stencil_size+i
+        enddo
+      endif
+!     
+!     JMIN
+      if ((ncoords(2)==0).and.(any(bctags(3:4)/=0))) then
+        self%ep_ord_change(:,0,:,2)  = -stencil_size+1
+        do j=1,stencil_size-1
+          self%ep_ord_change(:,j,:,2) = -stencil_size+j
+        enddo
+      endif
+!     
+!     JMAX
+      if ((ncoords(2)==(nblocks(2)-1)).and.(any(bctags(3:4)/=0))) then
+        self%ep_ord_change(:,ny,:,2) = -stencil_size+1
+        do j=1,stencil_size-1
+          self%ep_ord_change(:,ny-j,:,2) = -stencil_size+j
+        enddo
+      endif
+!     
+!     KMIN
+      if ((ncoords(3)==0).and.(any(bctags(5:6)/=0))) then
+        self%ep_ord_change(:,:,0,3)  = -stencil_size+1
+        do k=1,stencil_size-1
+          self%ep_ord_change(:,:,k,3) = -stencil_size+k
+        enddo
+      endif
+!     
+!     KMAX
+      if ((ncoords(3)==(nblocks(3)-1)).and.(any(bctags(5:6)/=0))) then
+        self%ep_ord_change(:,:,nz,3) = -stencil_size+1
+        do k=1,stencil_size-1
+          self%ep_ord_change(:,:,nz-k,3) = -stencil_size+k
+        enddo
+      endif
+!
+    endassociate
+  end subroutine correct_bc_order
+!
 !
 !
 !
@@ -674,12 +758,12 @@ contains
       allocate(self%w_aux(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng, nv_aux))
       allocate(self%w_stat(nv_stat, 1:nx, 1:ny))
       allocate(self%fluid_mask(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))
-      allocate(self%order_modify(0:nx, 0:ny, 0:nz, 2:3))
-      allocate(self%order_modify_x(0:ny, 0:nx, 0:nz))
+      allocate(self%ep_ord_change(0:nx, 0:ny, 0:nz, 2:3))
+      allocate(self%ep_ord_change_x(0:ny, 0:nx, 0:nz))
       if (enable_stat_3d>0) allocate(self%w_stat_3d(nv_stat_3d, 1:nx, 1:ny, 1:nz))
       self%fluid_mask     = 0
-      self%order_modify   = 0
-      self%order_modify_x = 0
+      self%ep_ord_change   = 0
+      self%ep_ord_change_x = 0
     endassociate
   endsubroutine alloc
 !
@@ -1472,13 +1556,15 @@ contains
       endif
 !     
       if (bl_case) then
-        if (self%masterproc) write(*,*) 'Input friction Reynolds number: ', Reynolds
-        Reynolds_friction  = Reynolds
         s2tinf = sutherland_S/T_ref_dim
-!       call get_reynolds(nymax,yg(1:nymax),Reynolds_friction,Mach,Trat,s2tinf,Re_out,gam,rfac,Prandtl,powerlaw_vtexp,visc_exp)
-        call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac,nymax,yg(1:nymax),uvec,&
-          rhovec,tvec,viscvec,Re_out,cf,thrat)
-        Reynolds = Re_out
+        if (.not.self%bl_laminar) then
+          if (self%masterproc) write(*,*) 'Input friction Reynolds number: ', Reynolds
+          Reynolds_friction  = Reynolds
+!         call get_reynolds(nymax,yg(1:nymax),Reynolds_friction,Mach,Trat,s2tinf,Re_out,gam,rfac,Prandtl,powerlaw_vtexp,visc_exp)
+          call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac,nymax,yg(1:nymax),uvec,&
+            rhovec,tvec,viscvec,Re_out,cf,thrat)
+          Reynolds = Re_out
+        endif
         if (self%masterproc) write(*,*) 'Reynolds based on free-stream properties: ', Reynolds
       endif
 !
@@ -1635,85 +1721,16 @@ contains
     case(0) ! CHANNEL
       call self%init_channel()
     case(1) ! BL, SBLI
-      call self%init_bl()
+      if (self%bl_laminar) then
+        call self%init_bl_lam()
+      else
+        call self%init_bl()
+      endif
     case(2) ! TGV
       call self%init_tgv()
     endselect
   endsubroutine initial_conditions
 ! 
-! subroutine get_reynolds(ny,eta,retau,rm,trat,s2tinf,reout,gam,rfac,pr,vtexp,visc_exp)
-!   
-!   integer, intent(in) :: ny
-!   logical, intent(in) :: visc_exp
-!   real(rkind), intent(in)  :: retau,rm,trat,s2tinf,gam,rfac,pr,vtexp
-!   real(rkind), intent(out) :: reout
-!   real(rkind), dimension(ny), intent(in)  :: eta
-!   
-!   real(rkind), dimension(ny) :: uplus       ! Incompressible velocity profile
-!   real(rkind), dimension(ny) :: ucplus      ! Compressible velocity profile
-!   real(rkind), dimension(ny) :: ucplusold
-!   real(rkind), dimension(ny) :: density     ! Density profile
-!   real(rkind), dimension(ny) :: viscosity   ! Viscosity profile
-!   real(rkind), dimension(ny) :: temperature ! Temperature profile
-!   
-!   real(rkind) :: cf,dstar,gm1,gm1h,res,rhow,th,tr,tw,uci,ue,uu,yplus,du
-!   real(rkind) :: alf,s,fuu
-!   integer :: j
-!   
-!   uplus = 0._rkind
-!   do j=2,ny
-!     yplus    = eta(j)*retau
-!     uplus(j) = velmusker(yplus,retau) ! Incompressible velocity profile (Musker, AIAA J 1979)
-!   enddo
-!   !
-!   gm1   = gam-1._rkind
-!   gm1h  = 0.5_rkind*gm1
-!   tr    = 1._rkind+gm1h*rfac*rm**2  ! Recovery temperature
-!   tw    = trat*tr                    ! Wall temperature
-!   rhow  = 1._rkind/tw
-!   s     = 1.1_rkind                 ! Reynolds analogy factor
-!   alf   = s*pr                       ! see Zhang
-!   !
-!   !Iterative loop to find the compressible profile
-!   ucplus = uplus
-!   do
-!     !
-!     ucplusold = ucplus
-!     do j=1,ny
-!       uu = ucplus(j)/ucplus(ny)
-!       !  temperature(j) = tw+(tr-tw)*uu+(1._rkind-tr)*uu**2 ! Walz pag 399 Zhang JFM 2014
-!       fuu = alf*uu+(1-alf)*uu**2
-!       temperature(j) = tw+(tr-tw)*fuu+(1._rkind-tr)*uu**2 ! Duan & Martin (see Zhang)
-!       density(j) = 1._rkind/temperature(j)
-!       if (visc_exp) then
-!         viscosity(j) = temperature(j)**vtexp ! Power-law
-!       else
-!         viscosity(j) = sqrt(temperature(j))*(1._rkind+s2tinf)/(1._rkind+s2tinf/temperature(j))
-!       endif
-!     enddo
-!     do j=2,ny
-!       du        = uplus(j)-uplus(j-1)
-!       uci       = 0.5_rkind*(sqrt(rhow/density(j))+sqrt(rhow/density(j-1)))
-!       ucplus(j) = ucplus(j-1)+uci*du
-!     enddo
-!     res = 0._rkind
-!     do j=1,ny
-!       res = res+abs(ucplus(j)-ucplusold(j))
-!     enddo
-!     res = res/ny
-!     if (res < tol_iter) exit
-!     !
-!   enddo ! End of iterative loop
-!   !
-!   dstar = 0._rkind
-!   th    = 0._rkind
-!   ue    = ucplus(ny)
-!   cf    = 2._rkind*rhow/ue**2
-!   !
-!   reout = retau*ue/rhow*viscosity(1)
-!   !
-! end subroutine get_reynolds
-!
   subroutine get_reynolds_cha(retau,rm,trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,y,yn,rebulk)
 !   
     logical, intent(in) :: visc_exp
@@ -1767,8 +1784,6 @@ contains
       do j=2,ny+1
         uplus(j) = velpiros_channel(yplus(j),retau)
 !       uplus(j) = 5.5_rkind+log(yplus(j))/0.4_rkind
-!       uplus(j) = 1._rkind/vkc*log(1._rkind+vkc*yplus(j))+&
-!       c1*(1._rkind-exp(-yplus(j)/eta_rich)-yplus(j)/eta_rich*exp(-b_rich*yplus(j)))
       enddo
 !     
       ucplus = uplus ! Assume as initial guess compressible velocity profile equal to incompressible
@@ -1869,85 +1884,93 @@ contains
     return
   end subroutine get_reynolds_cha
 ! 
-! subroutine get_reynolds_chan_old(ny,eta,yn,retau,rm,trat,s2tinf,reout,gam,rfac,pr,vtexp,visc_exp)
-!   !
-!   integer, intent(in) :: ny
-!   logical, intent(in) :: visc_exp
-!   real(rkind), intent(in)  :: retau,rm,trat,s2tinf,gam,rfac,pr,vtexp
-!   real(rkind), intent(out) :: reout
-!   real(rkind), dimension(ny), intent(in)  :: eta
-!   real(rkind), dimension(ny+1), intent(in) :: yn
-!   !
-!   real(rkind), dimension(ny) :: uplus       ! Incompressible velocity profile
-!   real(rkind), dimension(ny) :: ucplus      ! Compressible velocity profile
-!   real(rkind), dimension(ny) :: ucplusold
-!   real(rkind), dimension(ny) :: density     ! Density profile
-!   real(rkind), dimension(ny) :: viscosity   ! Viscosity profile
-!   real(rkind), dimension(ny) :: temperature ! Temperature profile
-!   
-!   real(rkind) :: gm1,gm1h,res,rhow,tr,tw,uci,ue,uu,yplus,du,dy,te
-!   real(rkind) :: alf,s,fuu,rhosum,rhousum,ubulk
-!   integer :: j
-!   !
-!   uplus = 0._rkind
-!   do j=2,ny
-!     yplus    = (1._rkind+eta(j))*retau
-!     uplus(j) = 5.5_rkind+log(yplus)/0.4_rkind
-!   enddo
-!   !
-!   gm1   = gam-1._rkind
-!   gm1h  = 0.5_rkind*gm1
-!   te    = 1._rkind
-!   tr    = 1._rkind+gm1h*rfac*rm**2 ! Recovery temperature
-!   tw    = trat*tr                    ! Wall temperature
-!   rhow  = 1._rkind/tw
-!   s     = 1.1_rkind                 ! Reynolds analogy factor
-!   alf   = s*pr                       ! see Zhang
-!   !
-!   !    Iterative loop to find the compressible profile
-!   ucplus = uplus
-!   do
-!     !
-!     ucplusold = ucplus
-!     do j=1,ny
-!       uu = ucplus(j)/ucplus(ny)
-!       !      temperature(j) = tw+(tr-tw)*uu+(1._rkind-tr)*uu**2 ! Walz pag 399 Zhang ! JFM
-!       fuu = alf*uu+(1-alf)*uu**2
-!       temperature(j) = tw+(tr-tw)*fuu+(te-tr)*uu**2 ! Duan & Martin (see Zhang)
-!       density(j) = 1._rkind/temperature(j)
-!       if (visc_exp) then
-!         viscosity(j) = temperature(j)**vtexp ! Power-law
-!       else
-!         viscosity(j) = sqrt(temperature(j))*(1._rkind+s2tinf)/(1._rkind+s2tinf/temperature(j))
-!       endif
-!     enddo
-!     do j=2,ny
-!       du        = uplus(j)-uplus(j-1)
-!       uci       = 0.5_rkind*(sqrt(rhow/density(j))+sqrt(rhow/density(j-1)))
-!       ucplus(j) = ucplus(j-1)+uci*du
-!     enddo
-!     res = 0._rkind
-!     do j=1,ny
-!       res = res+abs(ucplus(j)-ucplusold(j))
-!     enddo
-!     res = res/ny
-!     if (res < tol_iter) exit
-!     !
-!   enddo ! End of iterative loop
-!   !
-!   rhosum   = 0.
-!   rhousum  = 0.
-!   do j=1,ny
-!     dy      = yn(j+1)-yn(j)
-!     rhosum  = rhosum+density(j)*dy
-!     rhousum = rhousum+density(j)*ucplus(j)*dy
-!   enddo
-!   ubulk = rhousum/rhosum
-!   !
-!   ue    = ucplus(ny)
-!   reout = retau*ubulk*rhosum/rhow
-!   !
-! end subroutine get_reynolds_chan_old
+  subroutine init_bl_lam(self)
+    class(equation_singleideal_object), intent(inout) :: self
+!
+    integer :: i,j,k,n,nst,ii
+    integer :: ne
+    real(rkind) :: etad, deta, Tinf_dim, Twall_dim, etaedge, xbl
+    real(rkind) :: xx, yy, etast, wl, wr, ust, vst, tst, rst
+    real(rkind) :: rho,uu,vv,ww,rhouu,rhovv,rhoww,ee,tt
+    real(rkind), allocatable, dimension(:) :: ubl,tbl,vbl,eta
+!
+    allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
+!
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, &
+      x => self%field%x, y => self%field%y, z => self%field%z, Reynolds => self%Reynolds, &
+      xg => self%grid%xg, nxmax => self%grid%nxmax, &
+      rho0 => self%rho0, l0 => self%l0, u0 => self%u0, p0 => self%p0, gm => self%gm, &
+      wmean => self%wmean, w => self%field%w, Mach => self%Mach, gam => self%gam, &
+      rfac => self%rfac, Prandtl => self%Prandtl, w_aux => self%w_aux,  &
+      deltavec => self%deltavec ,deltavvec => self%deltavvec, cfvec => self%cfvec, &
+      t0 => self%t0, T_ref_dim => self%T_ref_dim, T_wall => self%T_wall, &
+      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, cv0 => self%cv0, &
+      calorically_perfect => self%calorically_perfect)
+!     
+      etad = 20._rkind
+      deta = 0.02_rkind
+      ne = nint(etad/deta)
+!     
+      allocate(ubl(0:ne))
+      allocate(vbl(0:ne))
+      allocate(tbl(0:ne))
+      allocate(eta(0:ne))
+!     
+      Tinf_dim = t0*T_ref_dim
+      Twall_dim = T_wall*T_ref_dim
+!     
+      call compressible_blasius(ne,etad,deta,gam,Mach,Prandtl,Tinf_dim,Twall_dim,eta,ubl,vbl,tbl,etaedge)
+!     
+      xbl = Reynolds/(etaedge**2)
+      if (self%masterproc) write(*,*) 'XBL', xbl
+!     
+      wmean = 0._rkind
+      do i=1-ng,nx+ng+1
+        ii = self%field%ncoords(1)*nx+i
+        do j=1,ny
+          xx = xg(ii)+xbl
+          yy = y(j)
+          etast = yy*etaedge*sqrt(xbl/xx)
+          nst = 1
+          do n=1,ne-1
+            if (eta(n+1)<etast) nst = n
+          enddo
+          wl = etast - eta(nst)
+          wr = eta(nst+1) - etast
+          ust = (wr*ubl(nst)+wl*ubl(nst+1))/deta * u0
+          vst = (wr*vbl(nst)+wl*vbl(nst+1))/deta/sqrt(Reynolds*xx)*u0
+          tst = (wr*tbl(nst)+wl*tbl(nst+1))/deta/Tinf_dim*t0
+          rst = p0/tst
+          wmean(i,j,1) = rst
+          wmean(i,j,2) = rst*ust
+          wmean(i,j,3) = rst*vst
+        enddo
+      enddo
+!     
+      do k=1,nz
+        do j=1,ny
+          do i=1,nx
+            rho = wmean(i,j,1)
+            uu  = wmean(i,j,2)/rho
+            vv  = wmean(i,j,3)/rho
+            ww  = wmean(i,j,4)/rho
+            rhouu = rho*uu
+            rhovv = rho*vv
+            rhoww = rho*ww
+            w(1,i,j,k) = rho
+            w(2,i,j,k) = rhouu
+            w(3,i,j,k) = rhovv
+            w(4,i,j,k) = rhoww
+            tt         = p0/rho
+            w_aux(i,j,k,6) = tt
+            ee = get_e_from_temperature(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+            w(5,i,j,k) = rho*ee + 0.5_rkind*(rhouu**2+rhovv**2+rhoww**2)/rho
+          enddo
+        enddo
+      enddo
+!
+    endassociate
+  endsubroutine init_bl_lam
 ! 
   subroutine init_bl(self)
     class(equation_singleideal_object), intent(inout) :: self
@@ -2257,6 +2280,234 @@ contains
 !   
     return
   end function velpiros_channel
+! 
+  subroutine compressible_blasius(n,etad,deta,gam,Mach,Prandtl,Te,Twall,eta,u,v,tbl,delta1)
+    integer, intent(in) :: n
+    real(rkind), intent(in) :: etad, deta, Mach, Prandtl, Te, Twall, gam
+    real(rkind), intent(out) :: delta1
+    real(rkind), dimension(0:n), intent(inout) :: u,v,tbl,eta
+    real(rkind), dimension(0:n) :: f,t,g,h,a1,a2,a3,a4,a5,a6,a7,a8,s,r,visc,tcr
+!   
+    integer :: iflag,nm,i,j,kk
+    real(rkind) :: Rg,s_suth,eps,z1,z2,z3,gm,adiab,T0e,Ae,Ue,Cp,He,H0e,visce,s0,r0,tt,vis
+    real(rkind) :: u0,f0,t0,g0,h0
+    real(rkind) :: u1,f1,t1,g1,h1
+    real(rkind) :: u2,f2,t2,g2,h2
+    real(rkind) :: u3,f3,t3,g3,h3
+    real(rkind) :: a10,a20,a30,a40,a50,a60,a70,a80
+    real(rkind) :: a11,a21,a31,a41,a51,a61,a71,a81
+    real(rkind) :: a12,a22,a32,a42,a52,a62,a72,a82
+    real(rkind) :: a13,a23,a33,a43,a53,a63,a73,a83
+    real(rkind) :: eq1,eq2,b1,b2,b3,b4,det,c1,c2,c3,c4,da,db,dd,rho,delta2
+!   
+    Rg = 287.15_rkind
+    s_suth = 110.4_rkind
+    eps    = 0.000001_rkind
+    z1     = 0.334_rkind
+    z2     = 0.82_rkind
+    z3     = 0.22_rkind
+    iflag  =  1
+!   
+    nm = n-1
+!   
+!   *************************************  fluid conditions
+!   
+    gm    = gam / ( gam -1._rkind)
+    adiab = (1._rkind+ (gam - 1._rkind) / 2._rkind *Mach*Mach)
+    T0e   = Te * adiab
+    Ae    = sqrt (gam * Rg * Te)
+    Ue    = Mach * ae
+    Cp    = gm * Rg
+    He    = Cp * Te
+    H0e   = Cp * T0e
+!   
+    if (Te.lt.110.4_rkind) then
+      visce = .693873D-6*te
+    else
+      visce = 1.458D-5 * te**1.5_rkind/( te + s_suth )
+    end if
+!   
+!   ************************************* initial conditions
+!   
+    j = 0
+    eta(0)  = 0._rkind
+    u(0)    = 0._rkind
+    h(0)    = 0._rkind
+    a1(0)   = 0._rkind
+    a2(0)   = 0._rkind
+    a3(0)   = 0._rkind
+    a5(0)   = 1._rkind
+    a6(0)   = 0._rkind
+    a7(0)   = 0._rkind
+    s0      = z1
+    if(iflag.eq.0) then
+      g(0)  = 0._rkind
+      a4(0) = 1._rkind
+      a8(0) = 0._rkind
+      r0    = z2
+    else
+      t(0)  = (Twall - Te )/(T0e-te)
+      a4(0) = 0._rkind
+      a8(0) = 1._rkind
+      r0    = z3
+    end if
+!   
+    do
+!
+      f(0) = s0
+      if ( iflag.eq.0)  t(0) = r0
+      if ( iflag.eq.1)  g(0) = r0
+!     
+      Tbl(0)  = Te + (T0e - Te) * t(0)
+      tt      = tbl(0)
+      if (tt<110.4_rkind) then
+        visc(0) = .693873D-6*tt
+      else
+        visc(0) = 1.458D-5 * tt**1.5_rkind  / ( tt + s_suth )
+      end if
+      vis     = visc(0) / visce
+!     
+!     ******************************** Runge-Kutta integration
+!     
+      do i = 0,nm
+!       
+        u0 =   f(i) / vis * deta
+        f0 = - h(i) * f(i) / vis* deta
+        t0 =   g(i) * Prandtl / vis * deta
+        g0 = -(h(i) * g(i) * Prandtl + 2._rkind * f(i) **2._rkind) / vis * deta
+        h0 =  .5_rkind*u(i) / (1 + (T0e/Te - 1) * t(i)) * deta
+        u1 =   (f(i) + .5_rkind*f0) / vis * deta
+        f1 = - (h(i) + .5_rkind*h0) * (f(i) + .5_rkind*f0) /vis * deta
+        t1 =   (g(i) + .5_rkind*g0) * Prandtl / vis * deta
+        g1 = -((h(i) + .5_rkind*h0) * (g(i) + .5_rkind*g0) * Prandtl + 2._rkind * (f(i) + .5_rkind*f0)**2._rkind) /vis*deta
+        h1 =  .5_rkind*(u(i)+.5_rkind*u0) / (1 + (T0e/Te - 1) * (t(i)+.5_rkind*t0)) *deta
+        u2 =   (f(i) + .5_rkind*f1) / vis * deta
+        f2 = - (h(i) + .5_rkind*h1) * (f(i) + .5_rkind*f1) /vis * deta
+        t2 =   (g(i) + .5_rkind*g1) * Prandtl / vis * deta
+        g2 = -((h(i) + .5_rkind*h1) * (g(i) + .5_rkind*g1) * Prandtl + 2._rkind * (f(i) + .5_rkind*f1)**2._rkind) /vis*deta
+        h2 =  .5_rkind*(u(i)+.5_rkind*u1) / (1 + (T0e/Te - 1) * (t(i)+.5*t1)) *deta
+        u3 =   (f(i) + f2) / vis * deta
+        f3 = - (h(i) + h2) * (f(i) + f2) /vis * deta
+        t3 =   (g(i) + g2) * Prandtl / vis * deta
+        g3 = -((h(i) + h2) * (g(i) + g2) * Prandtl + 2._rkind * (f(i) + f2)**2._rkind) /vis*deta
+        h3 = .5_rkind*(u(i)+u2) / (1 + (T0e/Te - 1) *(t(i)+t2))*deta
+!       
+        a10 =   a5(i)/vis *deta
+        a20 =   a6(i) / vis *deta
+        a30 =   a7(i) * Prandtl / vis *deta
+        a40 =   a8(i) *Prandtl / vis *deta
+        a50 = - a5(i) * h(i) / vis *deta
+        a60 = - a6(i) * h(i) / vis *deta
+        a70 = -(4*f(i)*a5(i)+ Prandtl * h(i) *a7(i))/vis *deta
+        a80 = -(4*f(i)*a6(i)+ Prandtl * h(i)*a8(i))/vis *deta
+!       
+        a11 =   (a5(i) + .5_rkind*a50) / vis *deta
+        a21 =   (a6(i) + .5_rkind*a60) / vis *deta
+        a31 =   (a7(i) + .5_rkind*a70) * Prandtl / vis *deta
+        a41 =   (a8(i) + .5_rkind*a80) * Prandtl / vis *deta
+        a51 = - (a5(i) + .5_rkind*a50) * (h(i) + .5_rkind*h0) / vis *deta
+        a61 = - (a6(i) + .5_rkind*a60) * (h(i) + .5_rkind*h0) / vis *deta
+        a71 = -(4* (f(i) + .5_rkind*f0) * (a5(i) + .5_rkind*a50)+Prandtl * (h(i) + .5_rkind*h0) *(a7(i) + .5_rkind*a70))/vis *deta
+        a81 = -(4* (f(i) + .5_rkind*f0) * (a6(i) + .5_rkind*a60)+Prandtl * (h(i) + .5_rkind*h0) *(a8(i) + .5_rkind*a80))/vis *deta
+!       
+        a12 =   (a5(i) + .5_rkind*a51) / vis *deta
+        a22 =   (a6(i) + .5_rkind*a61) / vis *deta
+        a32 =   (a7(i) + .5_rkind*a71) * Prandtl / vis *deta
+        a42 =   (a8(i) + .5_rkind*a81) * Prandtl / vis *deta
+        a52 = - (a5(i) + .5_rkind*a51) * (h(i) + .5_rkind*h1) / vis *deta
+        a62 = - (a6(i) + .5_rkind*a61) * (h(i) + .5_rkind*h1) / vis *deta
+        a72 = -(4* (f(i) + .5_rkind*f1) * (a5(i) + .5_rkind*a51)+Prandtl * (h(i) + .5_rkind*h1) *(a7(i) + .5_rkind*a71))/vis *deta
+        a82 = -(4* (f(i) + .5_rkind*f1) * (a6(i) + .5_rkind*a61)+Prandtl * (h(i) + .5_rkind*h1) *(a8(i) + .5_rkind*a81))/vis *deta
+!       
+        a13 =   (a5(i) + a52) / vis *deta
+        a23 =   (a6(i) + a62) / vis *deta
+        a33 =   (a7(i) + a72) * Prandtl / vis *deta
+        a43 =   (a8(i) + a82) * Prandtl / vis *deta
+        a53 = - (a5(i) + a52) * (h(i) + .5_rkind*h2) / vis *deta
+        a63 = - (a6(i) + a62) * (h(i) + .5_rkind*h2) / vis *deta
+        a73 = -(4* (f(i) + f2) * (a5(i) + a52) + Prandtl * (h(i) + h2) *(a7(i) + a72))/vis *deta
+        a83 = -(4* (f(i) + f2) * (a6(i) + a62) + Prandtl * (h(i) + h2) *(a8(i) + a82))/vis *deta
+!       
+        f(i+1) = f(i) + (f0 + 2._rkind*f1 + 2*f2 + f3) / 6._rkind
+        u(i+1) = u(i) + (u0 + 2._rkind*u1 + 2*u2 + u3) / 6._rkind
+        t(i+1) = t(i) + (t0 + 2._rkind*t1 + 2*t2 + t3) / 6._rkind
+        g(i+1) = g(i) + (g0 + 2._rkind*g1 + 2*g2 + g3) / 6._rkind
+        h(i+1) = h(i) + (h0 + 2._rkind*h1 + 2*h2 + h3) / 6._rkind
+!       
+        a1(i+1) = a1(i) + (a10 + 2._rkind*a11 + 2._rkind*a12 + a13) / 6._rkind
+        a2(i+1) = a2(i) + (a20 + 2._rkind*a21 + 2._rkind*a22 + a23) / 6._rkind
+        a3(i+1) = a3(i) + (a30 + 2._rkind*a31 + 2._rkind*a32 + a33) / 6._rkind
+        a4(i+1) = a4(i) + (a40 + 2._rkind*a41 + 2._rkind*a42 + a43) / 6._rkind
+        a5(i+1) = a5(i) + (a50 + 2._rkind*a51 + 2._rkind*a52 + a53) / 6._rkind
+        a6(i+1) = a6(i) + (a60 + 2._rkind*a61 + 2._rkind*a62 + a63) / 6._rkind
+        a7(i+1) = a7(i) + (a70 + 2._rkind*a71 + 2._rkind*a72 + a73) / 6._rkind
+        a8(i+1) = a8(i) + (a80 + 2._rkind*a81 + 2._rkind*a82 + a83) / 6._rkind
+        eta(i+1)  = eta(i) + deta
+!       
+!       **************************************   new value of visc
+!       
+        Tbl(i+1)  = Te + (T0e - Te) * t(i+1)
+        tt      = Tbl(i+1)
+        if (tt<110.4_rkind) then
+          visc(i+1) = .693873D-6*tt
+        else
+          visc(i+1) = 1.458D-5 * tt**1.5_rkind  / ( tt + s_suth )
+        end if
+        vis     = visc(i+1) / visce
+!       
+      end do
+!     
+!     ******************************************* shooting method
+!     ******************************************* with Newton Raphson
+!     
+      eq1 = 1._rkind - u(n)
+      eq2 = - t(n)
+      b1  =   a1(n)
+      b2  =   a1(n)
+      b3  =   a3(n)
+      b4  =   a4(n)
+      det =   b1 * b4 - b2 * b3
+      c1  =   b4 / det
+      c2  = - b2 / det
+      c3  = - b3 / det
+      c4  =   b1 / det
+      da  =   c1 * eq1 + c2 * eq2
+      db  =   c3 * eq1 + c4 * eq2
+      s0  =   s0 + da
+      r0  =   r0 + db
+      j = j + 1
+      if (abs(u(n)-1._rkind)<eps.and.abs(t(n))<eps) exit
+    enddo
+!   
+!   ********************************* b.l. thickness
+!   
+    dd = .99_rkind
+    do i = 0, nm
+      if (u(i).ge.dd) exit
+    end do
+    delta1 = eta(i-1)
+    kk = i - 1
+!   
+!   ******************************* displacement thickness
+!   
+    delta2 = delta1 -2*h(kk)
+!   
+!   ********************************* Crocco's temperature profile
+!   
+    do i = 0,n
+      tcr(i) = tbl(0)/Te  + (1._rkind - tbl(0)/Te) * u(i) + (gam - 1._rkind) / 2._rkind *Mach**2. * u(i) * (1._rkind - u(i))
+    end do
+!   
+!   ********************************************* printing
+!   
+    do i=0,n
+      g1  = .5_rkind*u(i) / tbl(i) * Te
+      rho = Te/tbl(i)
+      v(i) =  eta(i)*g1 - h(i)
+    end do
+!   
+    return
+  end subroutine compressible_blasius
 ! 
   subroutine meanvelocity_bl(retau,rm,trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,y,u,rho,t,visc,redelta,cf,th)
 !   

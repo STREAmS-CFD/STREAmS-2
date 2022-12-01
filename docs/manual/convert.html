@@ -7,6 +7,7 @@
   <title>Converting STREAmS for different purposes &mdash; STREAmS 2.0 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -41,9 +42,10 @@
 <li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS flow cases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="input.html">Setting input file</a></li>
-<li class="toctree-l1"><a class="reference internal" href="output.html">Understading output files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understanding output files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_to_cite.html">How to cite STREAmS</a></li>
 <li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
 </ul>
 
@@ -73,8 +75,76 @@
              
   <section id="converting-streams-for-different-purposes">
 <h1>Converting STREAmS for different purposes<a class="headerlink" href="#converting-streams-for-different-purposes" title="Permalink to this heading"></a></h1>
-<p>PyconvertSTREAmS is a converter tool written in Python3 to convert the main development branch of STEAmS solver to different backends. The converter also supports the removal of
-external plugins. The converter only requires Python3 and uses native Python libraries for the implementation. To look at the default options of the converter, run:</p>
+<p>PyconvertSTREAmS is a converter tool written in Python3 to convert the main development branch of STEAmS solver to different backends. Additionally, the converter also supports the removal of
+external plugins.</p>
+<section id="requirements">
+<h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this heading"></a></h2>
+<ul class="simple">
+<li><p>Python3 (3.9 or greater)</p></li>
+<li><p>tqdm</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>pip install -r install_requirements.txt
+</pre></div>
+</div>
+</section>
+<section id="background">
+<h2>Background<a class="headerlink" href="#background" title="Permalink to this heading"></a></h2>
+<p>The converter is designed to make STREAmS portable across different architectures. It is developed by considering:</p>
+<ol class="arabic simple">
+<li><p>The main development of STREAmS would happen on the CUDA Fortran backend</p></li>
+<li><p>The converter will automatically or in some cases semi-automatically produce various backends</p></li>
+<li><p>The converter will also assist in removing plugins that will not feature in the public release</p></li>
+<li><p>This would ensure a clean and a direct transformation of the CUDA Fortran backend without any bugs that could be introduced if the conversion is done manually</p></li>
+</ol>
+<p>Currently three modes are supported:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#hipfortl"><span class="std std-ref">hipfort</span></a></p></li>
+<li><p><a class="reference internal" href="#cpul"><span class="std std-ref">cpu</span></a></p></li>
+<li><p><a class="reference internal" href="#extl"><span class="std std-ref">ext</span></a></p></li>
+</ul>
+<p>The tree below represents the file organisation of the converter (directories in bold). <code class="docutils literal notranslate"><span class="pre">pyconvertstreams.py</span></code> contains the main program and <code class="docutils literal notranslate"><span class="pre">utils.py</span></code> has common utility functions used in the code. The other three modes are
+separated into their directories. Further, the <code class="docutils literal notranslate"><span class="pre">input_files</span></code> directory contains all the static files related to cpu and hipfort modes.</p>
+<div class="line-block">
+<div class="line"><strong>tools/streams-convert</strong></div>
+<div class="line">├ ── pyconvertstreams.py</div>
+<div class="line">├ ── utils.py</div>
+<div class="line">├ ── install_requirements.txt</div>
+<div class="line">├ ── <strong>cpu</strong></div>
+<div class="line-block">
+<div class="line">   └ ── cpu.py</div>
+</div>
+<div class="line">├ ── <strong>external</strong></div>
+<div class="line-block">
+<div class="line">   ├ ── external_libraries.py</div>
+<div class="line">   └ ── external_vars_procedures.json</div>
+</div>
+<div class="line">├ ── <strong>hipfort</strong></div>
+<div class="line-block">
+<div class="line">   ├ ── hipfort.py</div>
+<div class="line">   ├ ── hipfort_expressions.py</div>
+<div class="line">   ├ ── hipfort_utils.py</div>
+<div class="line">   ├ ── interface_wrapper.py</div>
+<div class="line">   ├ ── kernel_extract.py</div>
+<div class="line">   ├ ── kernels_config.ini</div>
+<div class="line">   ├ ── translator.py</div>
+<div class="line">   └ ── write_hipfort.py</div>
+</div>
+<div class="line">├ ── <strong>input_files</strong></div>
+<div class="line-block">
+<div class="line">   ├ ── <strong>amd</strong></div>
+<div class="line">       ├ ── base_amd.F90</div>
+<div class="line">       ├ ── base_amd_cpp.cpp</div>
+<div class="line">       ├ ── hip_utils.h</div>
+<div class="line">       └ ── <strong>singleideal</strong></div>
+<div class="line">          ├ ── device_kernels.cpp</div>
+<div class="line">          └ ── main_amd.F90</div>
+<div class="line">   ├ ── <strong>cpu</strong></div>
+<div class="line">      ├ ── base_cpu.F90</div>
+<div class="line">      └ ── <strong>singleideal</strong></div>
+<div class="line">          └ ── main_cpu.F90</div>
+</div>
+</div>
+<p>To look at the default options of the converter, run:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py -h
 
 <span class="go">usage: pyconvertstreams.py [-h] {hip,cpu,ext} ...</span>
@@ -93,79 +163,437 @@ external plugins. The converter only requires Python3 and uses native Python lib
 <span class="go">See &#39;&lt;command&gt; --help&#39; to read about a specific sub-command.</span>
 </pre></div>
 </div>
-<section id="file-structure">
-<h2>File structure<a class="headerlink" href="#file-structure" title="Permalink to this heading"></a></h2>
-<p>Below tree represents the file organisation of the converter. pyconvertstreams.py contains the main program and utils.py has common utility functions used in the code. The other three modes are
-separated into their directories.</p>
-<div class="line-block">
-<div class="line">├── README.md</div>
-<div class="line">├── cpu</div>
-<div class="line">│   └── cpu.py</div>
-<div class="line">├── external</div>
-<div class="line">│   ├── external_libraries.py</div>
-<div class="line">│   └── external_vars_procedures.json</div>
-<div class="line">├── hipfort</div>
-<div class="line">│   ├── debug_kernels.json</div>
-<div class="line">│   ├── gpu_vars.json</div>
-<div class="line">│   ├── hipfort.py</div>
-<div class="line">│   ├── hipfort_utils.py</div>
-<div class="line">│   ├── interface_wrapper.py</div>
-<div class="line">│   ├── kernel_extract.py</div>
-<div class="line">│   └── kernels.json</div>
-<div class="line">├── pyconvertstreams.py</div>
-<div class="line">└── utils.py</div>
-</div>
 </section>
-<section id="conversion-modes">
-<h2>Conversion modes<a class="headerlink" href="#conversion-modes" title="Permalink to this heading"></a></h2>
-<p>The converter currently supports three modes:</p>
-<ul class="simple">
-<li><p><a class="reference internal" href="#hipfortl"><span class="std std-ref">Hipfort</span></a></p></li>
-<li><p><a class="reference internal" href="#cpul"><span class="std std-ref">CPU</span></a></p></li>
-<li><p><a class="reference internal" href="#extl"><span class="std std-ref">Ext</span></a></p></li>
-</ul>
 <section id="hipfort">
-<h3>Hipfort<a class="headerlink" href="#hipfort" title="Permalink to this heading"></a></h3>
-<p id="hipfortl">This mode converts STREAmS CUDA Fortran version to Hipfort version. To look into the avilable options, run:</p>
-<p>bla bla
-bla bla</p>
-</section>
-<section id="cpu">
-<h3>CPU<a class="headerlink" href="#cpu" title="Permalink to this heading"></a></h3>
-<p id="cpul">This mode converts STREAmS CUDA Fortran version to CPU version. To look into the avilable options, run:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py cpu -h
+<span id="hipfortl"></span><h2>hipfort<a class="headerlink" href="#hipfort" title="Permalink to this heading"></a></h2>
+<p>This mode converts STREAmS CUDA Fortran version to Hipfort version. The main philospohy behind this implementation is collecting every possible information of
+a kernel and translate it to its hipfort equivalent. To look into the avilable options, run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py hip -h
 
-<span class="go">usage: pyconvertstreams.py cpu [-h] [-i INPUT]</span>
+<span class="go">usage: pyconvertstreams.py hip [-h] [-i INPUT] [-d]</span>
 
 <span class="go">options:</span>
 <span class="go">  -h, --help            show this help message and exit</span>
 <span class="go">  -i INPUT, --input INPUT</span>
 <span class="go">                        Input code folder (default: ../../code/)</span>
+<span class="go">  -d, --dry_run         If used, files will not be placed in input path (default: False)</span>
 </pre></div>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<dl class="simple">
+<dt>The names <code class="docutils literal notranslate"><span class="pre">amd</span></code>, <code class="docutils literal notranslate"><span class="pre">hip</span></code> and <code class="docutils literal notranslate"><span class="pre">hipfort</span></code> will be used interchangebly. For context, the distinctions are:</dt><dd><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">amd</span></code> is the GPU architecture which STREAmS is intended to run on</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hip</span></code> stands for Heterogeneous-Compute Interface for Portability which is a C++ runtime API and kernel language developed to run codes both on AMD and NVIDIA GPUs</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hipfort</span></code> is the Fortran Interface to access the libraries from <code class="docutils literal notranslate"><span class="pre">hip</span></code></p></li>
+<li><p>Ideally, the hipfort backend can run on both NVIDIA and AMD GPUs, however, we intend to use the backend mainly for AMD GPUs</p></li>
+</ul>
+</dd>
+</dl>
+</div>
+<section id="program-flow">
+<h3>Program flow<a class="headerlink" href="#program-flow" title="Permalink to this heading"></a></h3>
+digraph G{
+   hipfort [shape=box]
+   node [shape=oval, width=0.6];
+   hipfort -&gt; load_kernel [color=grey];
+   hipfort -&gt; extract_gpu [color=grey];
+   load_kernel -&gt; extract_kernel [color=grey];
+   extract_kernel -&gt; extract_details [style=bold,label=&quot;kernel&quot;,color=grey];
+   node [shape=box, width=0.6];
+   extract_gpu -&gt; write_amd_vars [style=dotted,color=red];
+   extract_gpu -&gt; write_log [style=dotted,color=red];
+   extract_details -&gt; write_log [style=dotted,color=red];
+   extract_details -&gt; write_eqn [color=blue];
+   extract_details -&gt; write_kernel [color=blue];
+   extract_details -&gt; write_kernel_cpp [color=blue];
+   extract_gpu -&gt; write_kernel_cpp [color=blue];
+   write_eqn [label=&quot;write equation_amd.F90&quot;];
+   write_kernel [label=&quot;write kernels_amd.F90&quot;];
+   write_kernel_cpp [label=&quot;write kernels_amd_cpp.cpp&quot;];
+   load_kernel [label=&quot;load \nkernels_config.ini&quot;];
+   extract_gpu [label=&quot;extract GPU arrays from \nbase_gpu and equation_gpu&quot;];
+   extract_kernel [label=&quot;extract all types of kernels from \nequation_gpu and kernels_gpu&quot;];
+   extract_details [label=&quot;1. extract all kernel information \n2. Create Interface and wrapper functions&quot;];
+   write_log [label=&quot;write log files: \n1. gpu_variables.json \n2. log_kernel_dict.json&quot;];
+   write_amd_vars [label=&quot;write the array index conversion file \namd_vars.h&quot;]
+}<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The explicit kernel wrappers are added in equation_amd.F90</p></li>
+<li><p>The cuf kernel wrappers are added in kernels_amd.F90</p></li>
+</ul>
+</div>
+</section>
+<section id="kernel-dictionary">
+<h3>Kernel dictionary<a class="headerlink" href="#kernel-dictionary" title="Permalink to this heading"></a></h3>
+<p>Every kernel that is extracted is stored in a dictionary. Below, we have all the definitions of the parameters extracted from a kernel:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$</span>-&gt; kernel dict structure:
+<span class="gp">    $</span>-&gt; kernel:
+<span class="gp">        $</span>-&gt; attribute <span class="o">(</span>str<span class="o">)</span>                <span class="p">|</span> - direct<span class="o">(</span>cuf kernels<span class="o">)</span>/explicit<span class="o">(</span>direct kernels without directives<span class="o">)</span>/reduction<span class="o">(</span>cuf kernels<span class="o">)</span>
+<span class="gp">        $</span>-&gt; new_name <span class="o">(</span>str<span class="o">)</span>                 <span class="p">|</span> - Name of the changed kernel
+<span class="gp">        $</span>-&gt; kernel_info:                   <span class="p">|</span> - Contains all the information about the kernel subroutine
+<span class="go">            -&gt; debug_mode (str)            | - Default:&quot;no&quot;. If &quot;yes&quot;: write everything except the kernel code</span>
+<span class="go">            -&gt; num_loop (list)             | - size of list=number of kernels and value=extent of the loops (only for direct/reduction)</span>
+<span class="go">            -&gt; full_kernel (str)           | - Contains the whole kernel subroutine</span>
+<span class="go">            -&gt; subroutine_call (str)       | - Contains the kernel subroutine call in equation_gpu.F90</span>
+<span class="go">            -&gt; kernel_subroutine (str)     | - Contains only the subroutine definition of the kernel subroutine</span>
+<span class="go">            -&gt; kernel_variables (str)      | - Contains only the variable definition part of the kernel subroutine</span>
+<span class="go">            -&gt; subroutine_code (str)       | - Contains only the inner code definition part of the kernel subroutine</span>
+<span class="go">            -&gt; idx (list)                  | - Loop index integer names for each kernel (only for direct/reduction)</span>
+<span class="go">            -&gt; size (list)                 | - Loop bounds for each kernel (only for direct/reduction)</span>
+<span class="go">            -&gt; serial (list)               | - Non-parallel part of each kernel (only for direct/reduction)</span>
+<span class="go">            -&gt; non_cuf (list)              | - &quot;non&quot; kernel part of the kernel subroutine : if n kernels are in the subroutine there are n+1 &quot;non_cuf&quot; parts (only for direct/reduction)</span>
+<span class="go">            -&gt; kernel_count (int)          | - Number of kernels in the subroutine</span>
+<span class="go">            -&gt; kernel_names (list)         | - New names of the kernel. If parent kernel subroutine(has 2 kernels) name is xxx_cuf, the new</span>
+<span class="go">                                           |   kernel names will be : xxx1_kernel and xxx2_kernel (only for direct/reduction)</span>
+<span class="go">            -&gt; interface (list)            | - Interface for each kernel</span>
+<span class="go">            -&gt; wrapper_args (list)         | - Arguments of the wrapper called in the kernel subroutine</span>
+<span class="go">            -&gt; wrapper_c_args (list)       | - Same arguments as &quot;wrapper_args&quot; but in C++ sense</span>
+<span class="go">            -&gt; wrapper_fside (str)         | - Wrapper to be called inside the kernel subroutinr (Fortran side)</span>
+<span class="go">            -&gt; wrapper_cside (str)         | - Wrapper to be called inside extern C (C++ side)</span>
+<span class="go">            -&gt; sub_call_arguments (list)   | - All the arguments of the kernel subroutine</span>
+<span class="go">            -&gt; args_map (dict)             | - Mapping between the kernel subroutine arguments (from kernels_gpu.F90) and</span>
+<span class="go">                                           |   kernel subroutine call arguments (from equation_gpu.F90). key: kernel subroutine and</span>
+<span class="go">                                           |   value: kernel subroutine call</span>
+<span class="go">            -&gt; array_index_map (dict)      | - Mapping between the GPU arrays from the call and definition</span>
+<span class="go">            -&gt; blockdim (list)             | - Contains the thread block configurations</span>
+<span class="go">            -&gt; non_kernel_def (list)       | - Contains non kernel variable definitions</span>
+<span class="go">            -&gt; launch_bounds (list)        | - Contains defintion of launch bounds for each kernel</span>
+<span class="gp">        $</span>-&gt; var_info:                      <span class="p">|</span> - Contains all the information about variables <span class="k">in</span> a kernel subroutine
+<span class="go">            -&gt; real_arrays (list)          | - Contains all the real GPU arrays</span>
+<span class="go">            -&gt; int_arrays (list)           | - Contains all the integer GPU arrays</span>
+<span class="go">            -&gt; logical_arrays (list)       | - Contains all the logical GPU arrays (Warning: not used for now!)</span>
+<span class="go">            -&gt; real (list)                 | - Contains all the real scalars passed to the kernel</span>
+<span class="go">            -&gt; integer (list)              | - Contains all the integer scalars passed to the kernel</span>
+<span class="go">            -&gt; logical (list)              | - Contains all the logical scalars passed to the kernel (Warning: not used for now!)</span>
+<span class="go">            -&gt; lreal (list)                | - Contains all the local real scalars</span>
+<span class="go">            -&gt; linteger (list)             | - Contains all the local integer scalars</span>
+<span class="go">            -&gt; llogical (list)             | - Contains all the local logical scalars (Warning: not used for now!)</span>
+<span class="go">            -&gt; lreal_arrays (list)         | - Contains all the local real arrays</span>
+<span class="go">            -&gt; linteger_arrays (list)      | - Contains all the local integer arrays</span>
+<span class="go">            -&gt; llogical_arrays (list)      | - Contains all the local logical arrays (Warning: not used for now!)</span>
+<span class="go">            -&gt; reduction type (str)        | - Type of reduction performed - sum/max/min (only for reduction kernels)</span>
+<span class="go">            -&gt; reduction_variables (str)   | - Contains all the reduction variables (only for reduction kernels)</span>
+</pre></div>
+</div>
+</section>
+<section id="input-file">
+<h3>Input file<a class="headerlink" href="#input-file" title="Permalink to this heading"></a></h3>
+<p>The input file is located in <code class="docutils literal notranslate"><span class="pre">streams-convert/hipfort/kernels_config.ini</span></code>. Currently, you can input the following parameters of the kernel dictionary:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>num_loop</p></li>
+<li><p>idx</p></li>
+<li><p>size</p></li>
+<li><p>debug_mode</p></li>
+<li><p>blockdim</p></li>
+<li><p>launch_bounds</p></li>
+</ol>
+</div></blockquote>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>If you input <code class="docutils literal notranslate"><span class="pre">idx</span></code>, <code class="docutils literal notranslate"><span class="pre">size</span></code> parameter must be added as well</p>
+</div>
+<p>An example input parameter for the kernel <code class="docutils literal notranslate"><span class="pre">visflx_cuf</span></code> is given below:</p>
+<div class="highlight-guess notranslate"><div class="highlight"><pre><span></span><span class="k">[visflx_cuf]</span><span class="w"></span>
+<span class="na">num_loop</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">[&quot;3&quot;]</span><span class="w"></span>
+<span class="na">idx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">[[&quot;k&quot;,&quot;j&quot;,&quot;i&quot;]]</span><span class="w"></span>
+<span class="na">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">[[[&quot;1&quot;,&quot;nz&quot;],[&quot;1&quot;,&quot;ny&quot;],[&quot;1&quot;,&quot;nx&quot;]]]</span><span class="w"></span>
+</pre></div>
+</div>
+<p>Another example for <code class="docutils literal notranslate"><span class="pre">euler_x_fluxes_hybrid_kernel</span></code> manually specifying the thread block configuration and its launch bounds is given below:</p>
+<div class="highlight-guess notranslate"><div class="highlight"><pre><span></span><span class="k">[euler_x_fluxes_hybrid_kernel]</span><span class="w"></span>
+<span class="na">blockdim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">[[&quot;EULERWENO_THREADS_X&quot;,&quot;EULERWENO_THREADS_Y&quot;]]</span><span class="w"></span>
+<span class="na">launch_bounds</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">[&quot;__launch_bounds__(512)&quot;]</span><span class="w"></span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The values for the threads can be provided in <code class="docutils literal notranslate"><span class="pre">streams-convert/output/amd/hip_utils.h</span></code></p></li>
+<li><p>You can also directly provide numbers in place of thread names</p></li>
+</ul>
+</div>
+</section>
+<section id="output-files">
+<h3>Output files<a class="headerlink" href="#output-files" title="Permalink to this heading"></a></h3>
+<p>Apart from the converted code, three other files are output in this mode:</p>
+<ul>
+<li><p>amd_vars.h</p>
+<blockquote>
+<div><p>This file contains all the macros for the conversions of multi dimensional GPU arrays to single dimension. An example for <code class="docutils literal notranslate"><span class="pre">w_gpu</span></code> and <code class="docutils literal notranslate"><span class="pre">w_aux_trans_gpu</span></code> is shown below:</p>
+<div class="highlight-C notranslate"><div class="highlight"><pre><span></span><span class="cp">#define __I4_W(i,j,k,m) (((i)-(1-ng))+((nx+ng)-(1-ng)+1)*((j)-(1-ng))+((nx+ng)-(1-ng)+1)*((ny+ng)-(1-ng)+1)*((k)-(1-ng))+((nx+ng)-(1-ng)+1)*((ny+ng)-(1-ng)+1)*((nz+ng)-(1-ng)+1)*((m)-(1)))</span>
+<span class="cp">#define __I4_W_AUX_TRANS(i,j,k,m) (((i)-(1-ng))+((ny+ng)-(1-ng)+1)*((j)-(1-ng))+((ny+ng)-(1-ng)+1)*((nx+ng)-(1-ng)+1)*((k)-(1-ng))+((ny+ng)-(1-ng)+1)*((nx+ng)-(1-ng)+1)*((nz+ng)-(1-ng)+1)*((m)-(1)))</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The names above are obtained by joining <code class="docutils literal notranslate"><span class="pre">I4</span></code> (4D index conversion) with name of the array in upper case</p>
+</div>
+</div></blockquote>
+</li>
+<li><p>gpu_variables.json</p>
+<blockquote>
+<div><p>This file contains all the information related to a GPU array. An example for <code class="docutils literal notranslate"><span class="pre">w_mean_gpu</span></code> is given below:</p>
+<div class="highlight-guess notranslate"><div class="highlight"><pre><span></span><span class="s2">&quot;wmean_gpu&quot;</span>:<span class="w"> </span>[<span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;__I3_WMEAN&quot;</span>,<span class="w">                                                       </span>#<span class="w"> </span><span class="nv">index</span><span class="w"> </span><span class="nv">conversion</span><span class="w"> </span><span class="nv">Macro</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;dimension(:,:,:)&quot;</span>,<span class="w">                                                 </span>#<span class="w"> </span><span class="nv">dimension</span><span class="w"> </span><span class="nv">tag</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;real&quot;</span>,<span class="w">                                                             </span>#<span class="w"> </span><span class="nv">array</span><span class="w"> </span><span class="nv">type</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;1-ng:nx+ng+1,1:ny,1:4&quot;</span>,<span class="w">                                            </span>#<span class="w"> </span><span class="nv">sizes</span><span class="w"> </span><span class="nv">without</span><span class="w"> </span><span class="o">%</span>,<span class="w"> </span><span class="nv">required</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="nv">defining</span><span class="w"> </span><span class="nv">macros</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;1-self%grid%ng:self%field%nx+self%grid%ng+1,1:self%field%ny,1:4&quot;</span><span class="w">   </span>#<span class="w"> </span><span class="nv">sizes</span><span class="w"> </span><span class="nv">in</span><span class="w"> </span><span class="nv">original</span><span class="w"> </span><span class="nv">format</span>,<span class="w"> </span><span class="nv">required</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="nv">allocate</span><span class="w"> </span><span class="nv">definition</span><span class="w"></span>
+<span class="w">        </span>],<span class="w"></span>
+</pre></div>
+</div>
+</div></blockquote>
+</li>
+<li><p>log_kernel_dict.json</p>
+<blockquote>
+<div><p>This file contains all the extracted information of a kernel. An example for <code class="docutils literal notranslate"><span class="pre">init_flux_cuf</span></code> is given below:</p>
+<div class="highlight-guess notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="s2">&quot;init_flux_cuf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="s2">&quot;attribute&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;direct&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="s2">&quot;new_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;init_flux_kernel&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="s2">&quot;kernel_info&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;debug_mode&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;no&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;full_kernel&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;    subroutine init_flux_cuf(nx, ny, nz, nv, fl_gpu, fln_gpu, rhodt) </span><span class="se">\n</span><span class="s2">        integer :: nx, ny, nz, nv</span><span class="se">\n</span><span class="s2">        real(rkind) :: rhodt</span><span class="se">\n</span><span class="s2">        real(rkind), dimension(1:,1:,1:,1:), intent(inout), device :: fl_gpu, fln_gpu</span><span class="se">\n</span><span class="s2">        integer :: i,j,k,m,iercuda</span><span class="se">\n</span><span class="s2">        !$cuf kernel do(3) &lt;&lt;&lt;*,*&gt;&gt;&gt; </span><span class="se">\n</span><span class="s2">         do k=1,nz</span><span class="se">\n</span><span class="s2">          do j=1,ny</span><span class="se">\n</span><span class="s2">           do i=1,nx</span><span class="se">\n</span><span class="s2">            do m=1,nv</span><span class="se">\n</span><span class="s2">             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)</span><span class="se">\n</span><span class="s2">             fl_gpu(i,j,k,m)  = 0._rkind</span><span class="se">\n</span><span class="s2">            enddo</span><span class="se">\n</span><span class="s2">           enddo</span><span class="se">\n</span><span class="s2">          enddo</span><span class="se">\n</span><span class="s2">         enddo</span><span class="se">\n</span><span class="s2">        !@cuf iercuda=cudaDeviceSynchronize()</span><span class="se">\n</span><span class="s2">    endsubroutine init_flux_cuf</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;subroutine_call&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;call init_flux_cuf(nx, ny, nz, nv, self</span><span class="si">%f</span><span class="s2">l_gpu, self</span><span class="si">%f</span><span class="s2">ln_gpu, rhodt)&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;sub_call_arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nx&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;ny&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nz&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nv&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;self</span><span class="si">%f</span><span class="s2">l_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;self</span><span class="si">%f</span><span class="s2">ln_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;rhodt&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;kernel&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;        !$cuf kernel do(3) &lt;&lt;&lt;*,*&gt;&gt;&gt; </span><span class="se">\n</span><span class="s2">         do k=1,nz</span><span class="se">\n</span><span class="s2">          do j=1,ny</span><span class="se">\n</span><span class="s2">           do i=1,nx</span><span class="se">\n</span><span class="s2">            do m=1,nv</span><span class="se">\n</span><span class="s2">             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)</span><span class="se">\n</span><span class="s2">             fl_gpu(i,j,k,m)  = 0._rkind</span><span class="se">\n</span><span class="s2">            enddo</span><span class="se">\n</span><span class="s2">           enddo</span><span class="se">\n</span><span class="s2">          enddo</span><span class="se">\n</span><span class="s2">         enddo</span><span class="se">\n</span><span class="s2">&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;non_cuf&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;serial&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;            do m=1,nv</span><span class="se">\n</span><span class="s2">             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)</span><span class="se">\n</span><span class="s2">             fl_gpu(i,j,k,m)  = 0._rkind</span><span class="se">\n</span><span class="s2">            enddo&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;num_loop&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;3&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;idx&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;k&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;j&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;i&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">]</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;size&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="p">[</span><span class="w"></span>
+<span class="w">            </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="s2">&quot;nz&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">],</span><span class="w"></span>
+<span class="w">          </span><span class="p">[</span><span class="w"></span>
+<span class="w">            </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="s2">&quot;ny&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">],</span><span class="w"></span>
+<span class="w">          </span><span class="p">[</span><span class="w"></span>
+<span class="w">            </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">            </span><span class="s2">&quot;nx&quot;</span><span class="w"></span>
+<span class="w">          </span><span class="p">]</span><span class="w"></span>
+<span class="w">        </span><span class="p">]</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;blockdim&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="p">[</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;THREE_X&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;THREE_Y&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">          </span><span class="s2">&quot;THREE_Z&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">]</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;non_kernel_def&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;kernel_args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nx&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;ny&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nz&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nv&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fl_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fln_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;rhodt&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;kernel_subroutine&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;    subroutine init_flux_cuf(nx, ny, nz, nv, fl_gpu, fln_gpu, rhodt) </span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;kernel_variables&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;        integer :: nx, ny, nz, nv</span><span class="se">\n</span><span class="s2">        real(rkind) :: rhodt</span><span class="se">\n</span><span class="s2">        real(rkind), dimension(1:,1:,1:,1:), intent(inout), device :: fl_gpu, fln_gpu</span><span class="se">\n</span><span class="s2">        integer :: i,j,k,m,iercuda</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;subroutine_code&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">        !$cuf kernel do(3) &lt;&lt;&lt;*,*&gt;&gt;&gt; </span><span class="se">\n</span><span class="s2">         do k=1,nz</span><span class="se">\n</span><span class="s2">          do j=1,ny</span><span class="se">\n</span><span class="s2">           do i=1,nx</span><span class="se">\n</span><span class="s2">            do m=1,nv</span><span class="se">\n</span><span class="s2">             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)</span><span class="se">\n</span><span class="s2">             fl_gpu(i,j,k,m)  = 0._rkind</span><span class="se">\n</span><span class="s2">            enddo</span><span class="se">\n</span><span class="s2">           enddo</span><span class="se">\n</span><span class="s2">          enddo</span><span class="se">\n</span><span class="s2">         enddo</span><span class="se">\n</span><span class="s2">        !@cuf iercuda=cudaDeviceSynchronize()</span><span class="se">\n</span><span class="s2">    &quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;args_map&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nx&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nx&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;ny&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ny&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nz&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nz&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nv&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;nv&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fl_gpu&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;self</span><span class="si">%f</span><span class="s2">l_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fln_gpu&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;self</span><span class="si">%f</span><span class="s2">ln_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;rhodt&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rhodt&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;array_index_map&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fl_gpu&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fl_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fln_gpu&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fln_gpu&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">},</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;kernel_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;kernel_names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;init_flux_kernel&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;wrapper_args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nx&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;ny&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nz&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nv&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;rhodt&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fl_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fln_gpu&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;wrapper_c_args&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;int nx&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;int ny&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;int nz&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;int nv&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;real rhodt&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;real *fl_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;real *fln_gpu&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;interface&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;interface</span><span class="se">\n</span><span class="s2">subroutine init_flux_kernel_wrapper(nx,ny,nz,nv,rhodt,fl_gpu,fln_gpu)&amp;</span><span class="se">\n</span><span class="s2">bind(c,name=</span><span class="se">\&quot;</span><span class="s2">init_flux_kernel_wrapper</span><span class="se">\&quot;</span><span class="s2">)</span><span class="se">\n</span><span class="s2">import :: c_ptr, c_rkind, c_bool, c_int</span><span class="se">\n</span><span class="s2">implicit none</span><span class="se">\n</span><span class="s2">integer(c_int), value :: nx,ny,nz,nv</span><span class="se">\n</span><span class="s2">real(c_rkind), value :: rhodt</span><span class="se">\n</span><span class="s2">type(c_ptr), value :: fl_gpu,fln_gpu</span><span class="se">\n</span><span class="s2">end subroutine init_flux_kernel_wrapper</span><span class="se">\n</span><span class="s2">end interface</span><span class="se">\n</span><span class="s2">&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;wrapper_fside&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;call init_flux_kernel_wrapper(nx,ny,nz,nv,rhodt,c_loc(fl_gpu),c_loc(fln_gpu))</span><span class="se">\n</span><span class="s2">&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;wrapper_cside&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;void init_flux_kernel_wrapper(int nx,int ny,int nz,int nv,real rhodt,real *fl_gpu,real *fln_gpu)&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">]</span><span class="w"></span>
+<span class="w">    </span><span class="p">},</span><span class="w"></span>
+<span class="w">    </span><span class="s2">&quot;var_info&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;real_arrays&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fl_gpu&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;fln_gpu&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;int_arrays&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;logical_arrays&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;real&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;rhodt&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;integer&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nx&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;ny&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nz&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;nv&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;logical&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;lreal&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;linteger&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;i&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;j&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;k&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;m&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s2">&quot;iercuda&quot;</span><span class="w"></span>
+<span class="w">      </span><span class="p">],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;llogical&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;lreal_arrays&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;linteger_arrays&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;llogical_arrays&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;reduction_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span><span class="w"></span>
+<span class="w">      </span><span class="s2">&quot;reduction_variables&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">  </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+</div>
+</div></blockquote>
+</li>
+</ul>
+</section>
 <section id="work-flow">
-<h4>Work flow<a class="headerlink" href="#work-flow" title="Permalink to this heading"></a></h4>
+<h3>Work flow<a class="headerlink" href="#work-flow" title="Permalink to this heading"></a></h3>
 <ol class="arabic simple">
-<li><p>Go to <code class="docutils literal notranslate"><span class="pre">tools/streams-convert</span></code> directory. Always run from here.</p></li>
-<li><p>Run the code in cpu mode. Find examples <a class="reference internal" href="#cpuex"><span class="std std-ref">here</span></a>.</p></li>
-<li><p>By default, This will create the CPU code in <code class="docutils literal notranslate"><span class="pre">code/</span></code> instead <code class="docutils literal notranslate"><span class="pre">code_ext</span></code>. Read <a class="reference internal" href="#extwf"><span class="std std-ref">here</span></a> to know more about <code class="docutils literal notranslate"><span class="pre">code_ext</span></code></p></li>
+<li><p>Go to <code class="docutils literal notranslate"><span class="pre">tools/streams-convert</span></code> directory. Always run from here</p></li>
+<li><p>Run the code in hipfort mode. Find examples <a class="reference internal" href="#hipfortex"><span class="std std-ref">here</span></a></p></li>
+<li><p>By default, this will create the AMD code in <code class="docutils literal notranslate"><span class="pre">code/</span></code></p></li>
+<li><p>For obtaining AMD code without plugins, first run in <a class="reference internal" href="#extl"><span class="std std-ref">ext</span></a> mode to obtain <code class="docutils literal notranslate"><span class="pre">code_ext</span></code></p></li>
 </ol>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>In this mode, both input and output path are the same locations. For example, if you want to convert the full STREAmS code (including ibm/insitu) from <code class="docutils literal notranslate"><span class="pre">code/</span></code>, you run
-this in default mode and the output will also be in <code class="docutils literal notranslate"><span class="pre">code/</span></code>.</p>
+<ul class="simple">
+<li><p>In default mode, both input and output path are the same locations (in place)</p></li>
+<li><p>The optional argument <code class="docutils literal notranslate"><span class="pre">-d</span></code> when used, will place the converted files only in <code class="docutils literal notranslate"><span class="pre">tools/streams-convert/output_amd/</span></code>. This mode can be used if you do not want to place the code in the main directory</p></li>
+<li><p>Logs written in <code class="docutils literal notranslate"><span class="pre">streams-convert/log_hipfort.log</span></code></p></li>
+</ul>
 </div>
 </section>
 <section id="examples">
-<h4>Examples<a class="headerlink" href="#examples" title="Permalink to this heading"></a></h4>
-<ol class="arabic simple" id="cpuex">
+<span id="hipfortex"></span><h3>Examples<a class="headerlink" href="#examples" title="Permalink to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>To obtain STREAmS AMD version in <code class="docutils literal notranslate"><span class="pre">code/</span></code>, run:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py hip
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>To obtain STREAmS AMD without ibm and insitu:</p></li>
+</ol>
+<blockquote>
+<div><ul class="simple">
+<li><p>First generate <a class="reference internal" href="#extex"><span class="std std-ref">ibm/insitu conversion</span></a></p></li>
+<li><p>After the generation of <code class="docutils literal notranslate"><span class="pre">code_ext/</span></code>, run:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py hip -i ../../code_ext/
+</pre></div>
+</div>
+</div></blockquote>
+<ol class="arabic simple" start="3">
+<li><p>To use STREAmS from <code class="docutils literal notranslate"><span class="pre">code_ext/</span></code> and only place it in <code class="docutils literal notranslate"><span class="pre">output_amd</span></code>, run:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py hip -i ../../code_ext/ -d
+</pre></div>
+</div>
+</section>
+</section>
+<section id="cpu">
+<span id="cpul"></span><h2>cpu<a class="headerlink" href="#cpu" title="Permalink to this heading"></a></h2>
+<p>This mode converts STREAmS CUDA Fortran version to CPU version. To look into the avilable options, run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py cpu -h
+
+<span class="go">usage: pyconvertstreams.py cpu [-h] [-i INPUT] [-d]</span>
+
+<span class="go">options:</span>
+<span class="go">  -h, --help            show this help message and exit</span>
+<span class="go">  -i INPUT, --input INPUT</span>
+<span class="go">                        Input code folder (default: ../../code/)</span>
+<span class="go">  -d, --dry_run         If used, files will not be placed in input path (default: False)</span>
+</pre></div>
+</div>
+<section id="id1">
+<h3>Work flow<a class="headerlink" href="#id1" title="Permalink to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Go to <code class="docutils literal notranslate"><span class="pre">tools/streams-convert</span></code> directory. Always run from here</p></li>
+<li><p>Run the code in cpu mode. Find examples <a class="reference internal" href="#cpuex"><span class="std std-ref">here</span></a></p></li>
+<li><p>By default, this will create the CPU code in <code class="docutils literal notranslate"><span class="pre">code/</span></code></p></li>
+<li><p>For obtaining CPU code without plugins, first run in <a class="reference internal" href="#extl"><span class="std std-ref">ext</span></a> mode to obtain <code class="docutils literal notranslate"><span class="pre">code_ext</span></code></p></li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>In default mode, both input and output path are the same locations (in place)</p></li>
+<li><p>The optional argument <code class="docutils literal notranslate"><span class="pre">-d</span></code> when used, will place the converted files only in <code class="docutils literal notranslate"><span class="pre">tools/streams-convert/output_cpu/</span></code>. This mode can be used if you do not want to place the code in the main directory</p></li>
+<li><p>Logs written in <code class="docutils literal notranslate"><span class="pre">streams-convert/log_cpu.log</span></code></p></li>
+</ul>
+</div>
+</section>
+<section id="cpuex">
+<span id="id2"></span><h3>Examples<a class="headerlink" href="#cpuex" title="Permalink to this heading"></a></h3>
+<ol class="arabic simple">
 <li><p>To obtain STREAmS CPU version in <code class="docutils literal notranslate"><span class="pre">code/</span></code>, run:</p></li>
 </ol>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py cpu
 </pre></div>
 </div>
 <ol class="arabic simple" start="2">
-<li><p>To obtain STREAmS CPU without ibm and insitu, run:</p></li>
+<li><p>To obtain STREAmS CPU without ibm and insitu:</p></li>
 </ol>
 <blockquote>
 <div><ul class="simple">
@@ -176,14 +604,20 @@ this in default mode and the output will also be in <code class="docutils litera
 </pre></div>
 </div>
 </div></blockquote>
+<ol class="arabic simple" start="3">
+<li><p>To use STREAmS from <code class="docutils literal notranslate"><span class="pre">code_ext/</span></code> and only place it in <code class="docutils literal notranslate"><span class="pre">output</span></code>, run:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py cpu -i ../../code_ext/ -d
+</pre></div>
+</div>
 </section>
 </section>
 <section id="ext">
-<h3>Ext<a class="headerlink" href="#ext" title="Permalink to this heading"></a></h3>
-<p id="extl">This mode currently supports the removal IBM, Insitu or both from the code. To look into the avilable options, run:</p>
+<span id="extl"></span><h2>ext<a class="headerlink" href="#ext" title="Permalink to this heading"></a></h2>
+<p>This mode currently supports the removal IBM, Insitu or both from STREAmS CUDA Fortran backend. To look into the avilable options, run:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -h
 
-<span class="go">usage: pyconvertstreams.py ext [-h] [-i INPUT] [-o OUTPUT] [-l] -m {ibm,insitu} [{ibm,insitu} ...]</span>
+<span class="go">usage: pyconvertstreams.py ext [-h] [-i INPUT] [-o OUTPUT] -m {ibm,insitu} [{ibm,insitu} ...]</span>
 
 <span class="go">options:</span>
 <span class="go">  -h, --help            show this help message and exit</span>
@@ -191,36 +625,17 @@ this in default mode and the output will also be in <code class="docutils litera
 <span class="go">                        Input code folder (default: ../../code/)</span>
 <span class="go">  -o OUTPUT, --output OUTPUT</span>
 <span class="go">                        Path to output converted files (default: ../../code_ext/)</span>
-<span class="go">  -l, --log             Log all the changes (default: False)</span>
 
 <span class="go">required arguments:</span>
 <span class="go">  -m {ibm,insitu} [{ibm,insitu} ...], --mode {ibm,insitu} [{ibm,insitu} ...]</span>
 <span class="go">                        Specify the plugins (default: None)</span>
 </pre></div>
 </div>
-<section id="id1">
-<h4>Work flow<a class="headerlink" href="#id1" title="Permalink to this heading"></a></h4>
-<ol class="arabic simple">
-<li><p>Go to <code class="docutils literal notranslate"><span class="pre">tools/streams-convert</span></code> directory. Always run from here.</p></li>
-<li><p>Prepare the input file <code class="docutils literal notranslate"><span class="pre">external/external_vars_procedures.json</span></code>. See <a class="reference internal" href="#extinp"><span class="std std-ref">here</span></a>.</p></li>
-<li><p>Run the code in ext mode. Find examples <a class="reference internal" href="#extex"><span class="std std-ref">here</span></a>.</p></li>
-<li><p>This will create a copy of <code class="docutils literal notranslate"><span class="pre">code/</span></code> directory called the <code class="docutils literal notranslate"><span class="pre">code_ext</span></code>.</p></li>
-</ol>
-<div class="admonition note" id="extwf">
-<p class="admonition-title">Note</p>
-<p>The directory code_ext should be removed everytime you rerun the converter. This is to make sure that we get a fresh copy of the original code everytime and to avoid any overwriting.
-Eventhough there is an option to specify both input/output directory, it is recommended to use the default values.</p>
-</div>
-<ol class="arabic simple" start="5">
-<li><p>There is an option to log the process. This will generate a log file (<code class="docutils literal notranslate"><span class="pre">streams-convert/log_external_data.json</span></code>).</p></li>
-</ol>
-</section>
-<section id="input-file">
-<h4>Input file<a class="headerlink" href="#input-file" title="Permalink to this heading"></a></h4>
-<p id="extinp">The input values can be found in <code class="docutils literal notranslate"><span class="pre">external/external_vars_procedures.json</span></code>. Generally, the input file will remain unchanged. However, if there are any new procedure additions, the values must be
-updated here. The input file is shown below:</p>
-<div class="literal-block-wrapper docutils container" id="id3">
-<div class="code-block-caption"><span class="caption-text">Input file for external conversions</span><a class="headerlink" href="#id3" title="Permalink to this code"></a></div>
+<section id="extinp">
+<span id="id3"></span><h3>Input file<a class="headerlink" href="#extinp" title="Permalink to this heading"></a></h3>
+<p>The input file can be found in <code class="docutils literal notranslate"><span class="pre">external/external_vars_procedures.json</span></code>:</p>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Input file for external conversions</span><a class="headerlink" href="#id6" title="Permalink to this code"></a></div>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="p">{</span><span class="w"></span>
 <span class="linenos"> 2</span><span class="w">	</span><span class="nt">&quot;singleideal&quot;</span><span class="p">:</span><span class="w"></span>
 <span class="linenos"> 3</span><span class="w">	</span><span class="p">{</span><span class="w"></span>
@@ -261,15 +676,32 @@ updated here. The input file is shown below:</p>
 </pre></div>
 </div>
 </div>
-<p>Currently, it can handle only the <code class="docutils literal notranslate"><span class="pre">singleideal</span></code> equations which is specified in line 2. For this equation, we have two removal modes. In the first, IBM mode (line 4) is specified.
+<p>Currently, it can handle only the <code class="docutils literal notranslate"><span class="pre">singleideal</span></code> equations which is specified in line 2. For this equation, we have two removal modes. In the first, ibm mode (line 4) is specified.
 For this, three files are required: <code class="docutils literal notranslate"><span class="pre">singleideal.F90</span></code> (line 6), <code class="docutils literal notranslate"><span class="pre">singleideal_gpu.F90</span></code> (line 10) and <code class="docutils literal notranslate"><span class="pre">kernels_gpu.F90</span></code> (line 14). For each file, we specify the corresponding <code class="docutils literal notranslate"><span class="pre">procedures</span></code>.
 This information must be updated as and when there is a change in the main branch. There is an optional fourth value, <code class="docutils literal notranslate"><span class="pre">skip_vars</span></code>. This is needed to specify if any variables should be retained
 after the conversion. This can be seen used for the insitu input where we specify <code class="docutils literal notranslate"><span class="pre">time_is_freezed</span></code> (line 34) which is required even if insitu is not enabled. Similar inputs are provided for insitu
 removal (lines 20-34).</p>
 </section>
-<section id="id2">
-<h4>Examples<a class="headerlink" href="#id2" title="Permalink to this heading"></a></h4>
-<ol class="arabic simple" id="extex">
+<section id="extwf">
+<span id="id4"></span><h3>Work flow<a class="headerlink" href="#extwf" title="Permalink to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>Go to <code class="docutils literal notranslate"><span class="pre">tools/streams-convert</span></code> directory. Always run from here.</p></li>
+<li><p>Prepare the input file <code class="docutils literal notranslate"><span class="pre">external/external_vars_procedures.json</span></code>. See <a class="reference internal" href="#extinp"><span class="std std-ref">here</span></a>.</p></li>
+<li><p>Run the code in ext mode. Find examples <a class="reference internal" href="#extex"><span class="std std-ref">here</span></a>.</p></li>
+<li><p>This will create a copy of <code class="docutils literal notranslate"><span class="pre">code/</span></code> directory which is called <code class="docutils literal notranslate"><span class="pre">code_ext</span></code>.</p></li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The input file <code class="docutils literal notranslate"><span class="pre">external/external_vars_procedures.json</span></code> will for the most time remain unchanged. If there are any new procedures implemented in the main branch, this file must be updated</p></li>
+<li><p>The directory <code class="docutils literal notranslate"><span class="pre">code_ext</span></code> should be removed everytime you rerun the converter. This is to make sure that we get a fresh copy of the original code everytime and to avoid any overwriting. Eventhough there is an option to specify both input/output directory, it is recommended to use the default values</p></li>
+<li><p>Logs written in <code class="docutils literal notranslate"><span class="pre">streams-convert/log_ext.log</span></code></p></li>
+</ul>
+</div>
+</section>
+<section id="extex">
+<span id="id5"></span><h3>Examples<a class="headerlink" href="#extex" title="Permalink to this heading"></a></h3>
+<ol class="arabic simple">
 <li><p>To obtain STREAmS without ibm, run:</p></li>
 </ol>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -m ibm
@@ -281,14 +713,120 @@ removal (lines 20-34).</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -m ibm insitu
 </pre></div>
 </div>
-<ol class="arabic simple" start="3">
-<li><p>To obtain STREAmS without insitu and log the removal, run:</p></li>
-</ol>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py ext -m insitu -l
-</pre></div>
+</section>
+</section>
+<section id="practices-to-ensure-clean-conversion">
+<h2>Practices to ensure clean conversion<a class="headerlink" href="#practices-to-ensure-clean-conversion" title="Permalink to this heading"></a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Mainly for hipfort mode</p>
+</div>
+<ul class="simple">
+<li><p>While defining arrays go in the order: <code class="docutils literal notranslate"><span class="pre">type,</span> <span class="pre">allocatable/pointer,</span> <span class="pre">dimension,</span> <span class="pre">device</span> <span class="pre">::</span></code></p></li>
+<li><p>Avoid using logical GPU arrays</p></li>
+<li><p>Add <code class="docutils literal notranslate"><span class="pre">_gpu</span></code> suffix to all the GPU arrays</p></li>
+<li><p>Try using allocate for one array at a time</p></li>
+<li><p>Avoid commenting directives</p></li>
+<li><p>Do not define any kernels in equation_gpu.F90. You always call kernels from kernels_gpu.F90 in equation_gpu.F90</p></li>
+<li><p>Reduction cuf kernels must not have a parts which cannot be repeated freely</p></li>
+<li><p>Always have <code class="docutils literal notranslate"><span class="pre">_cuf</span></code> suffix for kernels using kernel directives</p></li>
+<li><p>Maintain consistent syntax style for: <code class="docutils literal notranslate"><span class="pre">enddo</span></code>, <code class="docutils literal notranslate"><span class="pre">endif</span></code>, <code class="docutils literal notranslate"><span class="pre">elseif</span></code>, etc.,</p></li>
+<li><p>While slicing array add the range. For example: <code class="docutils literal notranslate"><span class="pre">bcswap_var(self%w_aux_gpu(:,:,:,10:10))</span></code> instead of <code class="docutils literal notranslate"><span class="pre">bcswap_var(self%w_aux_gpu(:,:,:,10))</span></code></p></li>
+<li><p>Hard-coded parts of the converter have been logged with a warning tag. Always look into the log file to know where they exist in the code</p></li>
+</ul>
+</section>
+<section id="limitations-known-issues">
+<h2>Limitations/Known issues<a class="headerlink" href="#limitations-known-issues" title="Permalink to this heading"></a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Mainly for hipfort mode</p>
+</div>
+<ul class="simple">
+<li><p>Reduction array is currently only 3D and the indices are specifically (i,j,k)</p></li>
+<li><p>Explicit kernels are assumed to invoke 2D grid block only and the index information is very specific for the current configuration (look for warnings in log file)</p></li>
+<li><p>Switch cases do not have break statement</p></li>
+<li><p>device_kernels.cpp, base_amd.F90 and base_amd_cpp.cpp are always static</p></li>
+<li><p>Array index conversion when non-contiguous indices are sliced is not currently possible</p></li>
+<li><p>Local arrays in explicit kernels currently only supported for 1D or 2D sizes</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If there are any bugs, Please raise an issue</p>
 </div>
 </section>
-</section>
+<section id="how-to-run-on-lumi">
+<h2>How to run on LUMI<a class="headerlink" href="#how-to-run-on-lumi" title="Permalink to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Go to:</p></li>
+</ol>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">cd</span> tools/streams-convert/
+</pre></div>
+</div>
+<ol class="arabic" start="2">
+<li><p>Edit <code class="docutils literal notranslate"><span class="pre">hipfort/kernels_config.ini</span></code> if needed and make sure all the static files in <code class="docutils literal notranslate"><span class="pre">input_files/amd/</span></code> are up to date</p></li>
+<li><p>Check if the avilable Python3 is greater than version 3.8. If not, reproduce the following steps to install locally using Anaconda:</p>
+<ul class="simple">
+<li><p>Download the latest version from <a class="reference external" href="https://www.anaconda.com/products/distribution">here</a></p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>wget https://repo.anaconda.com/archive/Anaconda3-2022.10-Linux-x86_64.sh
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Run the script:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>./Anaconda3-2022.10-Linux-x86_64.sh
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>After installing, run:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>conda activate base
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Verify the version of Python is greater than 3.8 and install the dependencies:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>pip install -r install_requirements.txt
+</pre></div>
+</div>
+</li>
+<li><p>Run the converter in <a class="reference internal" href="#hipfortl"><span class="std std-ref">hipfort</span></a> mode:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 pyconvertstreams.py hip
+</pre></div>
+</div>
+</li>
+<li><p>Load the following modules:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>module load CrayEnv rocm/5.0.2 PrgEnv-gnu
+</pre></div>
+</div>
+</li>
+<li><p>Currently, <code class="docutils literal notranslate"><span class="pre">hipfort</span></code> library in LUMI is outdated. Follow the steps below to install it locally:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git clone https://github.com/ROCmSoftwarePlatform/hipfort
+<span class="gp">$ </span>git checkout rocm-5.1.0 <span class="c1"># or greater</span>
+<span class="gp">$ </span>mkdir build INSTALL <span class="p">;</span> <span class="nb">cd</span> build
+<span class="gp">$ </span>cmake -DHIPFORT_INSTALL_DIR<span class="o">=</span>../INSTALL/ -DCMAKE_Fortran_COMPILER<span class="o">=</span>ftn ..
+<span class="gp">$ </span>make install
+</pre></div>
+</div>
+</li>
+<li><p>Go to <code class="docutils literal notranslate"><span class="pre">code/</span></code> and copy the LUMI makefile template:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cp make-templates/makefile.inc.lumi_amd makefile.inc
+</pre></div>
+</div>
+</li>
+<li><p>Make sure all the enviroment variables mentioned in makefile.inc are added to <code class="docutils literal notranslate"><span class="pre">bashrc</span></code> and run <code class="docutils literal notranslate"><span class="pre">make</span></code></p></li>
+<li><p>Go into any <code class="docutils literal notranslate"><span class="pre">examples/</span></code> directory and get an allocation. For example, to allocate 1 full node (8 GPUs), run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>salloc --partition<span class="o">=</span>eap --nodes<span class="o">=</span><span class="m">1</span> --account<span class="o">=</span>project_465000141 --time<span class="o">=</span><span class="m">00</span>:30:0 --ntasks-per-node<span class="o">=</span><span class="m">8</span> --gpus-per-node<span class="o">=</span><span class="m">8</span> --mem<span class="o">=</span>480G  --exclusive
+</pre></div>
+</div>
+</li>
+<li><p>For the above allocation, to run with 8 tasks, execute:</p></li>
+</ol>
+<blockquote>
+<div><div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>srun ../../code/streams_2.exe
+</pre></div>
+</div>
+</div></blockquote>
 </section>
 </section>
 

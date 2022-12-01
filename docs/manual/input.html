@@ -7,6 +7,7 @@
   <title>Setting input file &mdash; STREAmS 2.0 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -21,7 +22,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Understading output files" href="output.html" />
+    <link rel="next" title="Understanding output files" href="output.html" />
     <link rel="prev" title="STREAmS flow cases" href="flow_cases.html" /> 
 </head>
 
@@ -46,8 +47,8 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Setting input file</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#file-structure-of-singleideal-ini">File structure of <cite>singleideal.ini</cite></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#grid">[grid]</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#mpi">[mpi]</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#bc">[bc]</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#mpi">[mpi]</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#controls">[controls]</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#numerics">[numerics]</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#flow">[flow]</a></li>
@@ -57,9 +58,10 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="output.html">Understading output files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understanding output files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_to_cite.html">How to cite STREAmS</a></li>
 <li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
 </ul>
 
@@ -123,10 +125,11 @@ When the grid is directly generated in STREAmS, nodes in the x and z directions 
 (suggested values: 16,24,32)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">nywr</span></code>          =&gt; integer, active for <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">4,5</span></code>, number of nodes in the well-resolved region between the wall (y=0) and y = <code class="docutils literal notranslate"><span class="pre">lywr</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">lywr</span></code>          =&gt; real, active for <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">4,5</span></code>, size of the well-resolved region</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ysmoosteps</span></code>    =&gt; integer, number of iterations to smooth wall-normal grid at boundary layer edge or channel centreline</p></li>
 </ul>
 <p>Notes:</p>
 <p>A non-uniform distribution of nodes is needed in the wall-normal direction (y) for the simulation of wall-bounded flows.
-In this case, STREAmS adopts the “natural” grid stretching proposed in <span id="id1">[<a class="reference internal" href="references.html#id7" title="S. Pirozzoli and P. Orlandi. Natural grid stretching for DNS of wall-bounded flows. Journal of Computational Physics, 439:110408, August 2021. URL: https://doi.org/10.1016/j.jcp.2021.110408, doi:10.1016/j.jcp.2021.110408.">6</a>]</span>,
+In this case, STREAmS adopts the “natural” grid stretching proposed in <span id="id1">[<a class="reference internal" href="references.html#id7" title="S. Pirozzoli and P. Orlandi. Natural grid stretching for DNS of wall-bounded flows. Journal of Computational Physics, 439:110408, August 2021. URL: https://doi.org/10.1016/j.jcp.2021.110408, doi:10.1016/j.jcp.2021.110408.">10</a>]</span>,
 hereinafter denoted as <cite>Pirozzoli mapping</cite> function.
 Depending on the particular flow case under investigation, the following strategies are followed:</p>
 <ul class="simple">
@@ -140,17 +143,6 @@ domain (from y = <code class="docutils literal notranslate"><span class="pre">ly
 </ul>
 <p>When <code class="docutils literal notranslate"><span class="pre">grid_type</span> <span class="pre">=</span> <span class="pre">1</span></code>, the grid is generated in pre-processing, and so the user must provide the code with 3 ASCII files named <cite>x.dat</cite>, <cite>y.dat</cite>, <cite>z.dat</cite> of size <code class="docutils literal notranslate"><span class="pre">nxmax</span></code>,
 <code class="docutils literal notranslate"><span class="pre">nymax</span></code>, <code class="docutils literal notranslate"><span class="pre">nzmax</span></code> respectively, each containing one column with the node coordinates in the corresponding Cartesian direction.</p>
-</section>
-<section id="mpi">
-<h3>[mpi]<a class="headerlink" href="#mpi" title="Permalink to this heading"></a></h3>
-<p>This section allows the user to specify parameters for the MPI decomposition.</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">x_split</span></code> =&gt; integer, MPI partitions in x direction</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">y_split</span></code> =&gt; integer, MPI partitions in y direction (should be always 1)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">z_split</span></code> =&gt; integer, MPI partitions in z direction</p></li>
-</ul>
-<p>Notes:</p>
-<p>The product <code class="docutils literal notranslate"><span class="pre">x_split</span> <span class="pre">*</span> <span class="pre">y_split</span> <span class="pre">*</span> <span class="pre">z_split</span></code> must be equal to the total number of MPI tasks.</p>
 </section>
 <section id="bc">
 <h3>[bc]<a class="headerlink" href="#bc" title="Permalink to this heading"></a></h3>
@@ -169,6 +161,7 @@ domain (from y = <code class="docutils literal notranslate"><span class="pre">ly
 <li><p><code class="docutils literal notranslate"><span class="pre">zmin_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side zmin</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">zmax_nr</span></code> =&gt; integer, flag for bc treatment based on characteristic decomposition on side zmax</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">x_recyc</span></code> =&gt; real, specify recycling location in x direction</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">correct_bound_ord</span></code> =&gt; integer, flag to reduce the order of accuracy at boundaries and avoid the use of ghost nodes (1 -&gt; active)</p></li>
 </ul>
 <p>Notes:</p>
 <p>The following flags can be specified for the static boundary condition:</p>
@@ -176,18 +169,31 @@ domain (from y = <code class="docutils literal notranslate"><span class="pre">ly
 <li><p>0  ==&gt; periodicity (available for all sides)</p></li>
 <li><p>1  ==&gt; free-stream (available for xmin)</p></li>
 <li><p>2  ==&gt; extrapolation (available for all sides)</p></li>
+<li><p>4  ==&gt; extrapolation with pressure imposed (available for xmax, ymax)</p></li>
 <li><p>5  ==&gt; symmetry (available for ymin)</p></li>
 <li><p>6  ==&gt; viscous wall (available for ymin, ymax)</p></li>
 <li><p>7  ==&gt; oblique shock entering the domain (available for ymax)</p></li>
+<li><p>9  ==&gt; compressible Blasius for laminar inflow (available for xmin).</p></li>
 <li><p>10 ==&gt; recycling-rescaling for turbulent inflow (available for xmin).</p></li>
 </ul>
 <p>Concerning the characteristic treatment, the following options are available for all sides:</p>
 <ul class="simple">
 <li><p>0 ==&gt; characteristic treatment is not applied</p></li>
 <li><p>1 ==&gt; pure non-reflecting</p></li>
-<li><p>2 ==&gt; relaxation, see <span id="id2">[<a class="reference internal" href="references.html#id8" title="S. Pirozzoli and T. Colonius. Generalized characteristic relaxation boundary conditions for unsteady compressible flow simulations. Journal of Computational Physics, 248:109–126, September 2013. URL: https://doi.org/10.1016/j.jcp.2013.04.021, doi:10.1016/j.jcp.2013.04.021.">5</a>]</span></p></li>
+<li><p>2 ==&gt; relaxation, see <span id="id2">[<a class="reference internal" href="references.html#id8" title="S. Pirozzoli and T. Colonius. Generalized characteristic relaxation boundary conditions for unsteady compressible flow simulations. Journal of Computational Physics, 248:109–126, September 2013. URL: https://doi.org/10.1016/j.jcp.2013.04.021, doi:10.1016/j.jcp.2013.04.021.">9</a>]</span></p></li>
 <li><p>6 ==&gt; reflective wall</p></li>
 </ul>
+</section>
+<section id="mpi">
+<h3>[mpi]<a class="headerlink" href="#mpi" title="Permalink to this heading"></a></h3>
+<p>This section allows the user to specify parameters for the MPI decomposition.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">x_split</span></code> =&gt; integer, MPI partitions in x direction</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">y_split</span></code> =&gt; integer, MPI partitions in y direction (should be always 1)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">z_split</span></code> =&gt; integer, MPI partitions in z direction</p></li>
+</ul>
+<p>Notes:</p>
+<p>The product <code class="docutils literal notranslate"><span class="pre">x_split</span> <span class="pre">*</span> <span class="pre">y_split</span> <span class="pre">*</span> <span class="pre">z_split</span></code> must be equal to the total number of MPI tasks.</p>
 </section>
 <section id="controls">
 <h3>[controls]<a class="headerlink" href="#controls" title="Permalink to this heading"></a></h3>
@@ -208,19 +214,24 @@ In the latter case, the time step is equal to abs(<code class="docutils literal 
 <p>This section allows the user to specify parameters to control numerical methods.</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">ep_order</span></code> =&gt; integer, order of accuracy for the discretization of convective terms</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">nkeep</span></code> =&gt; integer, KEEP(n) scheme selection (default: 0, suggested: 1 or 2) [???]</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> =&gt; integer, parameter for WENO (order of accuracy is 2 * <code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> - 1) [???]</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nkeep</span></code> =&gt; integer, KEEP(n) or KEP scheme selection</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">conservative_viscous</span></code> =&gt; integer, flag to activate computation of viscous terms in conservative form (1-&gt; yes)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">visc_order</span></code> =&gt; integer, order of accuracy for the discretization of viscous terms</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">sensor_threshold</span></code> =&gt; real, threshold value for shock sensor [???]</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">rk_type</span></code> =&gt; integer, specify Runge-Kutta type, 1 -&gt; WRAY RK [???].</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> =&gt; integer, parameter for WENO (order of accuracy is 2 * <code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> - 1)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">weno_version</span></code> =&gt; integer, select WENO version (0  -&gt; Jang &amp; Shu, 1 -&gt; WENO Z)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sensor_threshold</span></code> =&gt; real, threshold value for shock sensor</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rk_type</span></code> =&gt; integer, specify Runge-Kutta type (for future use, only the third order scheme is currently implemented, set equal to 1)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rand_type</span></code> =&gt; integer, specify random behavior, &lt; 0 not reproducible, &gt;=0 reproducible</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">mod_async</span></code> =&gt; integer, specify communication pattern, =0 sync, =1 async</p></li>
 </ul>
 <p>Notes:</p>
-<p>The discretization of the convective terms of the Navier-Stokes equations is based on the implementation of the family
-of kinetic energy and entropy preserving schemes KEEP(n), described in <span id="id3">[<a class="reference internal" href="references.html#id9" title="Y. Tamaki, Y. Kuya, and S. Kawai. Comprehensive analysis of entropy conservation property of non-dissipative schemes for compressible flows: KEEP scheme redefined. Journal of Computational Physics, 468:111494, November 2022. URL: https://doi.org/10.1016/j.jcp.2022.111494, doi:10.1016/j.jcp.2022.111494.">7</a>]</span>.
+<p>The discretization of the convective terms of the Navier-Stokes equations in smooth flow regions can be selected with <code class="docutils literal notranslate"><span class="pre">nkeep</span></code>.
+When <code class="docutils literal notranslate"><span class="pre">nkeep&lt;0</span></code> the KEP scheme described in <span id="id3">[<a class="reference internal" href="references.html#id13" title="Sergio Pirozzoli. Generalized conservative approximations of split convective derivative operators. Journal of Computational Physics, 229(19):7180–7190, September 2010. URL: https://doi.org/10.1016/j.jcp.2010.06.006, doi:10.1016/j.jcp.2010.06.006.">11</a>]</span> is used. When <code class="docutils literal notranslate"><span class="pre">nkeep&gt;=0</span></code> the discretization
+is based on the family of kinetic energy and entropy preserving schemes KEEP(n), described in <span id="id4">[<a class="reference internal" href="references.html#id9" title="Y. Tamaki, Y. Kuya, and S. Kawai. Comprehensive analysis of entropy conservation property of non-dissipative schemes for compressible flows: KEEP scheme redefined. Journal of Computational Physics, 468:111494, November 2022. URL: https://doi.org/10.1016/j.jcp.2022.111494, doi:10.1016/j.jcp.2022.111494.">12</a>]</span>.
 The available orders of accuracy for <code class="docutils literal notranslate"><span class="pre">ep_order</span></code> and <code class="docutils literal notranslate"><span class="pre">visc_order</span></code> are 2,4,6,8.
-The shock capturing flux is based on the classic WENO schemes by <span id="id4">[]</span>. Admissible values for <code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> are 1,2,3,4,
-corresponding to first-, third-, fifth- and seventh-order schemes, respectively.</p>
+The baseline shock capturing flux is based on the classic WENO schemes by <span id="id5">[<a class="reference internal" href="references.html#id12" title="Guang-Shan Jiang and Chi-Wang Shu. Efficient implementation of weighted ENO schemes. Journal of Computational Physics, 126(1):202–228, June 1996. URL: https://doi.org/10.1006/jcph.1996.0130, doi:10.1006/jcph.1996.0130.">5</a>]</span> (<code class="docutils literal notranslate"><span class="pre">weno_version</span> <span class="pre">=</span> <span class="pre">0</span></code>).
+Admissible values for <code class="docutils literal notranslate"><span class="pre">weno_scheme</span></code> are 1,2,3,4, corresponding to first-, third-, fifth- and seventh-order schemes, respectively.
+For the fifth-order scheme (<code class="docutils literal notranslate"><span class="pre">weno_scheme</span> <span class="pre">=</span> <span class="pre">3</span></code>), it is possible to select the optimized WENO-Z scheme proposed by <span id="id6">[<a class="reference internal" href="references.html#id11" title="Rafael Borges, Monique Carmona, Bruno Costa, and Wai Sun Don. An improved weighted essentially non-oscillatory scheme for hyperbolic conservation laws. Journal of Computational Physics, 227(6):3191–3211, March 2008. URL: https://doi.org/10.1016/j.jcp.2007.11.038, doi:10.1016/j.jcp.2007.11.038.">1</a>]</span> (<code class="docutils literal notranslate"><span class="pre">weno_version=1</span></code>).</p>
 </section>
 <section id="flow">
 <h3>[flow]<a class="headerlink" href="#flow" title="Permalink to this heading"></a></h3>
@@ -248,9 +259,9 @@ Simulations are performed at constant flow rate. The bulk temperature <span clas
 temperature based on <span class="math notranslate nohighlight">\(T_b\)</span> and the Mach number.
 When <span class="math notranslate nohighlight">\(\Theta \ge -1\)</span>, a bulk cooling term is added to the total energy equation to keep the bulk temperature constant.
 For this type of simulation, <code class="docutils literal notranslate"><span class="pre">Mach</span></code>  is the Mach number based on the bulk velocity and on the speed of sound evaluated at bulk temperature,
-see <span id="id5">[<a class="reference internal" href="references.html#id4" title="D. Modesti, S. Sathyanarayana, F. Salvadore, and M. Bernardini. Direct numerical simulation of supersonic turbulent flows over rough surfaces. Journal of Fluid Mechanics, May 2022. URL: https://doi.org/10.1017/jfm.2022.393, doi:10.1017/jfm.2022.393.">4</a>]</span>.
+see <span id="id7">[<a class="reference internal" href="references.html#id4" title="D. Modesti, S. Sathyanarayana, F. Salvadore, and M. Bernardini. Direct numerical simulation of supersonic turbulent flows over rough surfaces. Journal of Fluid Mechanics, May 2022. URL: https://doi.org/10.1017/jfm.2022.393, doi:10.1017/jfm.2022.393.">8</a>]</span>.
 Alternatively, when <span class="math notranslate nohighlight">\(\Theta &lt; -1\)</span>, the bulk temperature is not constant and is free to evolve.
-In this case, the setup is similar to that reported in <span id="id6">[<a class="reference internal" href="references.html#id5" title="D. Modesti and S. Pirozzoli. Reynolds and Mach number effects in compressible turbulent channel flow. International Journal of Heat and Fluid Flow, 59:33–49, June 2016. URL: https://doi.org/10.1016/j.ijheatfluidflow.2016.01.007, doi:10.1016/j.ijheatfluidflow.2016.01.007.">3</a>]</span>,
+In this case, the setup is similar to that reported in <span id="id8">[<a class="reference internal" href="references.html#id5" title="D. Modesti and S. Pirozzoli. Reynolds and Mach number effects in compressible turbulent channel flow. International Journal of Heat and Fluid Flow, 59:33–49, June 2016. URL: https://doi.org/10.1016/j.ijheatfluidflow.2016.01.007, doi:10.1016/j.ijheatfluidflow.2016.01.007.">7</a>]</span>,
 with <code class="docutils literal notranslate"><span class="pre">Mach</span></code> based on the bulk velocity and on the speed of sound evaluated at wall temperature.</p>
 <p>For boundary layer and SBLI configurations, the input Reynolds number is the friction Reynolds number at the inflow station <span class="math notranslate nohighlight">\(Re_{\tau}\)</span>,
 whereas <code class="docutils literal notranslate"><span class="pre">Mach</span></code> is the free-stream Mach number. Moreover, in this case <span class="math notranslate nohighlight">\(\Theta = \frac{T_w - T_{\infty}}{T_r - T_{\infty}}\)</span>,
@@ -283,7 +294,7 @@ where <span class="math notranslate nohighlight">\(T_r\)</span> is the recovery 
 </li>
 <li><p><code class="docutils literal notranslate"><span class="pre">indx_cp_l</span></code>, integer, exponent low limit of <span class="math notranslate nohighlight">\(C_p (T)\)</span> polynomial</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">indx_cp_r</span></code>, integer, exponent high limit of <span class="math notranslate nohighlight">\(C_p (T)\)</span> polynomial</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">cp_coeff</span></code>, real, list of coefficients for <span class="math notranslate nohighlight">\(C_p (T)\)</span> polynomial (from lowest to highest power), see <span id="id7">[<a class="reference internal" href="references.html#id10" title="B. J. McBride, M. J. Zehe, and S. Gordon. NASA Glenn coefficients for calculating thermodynamic properties of individual species. NASA/TP 211556, NASA, 2002.">2</a>]</span>.
+<li><p><code class="docutils literal notranslate"><span class="pre">cp_coeff</span></code>, real, list of coefficients for <span class="math notranslate nohighlight">\(C_p (T)\)</span> polynomial (from lowest to highest power), see <span id="id9">[<a class="reference internal" href="references.html#id10" title="B. J. McBride, M. J. Zehe, and S. Gordon. NASA Glenn coefficients for calculating thermodynamic properties of individual species. NASA/TP 211556, NASA, 2002.">6</a>]</span>.
 If <span class="math notranslate nohighlight">\(T^*\)</span> is the dimensional temperature, the dimensional specific heat at constant pressure is expressed as</p></li>
 </ul>
 <div class="math notranslate nohighlight">
@@ -316,7 +327,7 @@ Frequencies are indicated in terms of number of cycles, i.e. RK steps or time it
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="flow_cases.html" class="btn btn-neutral float-left" title="STREAmS flow cases" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="output.html" class="btn btn-neutral float-right" title="Understading output files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="output.html" class="btn btn-neutral float-right" title="Understanding output files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

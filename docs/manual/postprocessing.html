@@ -7,6 +7,7 @@
   <title>Post-processing data &mdash; STREAmS 2.0 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -22,7 +23,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Gallery of STREAmS results" href="gallery.html" />
-    <link rel="prev" title="Understading output files" href="output.html" /> 
+    <link rel="prev" title="Understanding output files" href="output.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,7 +45,7 @@
 <li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS flow cases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="input.html">Setting input file</a></li>
-<li class="toctree-l1"><a class="reference internal" href="output.html">Understading output files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understanding output files</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Post-processing data</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#plotting-3d-data">Plotting 3D data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#post-processing-flow-statistics">Post-processing flow statistics</a><ul>
@@ -63,6 +64,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_to_cite.html">How to cite STREAmS</a></li>
 <li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
 </ul>
 
@@ -100,7 +102,7 @@ using Paraview, or Tecplot.</p>
 <section id="post-processing-flow-statistics">
 <h2>Post-processing flow statistics<a class="headerlink" href="#post-processing-flow-statistics" title="Permalink to this heading"></a></h2>
 <p>Mean flow statics are stored in raw format in the file <cite>stat.bin</cite>.
-To post-process this, use the post-processing program available in the folder <code class="docutils literal notranslate"><span class="pre">tools/postpro</span></code>.
+To post-process it, use the post-processing program available in the folder <code class="docutils literal notranslate"><span class="pre">tools/postpro</span></code>.
 Compile the tool by typing,</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>make
 </pre></div>
@@ -131,11 +133,11 @@ which will contain the files <code class="docutils literal notranslate"><span cl
 <ol class="arabic simple">
 <li><p><span class="math notranslate nohighlight">\(y/h,\quad\)</span> wall-normal coordinate normalized with the channel half width</p></li>
 <li><p><span class="math notranslate nohighlight">\(y^+,\quad\)</span> wall-normal coordinate in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(y_{TL}^+,\quad\)</span> wall-normal coordinate transformed according to Trettel and Larsson [???] in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{TL}^+,\quad\)</span> wall-normal coordinate transformed according to Trettel and Larsson <span id="id1">[<a class="reference internal" href="references.html#id14" title="A. Trettel and J. Larsson. Mean velocity scaling for compressible wall turbulence with heat transfer. Phys. Fluids, 28(2):026102, 2016.">13</a>]</span> in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\widetilde{u}/u_b,\quad\)</span> mean streamwise velocity normalized by the bulk flow velocity</p></li>
 <li><p><span class="math notranslate nohighlight">\(u^+,\quad\)</span> mean streamwise velocity in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(u_{VD}^+,\quad\)</span> mean streamwise velocity transformed according to van Driest [???] in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(u_{TL}^+,\quad\)</span> mean streamwise velocity transformed according to Trettel &amp; Larsson [???] in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{VD}^+,\quad\)</span> mean streamwise velocity transformed according to van Driest <span id="id2">[<a class="reference internal" href="references.html#id15" title="E.R. Van Driest. Turbulent boundary layer in compressible fluids. J. the Aeronaut. Sci., 18(3):145–160, 1951.">3</a>]</span> in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{TL}^+,\quad\)</span> mean streamwise velocity transformed according to Trettel &amp; Larsson <span id="id3">[<a class="reference internal" href="references.html#id14" title="A. Trettel and J. Larsson. Mean velocity scaling for compressible wall turbulence with heat transfer. Phys. Fluids, 28(2):026102, 2016.">13</a>]</span> in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\rho}/\overline{\rho}_w,\quad\)</span> mean density normalized by the mean wall density</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{11}/\tau_w,\quad\)</span> normal Reynolds stress component 11, scaled by density, in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{22}/\tau_w,\quad\)</span> normal Reynolds stress component 22, scaled by density, in viscous units</p></li>
@@ -146,8 +148,8 @@ which will contain the files <code class="docutils literal notranslate"><span cl
 <li><p><span class="math notranslate nohighlight">\(\overline{T^{'2}}/T_w^2,\quad\)</span> temperature fluctuations normalized by the wall temperature</p></li>
 <li><p><span class="math notranslate nohighlight">\((\overline{T}-T_w)/T_\tau,\quad\)</span> mean temperature in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{T^{'2}}/T_\tau^2,\quad\)</span> temperature fluctuations in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(y_{V}^+,\quad\)</span> wall-normal coordinate transformed according to Volpiani et al. [???], in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(u_{V}^+,\quad\)</span> mean streamwise velocity transformed according to Volpiani et al. [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{V}^+,\quad\)</span> wall-normal coordinate transformed according to Volpiani et al. <span id="id4">[<a class="reference internal" href="references.html#id16" title="P. Volpiani, P.S. Iyer, S. Pirozzoli, and J. Larsson. Data-driven compressibility transformation for turbulent wall layers. Phys. Rev. Fluids, 5(5):052602, 2020.">14</a>]</span>, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{V}^+,\quad\)</span> mean streamwise velocity transformed according to Volpiani et al. <span id="id5">[<a class="reference internal" href="references.html#id16" title="P. Volpiani, P.S. Iyer, S. Pirozzoli, and J. Larsson. Data-driven compressibility transformation for turbulent wall layers. Phys. Rev. Fluids, 5(5):052602, 2020.">14</a>]</span>, in viscous units</p></li>
 </ol>
 </section>
 </section>
@@ -182,7 +184,7 @@ where <code class="docutils literal notranslate"><span class="pre">nnnnn</span><
 <li><p><span class="math notranslate nohighlight">\(\theta^*,\quad\)</span> momentum thickness</p></li>
 <li><p><span class="math notranslate nohighlight">\(u_\tau/U_\infty,\quad\)</span> friction velocity normalized by free stream velocity</p></li>
 <li><p><span class="math notranslate nohighlight">\({Re_\theta}_{inc}=\rho_\infty U_\infty\theta_{inc}/\mu_\infty,\quad\)</span> Reynolds number based on incompressible momentum thickness</p></li>
-<li><p><span class="math notranslate nohighlight">\({C_f}_{inc},\quad\)</span> Skin friction coefficient transformed according to van Driest II transformation [???]</p></li>
+<li><p><span class="math notranslate nohighlight">\({C_f}_{inc},\quad\)</span> Skin friction coefficient transformed according to van Driest II transformation <span id="id6">[<a class="reference internal" href="references.html#id17" title="E.R. Van Driest. The problem of aerodynamic heating. Fluids, 1956.">4</a>]</span></p></li>
 <li><p><span class="math notranslate nohighlight">\({Re_\theta}=\rho_\infty u_\infty\theta/\mu_w\quad\)</span>, Reynolds number based on momentum thickness, and viscosity at the wall</p></li>
 <li><p><span class="math notranslate nohighlight">\(p_{rms}/\tau_w\)</span> Pressure rms at the wall in viscous units</p></li>
 </ol>
@@ -194,17 +196,17 @@ where <code class="docutils literal notranslate"><span class="pre">nnnnn</span><
 <li><p><span class="math notranslate nohighlight">\(y/\delta_{99},\quad\)</span> wall-distance normalized by local boundary layer thickness</p></li>
 <li><p><span class="math notranslate nohighlight">\(y^+,\quad\)</span> wall-distance in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\widetilde{u}^+,\quad\)</span> streamwise velocity in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(u_{VD}^+,\quad\)</span> streamwise velocity transformed according to van Driest [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{VD}^+,\quad\)</span> streamwise velocity transformed according to van Driest:cite:p:<cite>vanDriest1955</cite>, in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{11}/\tau_w,\quad\)</span> normal Reynolds stress component 11, scaled by density, in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{22}/\tau_w,\quad\)</span> normal Reynolds stress component 22, scaled by density, in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{33}/\tau_w,\quad\)</span> normal Reynolds stress component 33, scaled by density, in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\tau}_{12}/\tau_w,\quad\)</span> Reynolds shear stress component 12, scaled by density, in viscous units</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{\rho}/\overline{\rho}_w,\quad\)</span> mean density scaled by the wall density</p></li>
 <li><p><span class="math notranslate nohighlight">\(\overline{p^{'2}}/\tau_w,\quad\)</span> pressure fluctuations in wall units</p></li>
-<li><p><span class="math notranslate nohighlight">\(y_{TL}^+,\quad\)</span> wall-normal coordinate transformed according to Trettel and Larsson [???], in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(u_{TL}^+,\quad\)</span> mean streamwise velocity transformed according to Trettel and Larsson [???], in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(y_{V}^+,\quad\)</span> wall-normal coordinate transformed according to Volpiani et al. [???], in viscous units</p></li>
-<li><p><span class="math notranslate nohighlight">\(u_{V}^+,\quad\)</span> mean streamwise velocity transformed according to Volpiani et al. [???], in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{TL}^+,\quad\)</span> wall-normal coordinate transformed according to Trettel and Larsson <span id="id7">[<a class="reference internal" href="references.html#id14" title="A. Trettel and J. Larsson. Mean velocity scaling for compressible wall turbulence with heat transfer. Phys. Fluids, 28(2):026102, 2016.">13</a>]</span>, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{TL}^+,\quad\)</span> mean streamwise velocity transformed according to Trettel and Larsson <span id="id8">[<a class="reference internal" href="references.html#id14" title="A. Trettel and J. Larsson. Mean velocity scaling for compressible wall turbulence with heat transfer. Phys. Fluids, 28(2):026102, 2016.">13</a>]</span>, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(y_{V}^+,\quad\)</span> wall-normal coordinate transformed according to Volpiani et al. <span id="id9">[<a class="reference internal" href="references.html#id16" title="P. Volpiani, P.S. Iyer, S. Pirozzoli, and J. Larsson. Data-driven compressibility transformation for turbulent wall layers. Phys. Rev. Fluids, 5(5):052602, 2020.">14</a>]</span>, in viscous units</p></li>
+<li><p><span class="math notranslate nohighlight">\(u_{V}^+,\quad\)</span> mean streamwise velocity transformed according to Volpiani et al. <span id="id10">[<a class="reference internal" href="references.html#id16" title="P. Volpiani, P.S. Iyer, S. Pirozzoli, and J. Larsson. Data-driven compressibility transformation for turbulent wall layers. Phys. Rev. Fluids, 5(5):052602, 2020.">14</a>]</span>, in viscous units</p></li>
 </ol>
 </section>
 </section>
@@ -215,7 +217,7 @@ where <code class="docutils literal notranslate"><span class="pre">nnnnn</span><
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="output.html" class="btn btn-neutral float-left" title="Understading output files" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="output.html" class="btn btn-neutral float-left" title="Understanding output files" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="gallery.html" class="btn btn-neutral float-right" title="Gallery of STREAmS results" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

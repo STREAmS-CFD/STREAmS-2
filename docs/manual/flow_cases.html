@@ -7,6 +7,7 @@
   <title>STREAmS flow cases &mdash; STREAmS 2.0 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -50,9 +51,10 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="input.html">Setting input file</a></li>
-<li class="toctree-l1"><a class="reference internal" href="output.html">Understading output files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understanding output files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_to_cite.html">How to cite STREAmS</a></li>
 <li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
 </ul>
 
@@ -346,12 +348,12 @@ implying that both the <strong>bulk density and velocity are constant in time</s
 Furthermore, the <strong>wall temperature is constant</strong> during the simulation.</p>
 <p>For what concerns the bulk temperature, STREAmS can run channel flow simulations according to two possible options
 (see <a class="reference internal" href="input.html#inputfile"><span class="std std-ref">input</span></a> section):</p>
-<p>– <em>Freely-evolving bulk temperature.</em> This <em>classic</em> setup, see <span id="id1">[<a class="reference internal" href="references.html#id6" title="G. N. Coleman, J. Kim, and R. D. Moser. A numerical study of turbulent supersonic isothermal-wall channel flow. Journal of Fluid Mechanics, 305:159–183, December 1995. URL: https://doi.org/10.1017/s0022112095004587, doi:10.1017/s0022112095004587.">1</a>]</span> and <span id="id2">[<a class="reference internal" href="references.html#id5" title="D. Modesti and S. Pirozzoli. Reynolds and Mach number effects in compressible turbulent channel flow. International Journal of Heat and Fluid Flow, 59:33–49, June 2016. URL: https://doi.org/10.1016/j.ijheatfluidflow.2016.01.007, doi:10.1016/j.ijheatfluidflow.2016.01.007.">3</a>]</span>,
+<p>– <em>Freely-evolving bulk temperature.</em> This <em>classic</em> setup, see <span id="id1">[<a class="reference internal" href="references.html#id6" title="G. N. Coleman, J. Kim, and R. D. Moser. A numerical study of turbulent supersonic isothermal-wall channel flow. Journal of Fluid Mechanics, 305:159–183, December 1995. URL: https://doi.org/10.1017/s0022112095004587, doi:10.1017/s0022112095004587.">2</a>]</span> and <span id="id2">[<a class="reference internal" href="references.html#id5" title="D. Modesti and S. Pirozzoli. Reynolds and Mach number effects in compressible turbulent channel flow. International Journal of Heat and Fluid Flow, 59:33–49, June 2016. URL: https://doi.org/10.1016/j.ijheatfluidflow.2016.01.007, doi:10.1016/j.ijheatfluidflow.2016.01.007.">7</a>]</span>,
 corresponds to the case of a channel where the bulk temperature
 continuously increases up to the achievement of balance between aerodynamic heating and wall heat transfer.
 In this case, the user must supply the code with the desired values of <span class="math notranslate nohighlight">\(M_B^w\)</span> and an estimate of the friction Reynolds number
 <span class="math notranslate nohighlight">\(Re_\tau\)</span> in the input file.</p>
-<p>– <em>Fixed bulk temperature.</em> In this case, see <span id="id3">[<a class="reference internal" href="references.html#id4" title="D. Modesti, S. Sathyanarayana, F. Salvadore, and M. Bernardini. Direct numerical simulation of supersonic turbulent flows over rough surfaces. Journal of Fluid Mechanics, May 2022. URL: https://doi.org/10.1017/jfm.2022.393, doi:10.1017/jfm.2022.393.">4</a>]</span>,
+<p>– <em>Fixed bulk temperature.</em> In this case, see <span id="id3">[<a class="reference internal" href="references.html#id4" title="D. Modesti, S. Sathyanarayana, F. Salvadore, and M. Bernardini. Direct numerical simulation of supersonic turbulent flows over rough surfaces. Journal of Fluid Mechanics, May 2022. URL: https://doi.org/10.1017/jfm.2022.393, doi:10.1017/jfm.2022.393.">8</a>]</span>,
 the bulk temperature is kept constant in time thanks to the use of a bulk cooling term added to the total energy equation.
 The user must supply the code with the desired values of <span class="math notranslate nohighlight">\(M_B\)</span>, <span class="math notranslate nohighlight">\(\Theta\)</span> and an estimate of the friction Reynolds number
 <span class="math notranslate nohighlight">\(Re_\tau\)</span> in the input file.</p>

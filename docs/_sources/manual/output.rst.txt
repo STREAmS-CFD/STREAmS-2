@@ -1,5 +1,5 @@
 ===================================
-Understading output files
+Understanding output files
 ===================================
 
 --------------------------
@@ -7,7 +7,7 @@ Restart files
 --------------------------
 .. line-block:: In order to restart a simulation, STREAmS needs at least two files, `rst.bin` and `field_info.dat`.
 
-The file `rst.bin` contains the flow field of the conserved variables.
+The file `rst.bin` contains the flow field in terms of conserved variables.
 For a single-species, ideal gas, these are :math:`\rho`, :math:`\rho\,u`, :math:`\rho\,v`, :math:`\rho\,w`, and :math:`\rho\,E`,
 where :math:`\rho` is the density, :math:`u,v,w` are the streamwise, wall-normal and spanwise velocity components,
 and :math:`E` is the total energy.
@@ -37,7 +37,7 @@ Both Plot3d and VTK files contain the same primitive variables, namely :math:`\r
 :math:`v`, :math:`w` and :math:`T`.
 
 
-Solutions is VTK format are printed only if the input flag `enable_vtk=1`, whereas 
+Solutions in VTK format are printed only if the input flag `enable_vtk=1`, whereas 
 Plot3D files are printed only if `enable_plot3d=1`.
 The frequency with which these solutions are stored is controlled by the variable `dtsave` in the input file.
 
@@ -46,6 +46,7 @@ The frequency with which these solutions are stored is controlled by the variabl
 Mean flow statistics
 --------------------------
 Flow statistics are collected at runtime and stored in `stat.bin` and `stat3d.bin`.
+
 The file `stat.bin` contains statistics averaged in time and in the spanwise direction, for a total of 68 variables:
 
 .. list-table:: Mean flow statistics
@@ -153,7 +154,7 @@ The file stat3d.bin contains 3D flow statistics averaged in time, for a total of
 13. :math:`\langle\rho T^2\rangle\quad\quad`    
 14. :math:`\langle p^2\rangle\quad\quad`    
 
-The output frequency of the statistics files is controlled by the input parameter `dtsave_restart`. If `restart_type=0`, `stat.bin` and
+The output frequency of the statistics files is controlled by the input parameter `dtsave_restart`. If `restart_type=2`, `stat.bin` and
 `stat3d.bin` are read and renamed as `stat.bak` and `stat3d.bak`.
 
 --------------------------

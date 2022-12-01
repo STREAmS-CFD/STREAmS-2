@@ -8,4 +8,4 @@ STREAmS performs Direct Numerical Simulations of compressible turbulent flows in
 
 STREAmS can be used on both local clusters and massively parallel HPC architectures, including those based on Graphical Processing Units (GPUs).
 
-To start using it please go to the documentation page <https://francescosalvadore.github.io/stree>.
+To start using it please go to the documentation page <https://STREAmS-CFD.github.io/STREAmS-2>.

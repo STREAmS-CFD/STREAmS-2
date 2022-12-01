@@ -19,6 +19,10 @@ CXXFLAGS = -std=c++17 -frounding-math -O2
 # original INSITU was using c++11
 #CXXFLAGS = -std=c++11 -O2
 #----------------------------------------------------------------------
+# Trick to create a space
+E := 
+S := $E $E
+#----------------------------------------------------------------------
 
 ifeq (${COMPILE},"cray-cuda") # mpif90 shipped with PGI compiler
     # Pitz-Daint instructions (2022)
@@ -31,7 +35,7 @@ ifeq (${COMPILE},"cray-cuda") # mpif90 shipped with PGI compiler
     CUDA_HOME = $(CUDATOOLKIT_HOME) 
     INCLUDE   = -I $(MPICH_DIR)/include 
     FCLIBS    = -L$(MPICH_DIR)/lib -lmpich 
-    FC        = ftn
+    FC        = ftn$S
     ifeq (${MODE},"opt") 
         OLEVEL = CUDA_HOME=$(CUDATOOLKIT_HOME) -O3 -Mcuda=ccall 
     else
@@ -41,7 +45,7 @@ endif
 
 ifeq (${COMPILE},"nv-cuda") # mpif90 shipped with PGI compiler
     FC = mpif90 
-    MODULE_FLAG = -module
+    MODULE_FLAG = -module$S
     ifeq (${MODE},"opt") 
         #OLEVEL = -O3 -Mcuda=cc70,cuda10.1,ptxinfo -DUSE_CUDA -DCUDA_ASYNC #-DNOCUDAAWAREMPI
         OLEVEL = -O3 -Mcuda=ccall,cuda$(CUDA_VER)
@@ -53,7 +57,7 @@ endif
 
 ifeq (${COMPILE},"nv") # mpif90 shipped with PGI compiler or other MPI
     FC = mpif90 
-    MODULE_FLAG = -module
+    MODULE_FLAG = -module$S
     ifeq (${MODE},"opt") 
         OLEVEL = -O3 
     else
@@ -63,7 +67,7 @@ endif
 
 ifeq (${COMPILE},"intel") # mpiifort from IntelMPI
     FC = mpiifort
-    MODULE_FLAG = -module
+    MODULE_FLAG = -module$S
     ifeq (${MODE},"opt") 
         OLEVEL = -O3
     else
@@ -84,11 +88,24 @@ endif
 
 ifeq (${COMPILE},"ibmxl") # mpif90 from MPI library
     FC = mpif90
-	MODULE_FLAG = -qmoddir=
+    MODULE_FLAG = -qmoddir=
     ifeq (${MODE},"opt") 
         OLEVEL = -O4
     else
         OLEVEL = -O2 -g
+    endif
+endif
+
+ifeq (${COMPILE},"hip")
+    FC  = $(HIPFC)
+    CC  = $(HIPCC)
+    CXX = $(HIPCC)
+    MODULE_FLAG := -J
+    ifeq (${MODE},"opt")
+        OLEVEL = -std=f2008 -O3 -fallow-argument-mismatch
+    else
+	      CXXFLAGS := $(CXXFLAGS) -save-temps
+        OLEVEL = -std=f2008 -O2 -fallow-argument-mismatch -fbounds-check -g -fbacktrace -fdump-core -ffpe-trap=zero,invalid,overflow -save-temps
     endif
 endif
 
@@ -131,8 +148,8 @@ else ifeq (${BACKEND},"gpu")
     EQU_MODS := $(EQU_MODS) src/$(EQUATION)/kernels_gpu.o src/$(EQUATION)/$(EQUATION)_gpu.o
 else ifeq (${BACKEND},"amd") 
     MAIN     = src/$(EQUATION)/main_amd.o
-    LIB_MODS := $(LIB_MODS) src/base_amd.o
-    EQU_MODS := $(EQU_MODS) src/$(EQUATION)/kernels_amd.o src/$(EQUATION)/$(EQUATION)_amd.o
+    LIB_MODS := $(LIB_MODS) src/base_amd.o src/base_amd_cpp.o
+    EQU_MODS := $(EQU_MODS) src/$(EQUATION)/kernels_amd.o src/$(EQUATION)/kernels_amd_cpp.o src/$(EQUATION)/$(EQUATION)_amd.o 
 endif
 
 OBJS = $(TP_MODS) $(LIB_MODS) $(EQU_MODS) $(MAIN)
@@ -143,7 +160,7 @@ $(EXEC): $(OBJS_BUILD) Makefile makefile.inc
 	$(FC) $(PRECFLAGS) $(INCLUDE) $(OLEVEL) -o $@ $(OBJS_BUILD) $(FCLIBS) $(LDFLAGS)
 
 build/%.o:%.F90 Makefile makefile.inc
-	$(FC) $(PRECFLAGS) $(INCLUDE) $(OLEVEL) -c $< -o $@ $(MODULE_FLAG) build/mods
+	$(FC) $(PRECFLAGS) $(INCLUDE) $(OLEVEL) -c $< -o $@ $(MODULE_FLAG)build/mods
 
 build/%.o:%.c Makefile makefile.inc
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@

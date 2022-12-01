@@ -2,8 +2,72 @@
 Converting STREAmS for different purposes
 =========================================
 
-PyconvertSTREAmS is a converter tool written in Python3 to convert the main development branch of STEAmS solver to different backends. The converter also supports the removal of
-external plugins. The converter only requires Python3 and uses native Python libraries for the implementation. To look at the default options of the converter, run:
+PyconvertSTREAmS is a converter tool written in Python3 to convert the main development branch of STEAmS solver to different backends. Additionally, the converter also supports the removal of
+external plugins.  
+
+-------------------------------------
+Requirements
+-------------------------------------
+
+* Python3 (3.9 or greater)
+* tqdm
+
+.. code-block:: console
+
+  $ pip install -r install_requirements.txt
+
+-------------------------------------
+Background
+-------------------------------------
+
+The converter is designed to make STREAmS portable across different architectures. It is developed by considering:
+
+1. The main development of STREAmS would happen on the CUDA Fortran backend
+2. The converter will automatically or in some cases semi-automatically produce various backends
+3. The converter will also assist in removing plugins that will not feature in the public release
+4. This would ensure a clean and a direct transformation of the CUDA Fortran backend without any bugs that could be introduced if the conversion is done manually
+
+Currently three modes are supported:
+
+* :ref:`hipfort <hipfortl>`
+* :ref:`cpu <cpul>`
+* :ref:`ext <extl>`
+
+The tree below represents the file organisation of the converter (directories in bold). ``pyconvertstreams.py`` contains the main program and ``utils.py`` has common utility functions used in the code. The other three modes are
+separated into their directories. Further, the ``input_files`` directory contains all the static files related to cpu and hipfort modes.
+
+| **tools/streams-convert**
+| ├ ── pyconvertstreams.py
+| ├ ── utils.py
+| ├ ── install_requirements.txt
+| ├ ── **cpu**
+|      └ ── cpu.py
+| ├ ── **external**
+|      ├ ── external_libraries.py
+|      └ ── external_vars_procedures.json
+| ├ ── **hipfort**
+|      ├ ── hipfort.py
+|      ├ ── hipfort_expressions.py
+|      ├ ── hipfort_utils.py
+|      ├ ── interface_wrapper.py
+|      ├ ── kernel_extract.py
+|      ├ ── kernels_config.ini
+|      ├ ── translator.py
+|      └ ── write_hipfort.py
+| ├ ── **input_files**
+|      ├ ── **amd**
+|          ├ ── base_amd.F90
+|          ├ ── base_amd_cpp.cpp
+|          ├ ── hip_utils.h
+|          └ ── **singleideal**
+|             ├ ── device_kernels.cpp
+|             └ ── main_amd.F90
+|      ├ ── **cpu**
+|         ├ ── base_cpu.F90
+|         └ ── **singleideal**
+|             └ ── main_cpu.F90
+
+To look at the default options of the converter, run:
 
 .. code-block:: console
 
@@ -24,87 +88,436 @@ external plugins. The converter only requires Python3 and uses native Python lib
    
    See '<command> --help' to read about a specific sub-command.
 
--------------------------------------
-File structure
--------------------------------------
 
-Below tree represents the file organisation of the converter. pyconvertstreams.py contains the main program and utils.py has common utility functions used in the code. The other three modes are
-separated into their directories.
-
-|  ├── README.md
-|  ├── cpu
-|  │   └── cpu.py
-|  ├── external
-|  │   ├── external_libraries.py
-|  │   └── external_vars_procedures.json
-|  ├── hipfort
-|  │   ├── debug_kernels.json
-|  │   ├── gpu_vars.json
-|  │   ├── hipfort.py
-|  │   ├── hipfort_utils.py
-|  │   ├── interface_wrapper.py
-|  │   ├── kernel_extract.py
-|  │   └── kernels.json
-|  ├── pyconvertstreams.py
-|  └── utils.py
-
-
--------------------------------------
-Conversion modes
--------------------------------------
-
-The converter currently supports three modes:
-
-* :ref:`Hipfort <hipfortl>`
-* :ref:`CPU <cpul>`
-* :ref:`Ext <extl>`
-
-^^^^^^^
-Hipfort
-^^^^^^^
 .. _hipfortl:
 
-This mode converts STREAmS CUDA Fortran version to Hipfort version. To look into the avilable options, run:
+-------
+hipfort
+-------
 
-bla bla
-bla bla
-
-^^^^^^^
-CPU
-^^^^^^^
-.. _cpul:
-
-This mode converts STREAmS CUDA Fortran version to CPU version. To look into the avilable options, run:
+This mode converts STREAmS CUDA Fortran version to Hipfort version. The main philospohy behind this implementation is collecting every possible information of 
+a kernel and translate it to its hipfort equivalent. To look into the avilable options, run:
 
 .. code-block:: console
 
-   $ python3 pyconvertstreams.py cpu -h
+   $ python3 pyconvertstreams.py hip -h
    
-   usage: pyconvertstreams.py cpu [-h] [-i INPUT]
+   usage: pyconvertstreams.py hip [-h] [-i INPUT] [-d]
 
    options:
      -h, --help            show this help message and exit
      -i INPUT, --input INPUT
-                           Input code folder (default: ../../code/)   
+                           Input code folder (default: ../../code/)
+     -d, --dry_run         If used, files will not be placed in input path (default: False)
 
 
+.. Note::
+   The names ``amd``, ``hip`` and ``hipfort`` will be used interchangebly. For context, the distinctions are:
+      * ``amd`` is the GPU architecture which STREAmS is intended to run on
+      * ``hip`` stands for Heterogeneous-Compute Interface for Portability which is a C++ runtime API and kernel language developed to run codes both on AMD and NVIDIA GPUs
+      * ``hipfort`` is the Fortran Interface to access the libraries from ``hip``
+      * Ideally, the hipfort backend can run on both NVIDIA and AMD GPUs, however, we intend to use the backend mainly for AMD GPUs
+
+&&&&&&&&&&&&
+Program flow
+&&&&&&&&&&&&
+
+.. graphviz::
+
+   digraph G{
+      hipfort [shape=box]
+      node [shape=oval, width=0.6];
+      hipfort -> load_kernel [color=grey];
+      hipfort -> extract_gpu [color=grey];
+      load_kernel -> extract_kernel [color=grey];
+      extract_kernel -> extract_details [style=bold,label="kernel",color=grey];
+      node [shape=box, width=0.6];
+      extract_gpu -> write_amd_vars [style=dotted,color=red];
+      extract_gpu -> write_log [style=dotted,color=red];
+      extract_details -> write_log [style=dotted,color=red];
+      extract_details -> write_eqn [color=blue];
+      extract_details -> write_kernel [color=blue];
+      extract_details -> write_kernel_cpp [color=blue];
+      extract_gpu -> write_kernel_cpp [color=blue];
+      write_eqn [label="write equation_amd.F90"];
+      write_kernel [label="write kernels_amd.F90"];
+      write_kernel_cpp [label="write kernels_amd_cpp.cpp"];
+      load_kernel [label="load \nkernels_config.ini"];
+      extract_gpu [label="extract GPU arrays from \nbase_gpu and equation_gpu"];
+      extract_kernel [label="extract all types of kernels from \nequation_gpu and kernels_gpu"]; 
+      extract_details [label="1. extract all kernel information \n2. Create Interface and wrapper functions"];
+      write_log [label="write log files: \n1. gpu_variables.json \n2. log_kernel_dict.json"];
+      write_amd_vars [label="write the array index conversion file \namd_vars.h"]
+   }
+
+.. note::
+  * The explicit kernel wrappers are added in equation_amd.F90 
+  * The cuf kernel wrappers are added in kernels_amd.F90
+
+&&&&&&&&&&&&&&&&&
+Kernel dictionary
+&&&&&&&&&&&&&&&&&
+
+Every kernel that is extracted is stored in a dictionary. Below, we have all the definitions of the parameters extracted from a kernel:
+
+.. code-block:: console
+
+      $-> kernel dict structure:
+          $-> kernel:
+              $-> attribute (str)                | - direct(cuf kernels)/explicit(direct kernels without directives)/reduction(cuf kernels)
+              $-> new_name (str)                 | - Name of the changed kernel
+              $-> kernel_info:                   | - Contains all the information about the kernel subroutine
+                  -> debug_mode (str)            | - Default:"no". If "yes": write everything except the kernel code
+                  -> num_loop (list)             | - size of list=number of kernels and value=extent of the loops (only for direct/reduction)
+                  -> full_kernel (str)           | - Contains the whole kernel subroutine
+                  -> subroutine_call (str)       | - Contains the kernel subroutine call in equation_gpu.F90
+                  -> kernel_subroutine (str)     | - Contains only the subroutine definition of the kernel subroutine
+                  -> kernel_variables (str)      | - Contains only the variable definition part of the kernel subroutine
+                  -> subroutine_code (str)       | - Contains only the inner code definition part of the kernel subroutine
+                  -> idx (list)                  | - Loop index integer names for each kernel (only for direct/reduction)
+                  -> size (list)                 | - Loop bounds for each kernel (only for direct/reduction)
+                  -> serial (list)               | - Non-parallel part of each kernel (only for direct/reduction)
+                  -> non_cuf (list)              | - "non" kernel part of the kernel subroutine : if n kernels are in the subroutine there are n+1 "non_cuf" parts (only for direct/reduction)
+                  -> kernel_count (int)          | - Number of kernels in the subroutine
+                  -> kernel_names (list)         | - New names of the kernel. If parent kernel subroutine(has 2 kernels) name is xxx_cuf, the new
+                                                 |   kernel names will be : xxx1_kernel and xxx2_kernel (only for direct/reduction)
+                  -> interface (list)            | - Interface for each kernel
+                  -> wrapper_args (list)         | - Arguments of the wrapper called in the kernel subroutine
+                  -> wrapper_c_args (list)       | - Same arguments as "wrapper_args" but in C++ sense
+                  -> wrapper_fside (str)         | - Wrapper to be called inside the kernel subroutinr (Fortran side)
+                  -> wrapper_cside (str)         | - Wrapper to be called inside extern C (C++ side)
+                  -> sub_call_arguments (list)   | - All the arguments of the kernel subroutine
+                  -> args_map (dict)             | - Mapping between the kernel subroutine arguments (from kernels_gpu.F90) and
+                                                 |   kernel subroutine call arguments (from equation_gpu.F90). key: kernel subroutine and
+                                                 |   value: kernel subroutine call
+                  -> array_index_map (dict)      | - Mapping between the GPU arrays from the call and definition
+                  -> blockdim (list)             | - Contains the thread block configurations
+                  -> non_kernel_def (list)       | - Contains non kernel variable definitions
+                  -> launch_bounds (list)        | - Contains defintion of launch bounds for each kernel
+              $-> var_info:                      | - Contains all the information about variables in a kernel subroutine
+                  -> real_arrays (list)          | - Contains all the real GPU arrays
+                  -> int_arrays (list)           | - Contains all the integer GPU arrays
+                  -> logical_arrays (list)       | - Contains all the logical GPU arrays (Warning: not used for now!)
+                  -> real (list)                 | - Contains all the real scalars passed to the kernel
+                  -> integer (list)              | - Contains all the integer scalars passed to the kernel
+                  -> logical (list)              | - Contains all the logical scalars passed to the kernel (Warning: not used for now!)
+                  -> lreal (list)                | - Contains all the local real scalars
+                  -> linteger (list)             | - Contains all the local integer scalars
+                  -> llogical (list)             | - Contains all the local logical scalars (Warning: not used for now!)
+                  -> lreal_arrays (list)         | - Contains all the local real arrays
+                  -> linteger_arrays (list)      | - Contains all the local integer arrays
+                  -> llogical_arrays (list)      | - Contains all the local logical arrays (Warning: not used for now!)
+                  -> reduction type (str)        | - Type of reduction performed - sum/max/min (only for reduction kernels)
+                  -> reduction_variables (str)   | - Contains all the reduction variables (only for reduction kernels)
+
+&&&&&&&&&&&&
+Input file
+&&&&&&&&&&&&
+
+The input file is located in ``streams-convert/hipfort/kernels_config.ini``. Currently, you can input the following parameters of the kernel dictionary:
+ 
+ 1. num_loop
+ 2. idx 
+ 3. size
+ 4. debug_mode
+ 5. blockdim
+ 6. launch_bounds
+
+.. warning::
+  If you input ``idx``, ``size`` parameter must be added as well
+
+An example input parameter for the kernel ``visflx_cuf`` is given below:
+
+.. code-block:: guess
+   
+   [visflx_cuf]
+   num_loop = ["3"]
+   idx = [["k","j","i"]]
+   size = [[["1","nz"],["1","ny"],["1","nx"]]]
+
+Another example for ``euler_x_fluxes_hybrid_kernel`` manually specifying the thread block configuration and its launch bounds is given below:
+
+.. code-block:: guess
+   
+   [euler_x_fluxes_hybrid_kernel]
+   blockdim = [["EULERWENO_THREADS_X","EULERWENO_THREADS_Y"]]
+   launch_bounds = ["__launch_bounds__(512)"]
+
+.. note::
+  * The values for the threads can be provided in ``streams-convert/output/amd/hip_utils.h``
+  * You can also directly provide numbers in place of thread names 
+
+&&&&&&&&&&&&
+Output files
+&&&&&&&&&&&&
+
+Apart from the converted code, three other files are output in this mode:
+
+* amd_vars.h
+
+   This file contains all the macros for the conversions of multi dimensional GPU arrays to single dimension. An example for ``w_gpu`` and ``w_aux_trans_gpu`` is shown below:
+
+   .. code-block:: C
+      
+      #define __I4_W(i,j,k,m) (((i)-(1-ng))+((nx+ng)-(1-ng)+1)*((j)-(1-ng))+((nx+ng)-(1-ng)+1)*((ny+ng)-(1-ng)+1)*((k)-(1-ng))+((nx+ng)-(1-ng)+1)*((ny+ng)-(1-ng)+1)*((nz+ng)-(1-ng)+1)*((m)-(1)))
+      #define __I4_W_AUX_TRANS(i,j,k,m) (((i)-(1-ng))+((ny+ng)-(1-ng)+1)*((j)-(1-ng))+((ny+ng)-(1-ng)+1)*((nx+ng)-(1-ng)+1)*((k)-(1-ng))+((ny+ng)-(1-ng)+1)*((nx+ng)-(1-ng)+1)*((nz+ng)-(1-ng)+1)*((m)-(1)))
+   
+   .. note::
+      The names above are obtained by joining ``I4`` (4D index conversion) with name of the array in upper case
+
+* gpu_variables.json
+
+   This file contains all the information related to a GPU array. An example for ``w_mean_gpu`` is given below:
+   
+   .. code-block:: guess
+      
+      "wmean_gpu": [
+              "__I3_WMEAN",                                                       # index conversion Macro
+              "dimension(:,:,:)",                                                 # dimension tag 
+              "real",                                                             # array type
+              "1-ng:nx+ng+1,1:ny,1:4",                                            # sizes without %, required for defining macros
+              "1-self%grid%ng:self%field%nx+self%grid%ng+1,1:self%field%ny,1:4"   # sizes in original format, required for allocate definition
+              ],
+
+* log_kernel_dict.json
+
+   This file contains all the extracted information of a kernel. An example for ``init_flux_cuf`` is given below:
+   
+   .. code-block:: guess
+
+     {
+       "init_flux_cuf": {
+         "attribute": "direct",
+         "new_name": "init_flux_kernel",
+         "kernel_info": {
+           "debug_mode": "no",
+           "full_kernel": "    subroutine init_flux_cuf(nx, ny, nz, nv, fl_gpu, fln_gpu, rhodt) \n        integer :: nx, ny, nz, nv\n        real(rkind) :: rhodt\n        real(rkind), dimension(1:,1:,1:,1:), intent(inout), device :: fl_gpu, fln_gpu\n        integer :: i,j,k,m,iercuda\n        !$cuf kernel do(3) <<<*,*>>> \n         do k=1,nz\n          do j=1,ny\n           do i=1,nx\n            do m=1,nv\n             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)\n             fl_gpu(i,j,k,m)  = 0._rkind\n            enddo\n           enddo\n          enddo\n         enddo\n        !@cuf iercuda=cudaDeviceSynchronize()\n    endsubroutine init_flux_cuf\n",
+           "subroutine_call": "call init_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, rhodt)",
+           "sub_call_arguments": [
+             "nx",
+             "ny",
+             "nz",
+             "nv",
+             "self%fl_gpu",
+             "self%fln_gpu",
+             "rhodt"
+           ],
+           "kernel": [
+             "        !$cuf kernel do(3) <<<*,*>>> \n         do k=1,nz\n          do j=1,ny\n           do i=1,nx\n            do m=1,nv\n             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)\n             fl_gpu(i,j,k,m)  = 0._rkind\n            enddo\n           enddo\n          enddo\n         enddo\n"
+           ],
+           "non_cuf": [
+             "",
+             ""
+           ],
+           "serial": [
+             "            do m=1,nv\n             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)\n             fl_gpu(i,j,k,m)  = 0._rkind\n            enddo"
+           ],
+           "num_loop": [
+             "3"
+           ],
+           "idx": [
+             [
+               "k",
+               "j",
+               "i"
+             ]
+           ],
+           "size": [
+             [
+               [
+                 "1",
+                 "nz"
+               ],
+               [
+                 "1",
+                 "ny"
+               ],
+               [
+                 "1",
+                 "nx"
+               ]
+             ]
+           ],
+           "blockdim": [
+             [
+               "THREE_X",
+               "THREE_Y",
+               "THREE_Z"
+             ]
+           ],
+           "non_kernel_def": "",
+           "kernel_args": [
+             "nx",
+             "ny",
+             "nz",
+             "nv",
+             "fl_gpu",
+             "fln_gpu",
+             "rhodt"
+           ],
+           "kernel_subroutine": "    subroutine init_flux_cuf(nx, ny, nz, nv, fl_gpu, fln_gpu, rhodt) \n",
+           "kernel_variables": "        integer :: nx, ny, nz, nv\n        real(rkind) :: rhodt\n        real(rkind), dimension(1:,1:,1:,1:), intent(inout), device :: fl_gpu, fln_gpu\n        integer :: i,j,k,m,iercuda\n",
+           "subroutine_code": "\n        !$cuf kernel do(3) <<<*,*>>> \n         do k=1,nz\n          do j=1,ny\n           do i=1,nx\n            do m=1,nv\n             fln_gpu(i,j,k,m) = - rhodt * fl_gpu(i,j,k,m)\n             fl_gpu(i,j,k,m)  = 0._rkind\n            enddo\n           enddo\n          enddo\n         enddo\n        !@cuf iercuda=cudaDeviceSynchronize()\n    ",
+           "args_map": {
+             "nx": "nx",
+             "ny": "ny",
+             "nz": "nz",
+             "nv": "nv",
+             "fl_gpu": "self%fl_gpu",
+             "fln_gpu": "self%fln_gpu",
+             "rhodt": "rhodt"
+           },
+           "array_index_map": {
+             "fl_gpu": "fl_gpu",
+             "fln_gpu": "fln_gpu"
+           },
+           "kernel_count": 1,
+           "kernel_names": [
+             "init_flux_kernel"
+           ],
+           "wrapper_args": [
+             "nx",
+             "ny",
+             "nz",
+             "nv",
+             "rhodt",
+             "fl_gpu",
+             "fln_gpu"
+           ],
+           "wrapper_c_args": [
+             "int nx",
+             "int ny",
+             "int nz",
+             "int nv",
+             "real rhodt",
+             "real *fl_gpu",
+             "real *fln_gpu"
+           ],
+           "interface": [
+             "interface\nsubroutine init_flux_kernel_wrapper(nx,ny,nz,nv,rhodt,fl_gpu,fln_gpu)&\nbind(c,name=\"init_flux_kernel_wrapper\")\nimport :: c_ptr, c_rkind, c_bool, c_int\nimplicit none\ninteger(c_int), value :: nx,ny,nz,nv\nreal(c_rkind), value :: rhodt\ntype(c_ptr), value :: fl_gpu,fln_gpu\nend subroutine init_flux_kernel_wrapper\nend interface\n"
+           ],
+           "wrapper_fside": [
+             "call init_flux_kernel_wrapper(nx,ny,nz,nv,rhodt,c_loc(fl_gpu),c_loc(fln_gpu))\n"
+           ],
+           "wrapper_cside": [
+             "void init_flux_kernel_wrapper(int nx,int ny,int nz,int nv,real rhodt,real *fl_gpu,real *fln_gpu)"
+           ]
+         },
+         "var_info": {
+           "real_arrays": [
+             "fl_gpu",
+             "fln_gpu"
+           ],
+           "int_arrays": [],
+           "logical_arrays": [],
+           "real": [
+             "rhodt"
+           ],
+           "integer": [
+             "nx",
+             "ny",
+             "nz",
+             "nv"
+           ],
+           "logical": [],
+           "lreal": [],
+           "linteger": [
+             "i",
+             "j",
+             "k",
+             "m",
+             "iercuda"
+           ],
+           "llogical": [],
+           "lreal_arrays": [],
+           "linteger_arrays": [],
+           "llogical_arrays": [],
+           "reduction_type": "",
+           "reduction_variables": []
+         }
+       }
+     }
 
 &&&&&&&&&
 Work flow
 &&&&&&&&&
 
-1. Go to ``tools/streams-convert`` directory. Always run from here.
-2. Run the code in cpu mode. Find examples :ref:`here <cpuex>`.
-3. By default, This will create the CPU code in ``code/`` instead ``code_ext``. Read :ref:`here <extwf>` to know more about ``code_ext``
+1. Go to ``tools/streams-convert`` directory. Always run from here
+2. Run the code in hipfort mode. Find examples :ref:`here <hipfortex>`
+3. By default, this will create the AMD code in ``code/``
+4. For obtaining AMD code without plugins, first run in :ref:`ext<extl>` mode to obtain ``code_ext``
 
 .. Note::
-   In this mode, both input and output path are the same locations. For example, if you want to convert the full STREAmS code (including ibm/insitu) from ``code/``, you run
-   this in default mode and the output will also be in ``code/``. 
+   * In default mode, both input and output path are the same locations (in place)
+   * The optional argument ``-d`` when used, will place the converted files only in ``tools/streams-convert/output_amd/``. This mode can be used if you do not want to place the code in the main directory
+   * Logs written in ``streams-convert/log_hipfort.log``
+
+.. _hipfortex:
 
 &&&&&&&&
 Examples
 &&&&&&&&
+
+1. To obtain STREAmS AMD version in ``code/``, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py hip
+
+2. To obtain STREAmS AMD without ibm and insitu:
+
+  * First generate :ref:`ibm/insitu conversion <extex>`
+  * After the generation of ``code_ext/``, run:
+
+  .. code-block:: console
+
+    $ python3 pyconvertstreams.py hip -i ../../code_ext/
+
+3. To use STREAmS from ``code_ext/`` and only place it in ``output_amd``, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py hip -i ../../code_ext/ -d
+
+.. _cpul:
+
+-------
+cpu
+-------
+
+This mode converts STREAmS CUDA Fortran version to CPU version. To look into the avilable options, run:
+
+.. code-block:: console
+   
+   $ python3 pyconvertstreams.py cpu -h
+   
+   usage: pyconvertstreams.py cpu [-h] [-i INPUT] [-d]
+  
+   options:
+     -h, --help            show this help message and exit
+     -i INPUT, --input INPUT
+                           Input code folder (default: ../../code/)
+     -d, --dry_run         If used, files will not be placed in input path (default: False)
+
+&&&&&&&&&
+Work flow
+&&&&&&&&&
+
+1. Go to ``tools/streams-convert`` directory. Always run from here
+2. Run the code in cpu mode. Find examples :ref:`here <cpuex>`
+3. By default, this will create the CPU code in ``code/``
+4. For obtaining CPU code without plugins, first run in :ref:`ext<extl>` mode to obtain ``code_ext``
+
+.. Note::
+   * In default mode, both input and output path are the same locations (in place)
+   * The optional argument ``-d`` when used, will place the converted files only in ``tools/streams-convert/output_cpu/``. This mode can be used if you do not want to place the code in the main directory
+   * Logs written in ``streams-convert/log_cpu.log``
+
 .. _cpuex:
+
+&&&&&&&&
+Examples
+&&&&&&&&
 
 
 1. To obtain STREAmS CPU version in ``code/``, run:
@@ -113,7 +526,7 @@ Examples
 
    $ python3 pyconvertstreams.py cpu
 
-2. To obtain STREAmS CPU without ibm and insitu, run:
+2. To obtain STREAmS CPU without ibm and insitu:
 
   * First generate :ref:`ibm/insitu conversion <extex>`
   * After the generation of ``code_ext/``, run:
@@ -122,30 +535,57 @@ Examples
 
     $ python3 pyconvertstreams.py cpu -i ../../code_ext/
 
-^^^^^^^
-Ext
-^^^^^^^
+3. To use STREAmS from ``code_ext/`` and only place it in ``output``, run:
+
+.. code-block:: console
+
+   $ python3 pyconvertstreams.py cpu -i ../../code_ext/ -d
+
 .. _extl:
 
-This mode currently supports the removal IBM, Insitu or both from the code. To look into the avilable options, run:
+-------
+ext
+-------
+
+This mode currently supports the removal IBM, Insitu or both from STREAmS CUDA Fortran backend. To look into the avilable options, run:
 
 .. code-block:: console
 
    $ python3 pyconvertstreams.py ext -h
 
-   usage: pyconvertstreams.py ext [-h] [-i INPUT] [-o OUTPUT] [-l] -m {ibm,insitu} [{ibm,insitu} ...]
-
+   usage: pyconvertstreams.py ext [-h] [-i INPUT] [-o OUTPUT] -m {ibm,insitu} [{ibm,insitu} ...]
+   
    options:
      -h, --help            show this help message and exit
      -i INPUT, --input INPUT
                            Input code folder (default: ../../code/)
      -o OUTPUT, --output OUTPUT
                            Path to output converted files (default: ../../code_ext/)
-     -l, --log             Log all the changes (default: False)
    
    required arguments:
      -m {ibm,insitu} [{ibm,insitu} ...], --mode {ibm,insitu} [{ibm,insitu} ...]
                            Specify the plugins (default: None)
+
+.. _extinp:
+
+&&&&&&&&&&
+Input file
+&&&&&&&&&&
+
+The input file can be found in ``external/external_vars_procedures.json``:
+
+.. literalinclude:: ../../../tools/streams-convert/external/external_vars_procedures.json
+   :language: json
+   :linenos:
+   :caption: Input file for external conversions
+
+Currently, it can handle only the ``singleideal`` equations which is specified in line 2. For this equation, we have two removal modes. In the first, ibm mode (line 4) is specified.
+For this, three files are required: ``singleideal.F90`` (line 6), ``singleideal_gpu.F90`` (line 10) and ``kernels_gpu.F90`` (line 14). For each file, we specify the corresponding ``procedures``.
+This information must be updated as and when there is a change in the main branch. There is an optional fourth value, ``skip_vars``. This is needed to specify if any variables should be retained 
+after the conversion. This can be seen used for the insitu input where we specify ``time_is_freezed`` (line 34) which is required even if insitu is not enabled. Similar inputs are provided for insitu
+removal (lines 20-34).
+
+.. _extwf:
 
 &&&&&&&&&
 Work flow
@@ -154,39 +594,19 @@ Work flow
 1. Go to ``tools/streams-convert`` directory. Always run from here.
 2. Prepare the input file ``external/external_vars_procedures.json``. See :ref:`here <extinp>`.
 3. Run the code in ext mode. Find examples :ref:`here <extex>`.
-4. This will create a copy of ``code/`` directory called the ``code_ext``.
+4. This will create a copy of ``code/`` directory which is called ``code_ext``.
 
-.. _extwf:
 
 .. Note::
-  The directory code_ext should be removed everytime you rerun the converter. This is to make sure that we get a fresh copy of the original code everytime and to avoid any overwriting.
-  Eventhough there is an option to specify both input/output directory, it is recommended to use the default values. 
+   * The input file ``external/external_vars_procedures.json`` will for the most time remain unchanged. If there are any new procedures implemented in the main branch, this file must be updated 
+   * The directory ``code_ext`` should be removed everytime you rerun the converter. This is to make sure that we get a fresh copy of the original code everytime and to avoid any overwriting. Eventhough there is an option to specify both input/output directory, it is recommended to use the default values
+   * Logs written in ``streams-convert/log_ext.log``
 
-5. There is an option to log the process. This will generate a log file (``streams-convert/log_external_data.json``).
-
-&&&&&&&&&&
-Input file
-&&&&&&&&&&
-.. _extinp:
-
-The input values can be found in ``external/external_vars_procedures.json``. Generally, the input file will remain unchanged. However, if there are any new procedure additions, the values must be 
-updated here. The input file is shown below:
-
-.. literalinclude:: ../../../tools/streams-convert/external/external_vars_procedures.json
-   :language: json
-   :linenos:
-   :caption: Input file for external conversions
-
-Currently, it can handle only the ``singleideal`` equations which is specified in line 2. For this equation, we have two removal modes. In the first, IBM mode (line 4) is specified.
-For this, three files are required: ``singleideal.F90`` (line 6), ``singleideal_gpu.F90`` (line 10) and ``kernels_gpu.F90`` (line 14). For each file, we specify the corresponding ``procedures``.
-This information must be updated as and when there is a change in the main branch. There is an optional fourth value, ``skip_vars``. This is needed to specify if any variables should be retained 
-after the conversion. This can be seen used for the insitu input where we specify ``time_is_freezed`` (line 34) which is required even if insitu is not enabled. Similar inputs are provided for insitu
-removal (lines 20-34).
+.. _extex:
 
 &&&&&&&&
 Examples
 &&&&&&&&
-.. _extex:
 
 1. To obtain STREAmS without ibm, run:
 
@@ -200,9 +620,118 @@ Examples
 
    $ python3 pyconvertstreams.py ext -m ibm insitu
 
-3. To obtain STREAmS without insitu and log the removal, run:
+-------------------------------------
+Practices to ensure clean conversion
+-------------------------------------
+
+.. Note::
+   Mainly for hipfort mode
+
+* While defining arrays go in the order: ``type, allocatable/pointer, dimension, device ::``
+* Avoid using logical GPU arrays
+* Add ``_gpu`` suffix to all the GPU arrays
+* Try using allocate for one array at a time
+* Avoid commenting directives
+* Do not define any kernels in equation_gpu.F90. You always call kernels from kernels_gpu.F90 in equation_gpu.F90
+* Reduction cuf kernels must not have a parts which cannot be repeated freely
+* Always have ``_cuf`` suffix for kernels using kernel directives
+* Maintain consistent syntax style for: ``enddo``, ``endif``, ``elseif``, etc., 
+* While slicing array add the range. For example: ``bcswap_var(self%w_aux_gpu(:,:,:,10:10))`` instead of ``bcswap_var(self%w_aux_gpu(:,:,:,10))``
+* Hard-coded parts of the converter have been logged with a warning tag. Always look into the log file to know where they exist in the code 
+
+-------------------------------------
+Limitations/Known issues
+-------------------------------------
+
+.. Note::
+   Mainly for hipfort mode
+
+* Reduction array is currently only 3D and the indices are specifically (i,j,k)
+* Explicit kernels are assumed to invoke 2D grid block only and the index information is very specific for the current configuration (look for warnings in log file)
+* Switch cases do not have break statement
+* device_kernels.cpp, base_amd.F90 and base_amd_cpp.cpp are always static
+* Array index conversion when non-contiguous indices are sliced is not currently possible
+* Local arrays in explicit kernels currently only supported for 1D or 2D sizes
+
+.. Note::
+   If there are any bugs, Please raise an issue
+
+-------------------------------------
+How to run on LUMI
+-------------------------------------
+
+1. Go to:
 
 .. code-block:: console
 
-   $ python3 pyconvertstreams.py ext -m insitu -l
+   $ cd tools/streams-convert/
 
+2. Edit ``hipfort/kernels_config.ini`` if needed and make sure all the static files in ``input_files/amd/`` are up to date
+
+3. Check if the avilable Python3 is greater than version 3.8. If not, reproduce the following steps to install locally using Anaconda:
+   
+   * Download the latest version from `here <https://www.anaconda.com/products/distribution>`_ 
+
+   .. code-block:: console
+
+      $ wget https://repo.anaconda.com/archive/Anaconda3-2022.10-Linux-x86_64.sh
+
+   * Run the script:
+
+   .. code-block:: console
+
+      $ ./Anaconda3-2022.10-Linux-x86_64.sh
+   
+   * After installing, run:
+   
+   .. code-block:: console
+
+      $ conda activate base
+
+   * Verify the version of Python is greater than 3.8 and install the dependencies:
+
+   .. code-block:: console
+
+      $ pip install -r install_requirements.txt
+
+4. Run the converter in :ref:`hipfort <hipfortl>` mode:
+   
+   .. code-block:: console
+
+      $ python3 pyconvertstreams.py hip
+
+5. Load the following modules: 
+   
+   .. code-block:: console
+
+      $ module load CrayEnv rocm/5.0.2 PrgEnv-gnu
+
+6. Currently, ``hipfort`` library in LUMI is outdated. Follow the steps below to install it locally:
+
+   .. code-block:: console
+ 
+      $ git clone https://github.com/ROCmSoftwarePlatform/hipfort
+      $ git checkout rocm-5.1.0 # or greater
+      $ mkdir build INSTALL ; cd build
+      $ cmake -DHIPFORT_INSTALL_DIR=../INSTALL/ -DCMAKE_Fortran_COMPILER=ftn ..
+      $ make install     
+
+7. Go to ``code/`` and copy the LUMI makefile template:
+   
+   .. code-block:: console
+
+      $ cp make-templates/makefile.inc.lumi_amd makefile.inc
+
+8. Make sure all the enviroment variables mentioned in makefile.inc are added to ``bashrc`` and run ``make``
+
+9. Go into any ``examples/`` directory and get an allocation. For example, to allocate 1 full node (8 GPUs), run:
+   
+   .. code-block:: console
+
+      $ salloc --partition=eap --nodes=1 --account=project_465000141 --time=00:30:0 --ntasks-per-node=8 --gpus-per-node=8 --mem=480G  --exclusive
+
+10. For the above allocation, to run with 8 tasks, execute:
+   
+   .. code-block:: console
+
+      $ srun ../../code/streams_2.exe 

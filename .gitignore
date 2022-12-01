@@ -1,0 +1,12 @@
+# Compiled Object files
+**/*.o
+**/*.mod
+**/*.exe
+
+tools/post_proc_BL/DATA/
+tools/post_proc_BL/.objs/
+tools/post_proc_BL/.mods/
+tools/post_fields/DATA/
+
+# Python cache
+**/__pycache__

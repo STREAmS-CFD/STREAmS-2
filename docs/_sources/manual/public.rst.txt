@@ -7,8 +7,8 @@ How to prepare code for public repository
 
 .. code-block:: console
 
-   mkdir STREAMS2_COMMITS  # only for the first commit
-   cd STREAMS2_COMMITS
+   mkdir STREAmS2_COMMITS  # only for the first commit
+   cd STREAmS2_COMMITS
 
    date=$(date '+%Y_%m_%d_%H_%M_%S')
    mkdir $date 
@@ -16,7 +16,7 @@ How to prepare code for public repository
 
    git clone git@github.com:aerostreams/streams_2.git
 
-   git clone git@github.com:....TODEFINE----
+   git clone git@github.com:STREAmS-CFD/STREAmS-2.git
 
    mkdir work_public
 
@@ -25,21 +25,21 @@ How to prepare code for public repository
 .. code-block:: console
 
    cd streams_2/tools/streams-convert
-   python3 pystreamsconvert.py ext -m ibm insitu -o code_ext
+   python3 pyconvertstreams.py ext -m ibm insitu 
 
 - Create CPU code
 
 .. code-block:: console
 
    cd streams_2/tools/streams-convert
-   python3 pystreamsconvert.py cpu -i code_ext
+   python3 pyconvertstreams.py cpu -i ../../code_ext/
 
 - Indent code
 
 .. code-block:: console
 
    cd streams_2/tools/streams-indent
-   python3 pystreamsindent.py -i code_ext
+   python3 pystreamsindent.py 
 
 - Prune documentation commenting in ``streams_2/docs/source/index.rst`` the private parts
 
@@ -49,15 +49,23 @@ How to prepare code for public repository
 
    cd streams_2/docs/ && make html
 
+- Switch back full docs in private repo:
+
+.. code-block:: console
+
+   cd streams_2 && git checkout -- docs/source/index.rst
+
+
+
 - Copy selected content to the work_public folder
 
 .. code-block:: console
 
    mkdir work_public/code work_public/docs work_public/tools work_public/examples
-   cp LICENSE README.md .gitignore work_public
-   cp -r streams_2/code_ext/* work_public/code
+   cp streams_2/LICENSE streams_2/README.md streams_2/.gitignore work_public
+   cp -r streams_2/code_ext_indented/* work_public/code
    cp -r streams_2/docs/build/html/* work_public/docs
-   cp -r streams_2/tools/newpostpro work_public/tools/postpro
+   cp -r streams_2/tools/new_postpro work_public/tools/postpro
    cp -r streams_2/examples/subsonic_channel work_public/examples
    cp -r streams_2/examples/supersonic_channel work_public/examples
    cp -r streams_2/examples/supersonic_boundary_layer work_public/examples
@@ -66,7 +74,18 @@ How to prepare code for public repository
 
 .. code-block:: console
 
-   rm streams_2/code/src/.gitignore
+   rm work_public/code/src/.gitignore
+
+- Remove Makefile.amd and monolith makefile
+
+.. code-block:: console
+
+   rm work_public/code/Makefile.amd
+   rm work_public/code/maketemplates/makefile.inc.monolith_cuda
+
+- Copy work_public/code/src/singleideal/main_gpu.F90 to work_public/code/src/singleideal/main_cpu.F90 and replace each occurrence of gpu with cpu
+
+- Prune manually makefile.inc.m100_cuda and makefile.inc.dgx_cuda
 
 - Scrupoluously review content of ``work_public`` folder
 
@@ -74,20 +93,20 @@ How to prepare code for public repository
 
 .. code-block:: console
 
-   cp -r work_public/* streams_2_public
+   cp -r work_public/* STREAmS-2
 
 - Check changes using git
 
 .. code-block:: console
 
-   cd streams_2_public
+   cd STREAmS-2
    git status
 
 - If anything is reasonable, push to the public repo
  
 .. code-block:: console
 
-   git add ..
+   git add *
    git commit -m "STREAMS_YY version released"
    git push
 

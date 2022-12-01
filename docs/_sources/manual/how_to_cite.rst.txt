@@ -1,0 +1,42 @@
+===================================
+How to cite STREAmS
+===================================
+
+To properly reference STREAmS-2.0, please consider citing the following publications:
+
+[1] Bernardini, M., Modesti, D., Salvadore, F., & Pirozzoli, S. (2021). STREAmS: A high-fidelity accelerated solver for direct numerical simulation of compressible turbulent flows. Computer Physics Communications, 263, 107906. https://doi.org/10.1016/j.cpc.2021.107906
+
+[2] STREAmS 2
+
+-----------------------------------
+Bibtex
+-----------------------------------
+
+.. code-block:: console
+
+   @article{Bernardini2021,
+     doi = {10.1016/j.cpc.2021.107906},
+     url = {https://doi.org/10.1016/j.cpc.2021.107906},
+     year = {2021},
+     month = jun,
+     publisher = {Elsevier {BV}},
+     volume = {263},
+     pages = {107906},
+     author = {M. Bernardini and D. Modesti and F. Salvadore and S. Pirozzoli},
+     title = {{STREAmS}: A high-fidelity accelerated solver for direct numerical simulation of compressible turbulent flows},
+     journal = {Computer Physics Communications}
+   }
+
+   @article{Bernardini2022,
+     doi = {},
+     url = {},
+     year = {2022},
+     month = ,
+     publisher = {Elsevier {BV}},
+     volume = {},
+     pages = {},
+     author = {Bernardini and D. Modesti and F. Salvadore S. Sathyanarayana, G. Della Posta, and S. Pirozzoli},
+     title = {{STREAmS}-2.0: {S}upersonic turbulent accelerated {N}avier--{S}tokes solver version 2.0},
+     journal = {Computer Physics Communications}
+   }
+

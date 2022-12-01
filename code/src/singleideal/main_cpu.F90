@@ -1,5 +1,5 @@
 program streams_singleideal_cpu
-!< STREAmS, STREAmS for Navier-Stokes equation, GPU backend.
+!< STREAmS, STREAmS for Navier-Stokes equation, CPU backend.
 
 use streams_equation_singleideal_cpu_object
 use streams_parameters

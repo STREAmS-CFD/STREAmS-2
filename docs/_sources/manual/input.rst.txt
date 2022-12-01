@@ -40,9 +40,9 @@ When the grid is directly generated in STREAmS, nodes in the x and z directions 
   (suggested values: 16,24,32)
 - ``nywr``          => integer, active for ``grid_type = 4,5``, number of nodes in the well-resolved region between the wall (y=0) and y = ``lywr``
 - ``lywr``          => real, active for ``grid_type = 4,5``, size of the well-resolved region
+- ``ysmoosteps``    => integer, number of iterations to smooth wall-normal grid at boundary layer edge or channel centreline
  
 Notes:
-
 
 A non-uniform distribution of nodes is needed in the wall-normal direction (y) for the simulation of wall-bounded flows.
 In this case, STREAmS adopts the "natural" grid stretching proposed in :cite:p:`Pirozzoli2021`,
@@ -59,20 +59,6 @@ Depending on the particular flow case under investigation, the following strateg
  
 When ``grid_type = 1``, the grid is generated in pre-processing, and so the user must provide the code with 3 ASCII files named `x.dat`, `y.dat`, `z.dat` of size ``nxmax``, 
 ``nymax``, ``nzmax`` respectively, each containing one column with the node coordinates in the corresponding Cartesian direction.
-
-&&&&&&&&&&&&&&&&&&&&&
-[mpi]
-&&&&&&&&&&&&&&&&&&&&&
-
-This section allows the user to specify parameters for the MPI decomposition.
-
-- ``x_split`` => integer, MPI partitions in x direction
-- ``y_split`` => integer, MPI partitions in y direction (should be always 1)
-- ``z_split`` => integer, MPI partitions in z direction
-
-Notes:
-
-The product ``x_split * y_split * z_split`` must be equal to the total number of MPI tasks.
 
 &&&&&&&&&&&&&&&&&&&&&
 [bc]
@@ -93,6 +79,7 @@ This section allows the user to specify flags to impose boundary conditions.
 - ``zmin_nr`` => integer, flag for bc treatment based on characteristic decomposition on side zmin
 - ``zmax_nr`` => integer, flag for bc treatment based on characteristic decomposition on side zmax
 - ``x_recyc`` => real, specify recycling location in x direction
+- ``correct_bound_ord`` => integer, flag to reduce the order of accuracy at boundaries and avoid the use of ghost nodes (1 -> active)
 
 Notes:
 
@@ -101,9 +88,11 @@ The following flags can be specified for the static boundary condition:
 - 0  ==> periodicity (available for all sides)
 - 1  ==> free-stream (available for xmin)
 - 2  ==> extrapolation (available for all sides)
+- 4  ==> extrapolation with pressure imposed (available for xmax, ymax)
 - 5  ==> symmetry (available for ymin)
 - 6  ==> viscous wall (available for ymin, ymax)
 - 7  ==> oblique shock entering the domain (available for ymax)
+- 9  ==> compressible Blasius for laminar inflow (available for xmin).
 - 10 ==> recycling-rescaling for turbulent inflow (available for xmin).
 
 Concerning the characteristic treatment, the following options are available for all sides:
@@ -112,6 +101,20 @@ Concerning the characteristic treatment, the following options are available for
 - 1 ==> pure non-reflecting
 - 2 ==> relaxation, see :cite:p:`Pirozzoli2013`
 - 6 ==> reflective wall
+
+&&&&&&&&&&&&&&&&&&&&&
+[mpi]
+&&&&&&&&&&&&&&&&&&&&&
+
+This section allows the user to specify parameters for the MPI decomposition.
+
+- ``x_split`` => integer, MPI partitions in x direction
+- ``y_split`` => integer, MPI partitions in y direction (should be always 1)
+- ``z_split`` => integer, MPI partitions in z direction
+
+Notes:
+
+The product ``x_split * y_split * z_split`` must be equal to the total number of MPI tasks.
 
 &&&&&&&&&&&&&&&&&&&&&
 [controls]
@@ -137,20 +140,25 @@ In the latter case, the time step is equal to abs(``cfl``).
 This section allows the user to specify parameters to control numerical methods.
 
 - ``ep_order`` => integer, order of accuracy for the discretization of convective terms
-- ``nkeep`` => integer, KEEP(n) scheme selection (default: 0, suggested: 1 or 2) [???]
-- ``weno_scheme`` => integer, parameter for WENO (order of accuracy is 2 * ``weno_scheme`` - 1) [???]
+- ``nkeep`` => integer, KEEP(n) or KEP scheme selection
+- ``conservative_viscous`` => integer, flag to activate computation of viscous terms in conservative form (1-> yes)
 - ``visc_order`` => integer, order of accuracy for the discretization of viscous terms
-- ``sensor_threshold`` => real, threshold value for shock sensor [???]
-- ``rk_type`` => integer, specify Runge-Kutta type, 1 -> WRAY RK [???].
+- ``weno_scheme`` => integer, parameter for WENO (order of accuracy is 2 * ``weno_scheme`` - 1)
+- ``weno_version`` => integer, select WENO version (0  -> Jang & Shu, 1 -> WENO Z)
+- ``sensor_threshold`` => real, threshold value for shock sensor
+- ``rk_type`` => integer, specify Runge-Kutta type (for future use, only the third order scheme is currently implemented, set equal to 1)
 - ``rand_type`` => integer, specify random behavior, < 0 not reproducible, >=0 reproducible
+- ``mod_async`` => integer, specify communication pattern, =0 sync, =1 async
 
 Notes:
 
-The discretization of the convective terms of the Navier-Stokes equations is based on the implementation of the family
-of kinetic energy and entropy preserving schemes KEEP(n), described in :cite:p:`Tamaki2022`.
+The discretization of the convective terms of the Navier-Stokes equations in smooth flow regions can be selected with ``nkeep``.
+When ``nkeep<0`` the KEP scheme described in :cite:p:`Pirozzoli2010` is used. When ``nkeep>=0`` the discretization
+is based on the family of kinetic energy and entropy preserving schemes KEEP(n), described in :cite:p:`Tamaki2022`.
 The available orders of accuracy for ``ep_order`` and ``visc_order`` are 2,4,6,8.
-The shock capturing flux is based on the classic WENO schemes by :cite:p:`Shu1996`. Admissible values for ``weno_scheme`` are 1,2,3,4,
-corresponding to first-, third-, fifth- and seventh-order schemes, respectively. 
+The baseline shock capturing flux is based on the classic WENO schemes by :cite:p:`Jiang1996` (``weno_version = 0``).
+Admissible values for ``weno_scheme`` are 1,2,3,4, corresponding to first-, third-, fifth- and seventh-order schemes, respectively.
+For the fifth-order scheme (``weno_scheme = 3``), it is possible to select the optimized WENO-Z scheme proposed by :cite:p:`Borges2008` (``weno_version=1``).
 
 &&&&&&&&&&&&&&&&&&&&&
 [flow]

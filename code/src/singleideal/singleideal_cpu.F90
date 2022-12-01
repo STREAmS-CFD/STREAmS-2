@@ -1,5 +1,5 @@
 module streams_equation_singleideal_cpu_object
-    !< STREAmS, Euler equations system class definition, CPU backend.
+    !< STREAmS, Navier-Stokes equations, CPU backend.
 
     use streams_base_cpu_object
     use streams_field_object
@@ -15,16 +15,11 @@ module streams_equation_singleideal_cpu_object
     private
     public :: equation_singleideal_cpu_object
 
-    integer, parameter :: EULERCENTRAL_THREADS_X=128,EULERCENTRAL_THREADS_Y=3
-    integer, parameter :: EULERWENO_THREADS_X=128   ,EULERWENO_THREADS_Y=2
+    integer :: stream1
+
 
     type :: equation_singleideal_cpu_object
-        !< Flame single-step class definition, CPU backend.
         !<
-        !< Arrenhius form for reaction term.
-        !<
-        !< The conservative variables are arranged as follows:
-        !<```
         !< w(1): rho
         !< w(2): rho * u
         !< w(3): rho * v
@@ -42,7 +37,6 @@ module streams_equation_singleideal_cpu_object
         !< w_aux(9) : |omega|
         !< w_aux(10): div
         !<```
-        !type(file_ini)              :: file_input             !< Nasto input file handler.
         type(base_cpu_object)       :: base_cpu               !< The base CPU handler.
         type(equation_singleideal_object)    :: equation_base  !< The equation base.
         type(field_object), pointer :: field=>null()          !< The field.
@@ -53,11 +47,9 @@ module streams_equation_singleideal_cpu_object
         integer(ikind)              :: nz                     !< Number of cells in k direction.
         integer(ikind)              :: nv                     !< Number of variables.
         integer(ikind)              :: nv_aux                 !< Number of auxiliary variables.
-        integer(ikind)              :: ns                 !< Number of auxiliary variables.
-        integer(ikind)              :: procs_number                 !< Number of auxiliary variables.
         integer(ikind)              :: nprocs                 !< Number of auxiliary variables.
         integer(ikind)              :: myrank                 !< Number of auxiliary variables.
-        integer(ikind)              :: error                 !< Number of auxiliary variables.
+        integer(ikind)              :: error                  !< Number of auxiliary variables.
         real(rkind)                 :: time0
         real(rkind), allocatable, dimension(:,:) :: coeff_deriv1_cpu
         real(rkind), allocatable, dimension(:,:) :: coeff_deriv2_cpu
@@ -78,8 +70,8 @@ module streams_equation_singleideal_cpu_object
         real(rkind), allocatable, dimension(:,:,:,:) :: gplus_y_cpu, gminus_y_cpu
         real(rkind), allocatable, dimension(:,:,:,:) :: gplus_z_cpu, gminus_z_cpu
         integer, allocatable, dimension(:,:,:) :: fluid_mask_cpu
-        integer, allocatable, dimension(:,:,:,:) :: order_modify_cpu
-        integer, allocatable, dimension(:,:,:) :: order_modify_x_cpu
+        integer, allocatable, dimension(:,:,:,:) :: ep_ord_change_cpu
+        integer, allocatable, dimension(:,:,:) :: ep_ord_change_x_cpu
 
         real(rkind), allocatable, dimension(:,:,:,:) :: wrecyc_cpu
         real(rkind), allocatable, dimension(:,:,:) :: wrecycav_cpu
@@ -109,25 +101,26 @@ module streams_equation_singleideal_cpu_object
         procedure, pass(self) :: compute_dt       
         procedure, pass(self) :: initialize       
         procedure, pass(self) :: compute_residual
-        !procedure, pass(self) :: parse_input     
         procedure, pass(self) :: print_progress  
         procedure, pass(self) :: run              
-        procedure, pass(self) :: rk               
-        procedure, pass(self) :: point_to_field   
+        procedure, pass(self) :: rk_sync_old
+        procedure, pass(self) :: rk_sync
+                procedure, pass(self) :: point_to_field   
         procedure, pass(self) :: point_to_grid   
         procedure, pass(self) :: alloc            
         procedure, pass(self) :: update_ghost     
         procedure, pass(self) :: force_rhs        
         procedure, pass(self) :: force_var
-        procedure, pass(self) :: euler_x_fluxes 
-        !procedure, pass(self) :: euler_x_update
+        procedure, pass(self) :: euler_x          
         procedure, pass(self) :: euler_y          
         procedure, pass(self) :: euler_z          
-        !procedure, pass(self) :: compute_residuals_cpu  
+        procedure, pass(self) :: visflx          
+        procedure, pass(self) :: compute_aux
         procedure, pass(self) :: recyc_exchange
         procedure, pass(self) :: bcrecyc
         procedure, pass(self) :: bc_nr
         procedure, pass(self) :: manage_output
+        
                                 
                         
     endtype equation_singleideal_cpu_object
@@ -155,10 +148,60 @@ contains
 
 
 
-    subroutine rk(self)
+    subroutine rk_sync_old(self)
         class(equation_singleideal_cpu_object), intent(inout) :: self              !< The equation.
         integer :: istep
         real(rkind) :: rhodt, gamdt, alpdt
+        associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
+                  nv => self%nv,  nv_aux => self%nv_aux, &
+                  dt => self%equation_base%dt, &
+                  eul_imin => self%equation_base%eul_imin, eul_imax => self%equation_base%eul_imax, &
+                  eul_jmin => self%equation_base%eul_jmin, eul_jmax => self%equation_base%eul_jmax, &
+                  eul_kmin => self%equation_base%eul_kmin, eul_kmax => self%equation_base%eul_kmax, &
+                  channel_case => self%equation_base%channel_case)
+!
+!
+        if (channel_case) self%equation_base%dpdx = 0._rkind
+!
+        do istep=1,self%equation_base%nrk
+            rhodt = self%equation_base%rhork(istep)*dt
+            gamdt = self%equation_base%gamrk(istep)*dt
+            alpdt = self%equation_base%alprk(istep)*dt
+            
+            call init_flux_cpu(nx, ny, nz, nv, self%fl_cpu, self%fln_cpu, rhodt) 
+            if (self%equation_base%conservative_viscous==1) then
+             call self%visflx(mode=2)
+            else
+             call self%visflx(mode=0)
+            endif
+            call bcextr_var_cpu(nx, ny, nz, ng, self%w_aux_cpu(:,:,:,10:10))
+            call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,10:10)) ! div/3
+            call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,8:8 )) ! ducros
+            if (self%equation_base%conservative_viscous==1) then
+             call self%visflx(mode=7)
+            else
+             call self%visflx(mode=1)
+            endif
+            call self%euler_x(eul_imin, eul_imax, 1-ng, nx+ng)
+            call self%euler_y(eul_jmin,eul_jmax) 
+            call self%euler_z(eul_kmin,eul_kmax) 
+            if (self%equation_base%conservative_viscous==1) then
+             call self%visflx(mode=5)
+            endif
+            call self%bc_nr() 
+            call update_flux_cpu(nx, ny, nz, nv, self%fl_cpu, self%fln_cpu, gamdt) 
+            if (channel_case) call self%force_rhs()
+            call update_field_cpu(nx, ny, nz, ng, nv, self%base_cpu%w_cpu, self%fln_cpu, self%fluid_mask_cpu)
+            if (channel_case) call self%force_var()
+            call self%update_ghost()         
+            call self%compute_aux()
+        enddo
+        endassociate
+    endsubroutine rk_sync_old
+
+    subroutine visflx(self, mode)
+        class(equation_singleideal_cpu_object), intent(inout) :: self              !< The equation.
+        integer, intent(in) :: mode
         associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
                   nv => self%nv,  nv_aux => self%nv_aux, &
                   dt => self%equation_base%dt, &
@@ -180,6 +223,9 @@ contains
                   dcsidx2_cpu => self%base_cpu%dcsidx2_cpu, &
                   detady2_cpu => self%base_cpu%detady2_cpu, &
                   dzitdz2_cpu => self%base_cpu%dzitdz2_cpu, &
+                  x_cpu => self%base_cpu%x_cpu, &
+                  y_cpu => self%base_cpu%y_cpu, &
+                  z_cpu => self%base_cpu%z_cpu, &
                   eul_imin => self%equation_base%eul_imin, eul_imax => self%equation_base%eul_imax, &
                   eul_jmin => self%equation_base%eul_jmin, eul_jmax => self%equation_base%eul_jmax, &
                   eul_kmin => self%equation_base%eul_kmin, eul_kmax => self%equation_base%eul_kmax, &
@@ -191,66 +237,191 @@ contains
                   cv0 => self%equation_base%cv0, &
                   cp0 => self%equation_base%cp0, &
                   channel_case => self%equation_base%channel_case)
-!
-!
-        if (channel_case) self%equation_base%dpdx = 0._rkind
-!
-        do istep=1,self%equation_base%nrk
-            rhodt = self%equation_base%rhork(istep)*dt
-            gamdt = self%equation_base%gamrk(istep)*dt
-            alpdt = self%equation_base%alprk(istep)*dt
-            
-            call init_flux_cpu(nx, ny, nz, nv, self%fl_cpu, self%fln_cpu, rhodt) 
-
+        if (mode == 0) then ! laplacian
             call visflx_cpu(nx, ny, nz, ng, visc_order, &
-                 Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
-                 u0, l0, self%base_cpu%w_cpu, self%w_aux_cpu, self%fl_cpu, &
-                 coeff_deriv1_cpu, coeff_deriv2_cpu, &
-                 dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
-                 dcsidxs_cpu, detadys_cpu, dzitdzs_cpu,  &
-                 dcsidx2_cpu, detady2_cpu, dzitdz2_cpu, self%wallprop_cpu)
-            call bcextr_var_cpu(nx, ny, nz, ng, self%w_aux_cpu(:,:,:,10:10))
-            call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,10:10)) ! div/3
-            call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,8:8 )) ! ducros
+                Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+                u0, l0, self%base_cpu%w_cpu, self%w_aux_cpu, self%fl_cpu, &
+                coeff_deriv1_cpu, coeff_deriv2_cpu, &
+                dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
+                dcsidxs_cpu, detadys_cpu, dzitdzs_cpu,  &
+                dcsidx2_cpu, detady2_cpu, dzitdz2_cpu, self%wallprop_cpu)
+        elseif (mode == 1) then ! div
             call visflx_div_cpu(nx, ny, nz, ng, visc_order, &
                self%w_aux_cpu, self%fl_cpu, coeff_deriv1_cpu, &
-               dcsidx_cpu, detady_cpu, dzitdz_cpu)
-
-            call euler_x_transpose_cpu(nx, ny, nz, ng, nv_aux, w_aux_cpu, w_aux_trans_cpu)
-
-            !async call self%euler_x_fluxes(lmax+1,eul_imax-lmax) 
-            !async if(lmax-i1 >= 0)      call self%euler_x_fluxes(i1,lmax) 
-            !async if(eul_imax-nx+lmax-1 >= 0) call self%euler_x_fluxes(nx-lmax+1,eul_imax) 
-
-            call self%euler_x_fluxes(eul_imin,eul_imax) 
-            call euler_x_update_cpu(nx, ny, nz, ng, nv, eul_imin, eul_imax, fhat_trans_cpu, fl_trans_cpu, fl_cpu, dcsidx_cpu)
-
-            call self%euler_y(eul_jmin,eul_jmax) 
-
-            call self%euler_z(eul_kmin,eul_kmax) 
-
-            call self%bc_nr() 
-            call update_flux_cpu(nx, ny, nz, nv, self%fl_cpu, self%fln_cpu, gamdt) 
-            if (channel_case) call self%force_rhs()
-            call update_field_cpu(nx, ny, nz, ng, nv, self%base_cpu%w_cpu, self%fln_cpu, self%fluid_mask_cpu)
-            if (channel_case) call self%force_var()
-            call self%update_ghost()         
-            call compute_aux_cpu(nx, ny, nz, ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
-                 visc_model, mu0, t0, sutherland_S, T_ref_dim, &
-                 powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu, &
-                 indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
-           
-        enddo
+               dcsidx_cpu, detady_cpu, dzitdz_cpu, stream1)
+        elseif (mode == 2) then ! reduced
+!           call visflx_reduced_cpu(nx, ny, nz, ng, visc_order, &
+!                Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+!                u0, l0, self%base_cpu%w_cpu, self%w_aux_cpu, self%fl_cpu, &
+!                coeff_deriv1_cpu, coeff_deriv2_cpu, &
+!                dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
+!                dcsidxs_cpu, detadys_cpu, dzitdzs_cpu,  &
+!                dcsidx2_cpu, detady2_cpu, dzitdz2_cpu, self%wallprop_cpu, 1)
+            call visflx_reduced_ord2_cpu(nx, ny, nz, ng, &
+                 Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+                 u0, l0, self%base_cpu%w_cpu, self%w_aux_cpu, self%fl_cpu, &
+                 x_cpu, y_cpu, z_cpu, self%wallprop_cpu, 1)
+        elseif (mode == 3) then ! only sensor
+             call sensor_cpu(nx, ny, nz, ng, u0, l0, self%w_aux_cpu)
+        elseif (mode == 4) then ! laplacian
+            call visflx_nosensor_cpu(nx, ny, nz, ng, visc_order, &
+                Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+                u0, l0, self%base_cpu%w_cpu, self%w_aux_cpu, self%fl_cpu, &
+                coeff_deriv1_cpu, coeff_deriv2_cpu, &
+                dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
+                dcsidxs_cpu, detadys_cpu, dzitdzs_cpu,  &
+                dcsidx2_cpu, detady2_cpu, dzitdz2_cpu, self%wallprop_cpu)
+        elseif (mode == 5) then ! staggered
+            call visflx_x_cpu(nx, ny, nz, nv, ng, &
+                Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+                self%base_cpu%x_cpu, w_aux_trans_cpu, fl_trans_cpu, self%fl_cpu)
+            call visflx_y_cpu(nx, ny, nz, nv, ng, &
+                Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+                self%base_cpu%y_cpu, self%w_aux_cpu, self%fl_cpu)
+            call visflx_z_cpu(nx, ny, nz, nv, ng, &
+                Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+                self%base_cpu%z_cpu, self%w_aux_cpu, self%fl_cpu)
+        elseif (mode == 6) then ! reduce_nosensor
+!           call visflx_reduced_cpu(nx, ny, nz, ng, visc_order, &
+!                Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+!                u0, l0, self%base_cpu%w_cpu, self%w_aux_cpu, self%fl_cpu, &
+!                coeff_deriv1_cpu, coeff_deriv2_cpu, &
+!                dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
+!                dcsidxs_cpu, detadys_cpu, dzitdzs_cpu,  &
+!                dcsidx2_cpu, detady2_cpu, dzitdz2_cpu, self%wallprop_cpu, 0)
+            call visflx_reduced_ord2_cpu(nx, ny, nz, ng, &
+                 Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+                 u0, l0, self%base_cpu%w_cpu, self%w_aux_cpu, self%fl_cpu, &
+                 x_cpu, y_cpu, z_cpu, self%wallprop_cpu, 0)
+        elseif (mode == 7) then ! div_ord2
+            call visflx_div_ord2_cpu(nx, ny, nz, ng, &
+               self%w_aux_cpu, self%fl_cpu, &
+               x_cpu, y_cpu, z_cpu, stream1)
+        endif
         endassociate
-    endsubroutine rk
+    endsubroutine visflx
 
-    subroutine euler_x_fluxes(self, eul_imin, eul_imax)
+    subroutine compute_aux(self, central, ghost)
+        class(equation_singleideal_cpu_object), intent(inout) :: self              !< The equation.
+        integer, intent(in), optional :: central, ghost
+        integer :: central_, ghost_
+        central_ = 1 ; if(present(central)) central_ = central
+        ghost_ = 1   ; if(present(ghost))   ghost_ = ghost
+        associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
+                  visc_model => self%visc_model, mu0 => self%mu0, &
+                  t0 => self%t0, T_ref_dim => self%T_ref_dim, &
+                  sutherland_S => self%sutherland_S, &
+                  powerlaw_vtexp => self%powerlaw_vtexp, &
+                  cv_coeff_cpu => self%cv_coeff_cpu, &
+                  cp_coeff_cpu => self%cp_coeff_cpu, &
+                  indx_cp_l => self%equation_base%indx_cp_l, &
+                  indx_cp_r => self%equation_base%indx_cp_r, &
+                  calorically_perfect => self%equation_base%calorically_perfect, &
+                  cv0 => self%equation_base%cv0)
+        if(central_ == 1 .and. ghost_ == 1) then
+            call eval_aux_cpu(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, 1-ng, nz+ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        elseif(central_ == 1 .and. ghost_ == 0) then
+            call eval_aux_cpu(nx, ny, nz, ng, 1, nx, 1, ny, 1, nz, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        elseif(central_ == 0 .and. ghost_ == 1) then
+            call eval_aux_cpu(nx, ny, nz, ng, 1-ng, 0, 1-ng, ny+ng, 1-ng, nz+ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+            call eval_aux_cpu(nx, ny, nz, ng, nx+1, nx+ng, 1-ng, ny+ng, 1-ng, nz+ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+            call eval_aux_cpu(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, 0, 1-ng, nz+ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+            call eval_aux_cpu(nx, ny, nz, ng, 1-ng, nx+ng, ny+1, ny+ng, 1-ng, nz+ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+            call eval_aux_cpu(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, 1-ng, 0, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+            call eval_aux_cpu(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, nz+1, nz+ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
+                visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+                powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu,  &
+                indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        endif
+        endassociate
+    endsubroutine compute_aux
+
+    subroutine rk_sync(self)
+        class(equation_singleideal_cpu_object), intent(inout) :: self              !< The equation.
+        integer :: istep, lmax
+        real(rkind) :: rhodt, gamdt, alpdt
+!
+        associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, nv => self%nv, &
+                  dt => self%equation_base%dt, ep_order => self%equation_base%ep_order, &
+                  weno_scheme => self%equation_base%weno_scheme, &
+                  conservative_viscous => self%equation_base%conservative_viscous, &
+                  eul_imin => self%equation_base%eul_imin, eul_imax => self%equation_base%eul_imax, &
+                  eul_jmin => self%equation_base%eul_jmin, eul_jmax => self%equation_base%eul_jmax, &
+                  eul_kmin => self%equation_base%eul_kmin, eul_kmax => self%equation_base%eul_kmax, &
+                  channel_case => self%equation_base%channel_case, &
+                  nv_aux => self%nv_aux)
+
+!
+!
+
+            if (channel_case) self%equation_base%dpdx = 0._rkind
+
+            do istep=1,self%equation_base%nrk
+                rhodt = self%equation_base%rhork(istep)*dt
+                gamdt = self%equation_base%gamrk(istep)*dt
+                alpdt = self%equation_base%alprk(istep)*dt
+
+                call init_flux_cpu(nx, ny, nz, nv, self%fl_cpu, self%fln_cpu, rhodt) 
+                call self%update_ghost()
+                call self%compute_aux()
+                call self%euler_x(eul_imin, eul_imax, 1-ng, nx+ng)
+                if (conservative_viscous== 1) then
+                    call self%visflx(mode=6) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+                    call self%visflx(mode=5) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+                else
+                    call self%visflx(mode=4) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+                endif
+                call bcextr_var_cpu(nx, ny, nz, ng, self%w_aux_cpu(:,:,:,10:10))
+                call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,10:10)) ! div/3
+                call self%euler_y(eul_jmin,eul_jmax) 
+                call self%euler_z(eul_kmin,eul_kmax) 
+                if(istep == 3) then
+                    call self%visflx(mode=3) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+                    call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,8:8)) ! ducros
+                endif
+                if (conservative_viscous==1) then
+                 call self%visflx(mode=7)  ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+                else
+                 call self%visflx(mode=1)
+                endif
+                call self%bc_nr() 
+                call update_flux_cpu(nx, ny, nz, nv, self%fl_cpu, self%fln_cpu, gamdt) 
+                if (channel_case) call self%force_rhs()
+                call update_field_cpu(nx, ny, nz, ng, nv, self%base_cpu%w_cpu, self%fln_cpu, self%fluid_mask_cpu)
+                if (channel_case) call self%force_var()
+            enddo
+
+        endassociate
+    endsubroutine rk_sync
+
+
+    subroutine euler_x(self, istart, iend, istart_trans, iend_trans)
         class(equation_singleideal_cpu_object), intent(inout) :: self       
-        integer, intent(in) :: eul_imin, eul_imax
-        integer :: lmax,weno_size
+        integer, intent(in) :: istart, iend, istart_trans, iend_trans
+        integer :: lmax, weno_size
 
-        integer :: force_zero_flux_min, force_zero_flux_max
-       
+        integer :: force_zero_flux_min,force_zero_flux_max
         associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
                   nv => self%nv,  nv_aux => self%nv_aux, &
                   ep_order => self%equation_base%ep_order, &
@@ -258,40 +429,40 @@ contains
                   coeff_deriv1_cpu => self%coeff_deriv1_cpu,  dcsidx_cpu => self%base_cpu%dcsidx_cpu, &
                   fhat_cpu => self%fhat_cpu, w_cpu => self%base_cpu%w_cpu, w_aux_cpu => self%w_aux_cpu, &
                   fl_cpu => self%fl_cpu, sensor_threshold => self%equation_base%sensor_threshold, &
+                  fl_trans_cpu => self%fl_trans_cpu, &
                   weno_scheme => self%equation_base%weno_scheme, &
+                  weno_version => self%equation_base%weno_version, &
                   gplus_x_cpu => self%gplus_x_cpu, gminus_x_cpu => self%gminus_x_cpu, &
                   w_aux_trans_cpu => self%w_aux_trans_cpu, fhat_trans_cpu => self%fhat_trans_cpu, &
                   cp_coeff_cpu => self%cp_coeff_cpu, &
                   indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
                   calorically_perfect => self%equation_base%calorically_perfect, &
-                  order_modify_x_cpu => self%order_modify_x_cpu, nkeep => self%equation_base%nkeep, &
+                  ep_ord_change_x_cpu => self%ep_ord_change_x_cpu, nkeep => self%equation_base%nkeep, &
                   cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
+
+        call euler_x_transp_cpu(nx, ny, nz, ng, istart_trans, iend_trans, nv_aux, w_aux_cpu, w_aux_trans_cpu, stream1)
+
         weno_size  = 2*weno_scheme
         lmax = ep_order/2 ! max stencil width
         force_zero_flux_min = force_zero_flux(1)
         force_zero_flux_max = force_zero_flux(2)
-        if (sensor_threshold<1._rkind) then
 
 
-            call euler_x_fluxes_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-                eul_imin, eul_imax, lmax, nkeep, cp0, cv0, coeff_deriv1_cpu, dcsidx_cpu, w_aux_trans_cpu, fhat_trans_cpu, &
-                force_zero_flux_min, force_zero_flux_max, &
-                weno_scheme, sensor_threshold, weno_size, gplus_x_cpu, gminus_x_cpu, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
-                order_modify_x_cpu, calorically_perfect, tol_iter_nr)
-         else
 
+        call euler_x_fluxes_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
+            istart, iend, lmax, nkeep, cp0, cv0, coeff_deriv1_cpu, dcsidx_cpu, w_aux_trans_cpu, fhat_trans_cpu, &
+            force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+            sensor_threshold, weno_size, gplus_x_cpu, gminus_x_cpu, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
+            ep_ord_change_x_cpu, calorically_perfect, tol_iter_nr)
 
-            call euler_x_fluxes_central_kernel(nv, nv_aux, nx, ny, nz, ng, &
-                eul_imin, eul_imax, lmax, w_aux_trans_cpu, coeff_deriv1_cpu, dcsidx_cpu, fhat_trans_cpu, &
-                force_zero_flux_min, force_zero_flux_max)
-         endif
-         endassociate
-    endsubroutine euler_x_fluxes
+        call euler_x_update_cpu(nx, ny, nz, ng, nv, istart, iend, fhat_trans_cpu, fl_trans_cpu, fl_cpu, dcsidx_cpu, stream1)
+        endassociate
+    endsubroutine euler_x
 
     subroutine euler_y(self, eul_jmin, eul_jmax)
         class(equation_singleideal_cpu_object), intent(inout) :: self       
         integer, intent(in) :: eul_jmin, eul_jmax
-        integer :: lmax,weno_size
+        integer :: lmax, weno_size
 
         integer :: force_zero_flux_min,force_zero_flux_max
        
@@ -303,39 +474,32 @@ contains
                   fhat_cpu => self%fhat_cpu, w_cpu => self%base_cpu%w_cpu, w_aux_cpu => self%w_aux_cpu, &
                   fl_cpu => self%fl_cpu, sensor_threshold => self%equation_base%sensor_threshold, &
                   weno_scheme => self%equation_base%weno_scheme, &
+                  weno_version => self%equation_base%weno_version, &
                   gplus_y_cpu => self%gplus_y_cpu, gminus_y_cpu => self%gminus_y_cpu, &
                   indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
                   calorically_perfect => self%equation_base%calorically_perfect, &
                   cp_coeff_cpu => self%cp_coeff_cpu, &
-                  order_modify_cpu => self%order_modify_cpu, nkeep => self%equation_base%nkeep, &
+                  ep_ord_change_cpu => self%ep_ord_change_cpu, nkeep => self%equation_base%nkeep, &
                   cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
         weno_size = 2*weno_scheme
         lmax  = ep_order/2 ! max stencil width
         force_zero_flux_min = force_zero_flux(3)
         force_zero_flux_max = force_zero_flux(4)
 
-        if (sensor_threshold<1._rkind) then
 
 
-            call euler_y_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-                eul_jmin, eul_jmax, lmax, nkeep, cp0, cv0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, detady_cpu, fhat_cpu, &
-                force_zero_flux_min, force_zero_flux_max, &
-                weno_scheme, sensor_threshold, weno_size, w_cpu, gplus_y_cpu, gminus_y_cpu, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
-                order_modify_cpu, calorically_perfect, tol_iter_nr)
-        else
-
-
-            call euler_y_central_kernel(nv, nv_aux, nx, ny, nz, ng, &
-                eul_jmin, eul_jmax, lmax, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, detady_cpu, fhat_cpu, &
-                force_zero_flux_min, force_zero_flux_max)
-        endif
+        call euler_y_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
+            eul_jmin, eul_jmax, lmax, nkeep, cp0, cv0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, detady_cpu, fhat_cpu, &
+            force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+            sensor_threshold, weno_size, w_cpu, gplus_y_cpu, gminus_y_cpu, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
+            ep_ord_change_cpu, calorically_perfect, tol_iter_nr)
          endassociate
     endsubroutine euler_y
 
     subroutine euler_z(self, eul_kmin, eul_kmax)
         class(equation_singleideal_cpu_object), intent(inout) :: self       
         integer, intent(in) :: eul_kmin, eul_kmax
-        integer :: lmax,weno_size
+        integer :: lmax, weno_size
 
         integer :: force_zero_flux_min, force_zero_flux_max
        
@@ -347,31 +511,24 @@ contains
                   fhat_cpu => self%fhat_cpu, w_cpu => self%base_cpu%w_cpu, w_aux_cpu => self%w_aux_cpu, &
                   fl_cpu => self%fl_cpu, sensor_threshold => self%equation_base%sensor_threshold, &
                   weno_scheme => self%equation_base%weno_scheme, &
+                  weno_version => self%equation_base%weno_version, &
                   gplus_z_cpu => self%gplus_z_cpu, gminus_z_cpu => self%gminus_z_cpu, &
                   cp_coeff_cpu => self%cp_coeff_cpu, &
                   indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
                   calorically_perfect => self%equation_base%calorically_perfect, &
-                  order_modify_cpu => self%order_modify_cpu, nkeep => self%equation_base%nkeep, &
+                  ep_ord_change_cpu => self%ep_ord_change_cpu, nkeep => self%equation_base%nkeep, &
                   cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
         weno_size = 2*weno_scheme
         lmax = ep_order/2 ! max stencil width
         force_zero_flux_min = force_zero_flux(5)
         force_zero_flux_max = force_zero_flux(6)
-        if (sensor_threshold<1._rkind) then
 
 
-            call euler_z_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-                eul_kmin, eul_kmax, lmax, nkeep, cp0, cv0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, dzitdz_cpu, fhat_cpu, &
-                force_zero_flux_min, force_zero_flux_max, &
-                weno_scheme, sensor_threshold, weno_size, w_cpu, gplus_z_cpu, gminus_z_cpu, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
-                order_modify_cpu, calorically_perfect, tol_iter_nr)
-        else
-
-
-            call euler_z_central_kernel(nv, nv_aux, nx, ny, nz, ng, &
-                eul_kmin, eul_kmax, lmax, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, dzitdz_cpu, fhat_cpu, &
-                force_zero_flux_min, force_zero_flux_max)
-        endif
+        call euler_z_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
+            eul_kmin, eul_kmax, lmax, nkeep, cp0, cv0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, dzitdz_cpu, fhat_cpu, &
+            force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+            sensor_threshold, weno_size, w_cpu, gplus_z_cpu, gminus_z_cpu, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
+            ep_ord_change_cpu, calorically_perfect, tol_iter_nr)
         endassociate
     endsubroutine euler_z
 
@@ -547,9 +704,13 @@ contains
 
     endsubroutine bc_nr
 
-    subroutine update_ghost(self)
+    subroutine update_ghost(self, do_swap)
         class(equation_singleideal_cpu_object), intent(inout) :: self      
+        integer, intent(in), optional :: do_swap
+        integer :: do_swap_
         integer :: ilat
+
+        do_swap_ = 1 ; if (present(do_swap)) do_swap_ = do_swap
 
         if (self%equation_base%recyc) call self%recyc_exchange()
 
@@ -562,6 +723,9 @@ contains
             case(2)
                 call bcextr_cpu(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%base_cpu%w_cpu)
             case(4)
+                call bcextr_sub_cpu(ilat, self%nx, self%ny, self%nz, self%ng, &
+                     self%equation_base%p0, self%base_cpu%w_cpu, self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, &
+                     self%cv_coeff_cpu, self%equation_base%cv0, self%equation_base%calorically_perfect)
             case(5)
                 call bcsym_cpu(ilat, self%nx, self%ny, self%nz, self%ng, &
                      self%equation_base%T_wall, self%base_cpu%w_cpu, self%w_aux_cpu, &
@@ -587,12 +751,15 @@ contains
             case(8)
              
             case(9)
+                call bclam_cpu(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%base_cpu%w_cpu, self%wmean_cpu, &
+                     self%equation_base%p0, self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, self%cv_coeff_cpu, &
+                     self%equation_base%cv0, self%equation_base%calorically_perfect)
             case(10)
                 call self%bcrecyc(ilat)
           endselect
         enddo
 
-        call self%base_cpu%bcswap()
+        if (do_swap_ == 1) call self%base_cpu%bcswap()
 
     endsubroutine update_ghost
 
@@ -684,8 +851,8 @@ contains
 
         self%w_aux_cpu = self%equation_base%w_aux
         self%fluid_mask_cpu = self%equation_base%fluid_mask
-        self%order_modify_cpu = self%equation_base%order_modify
-        self%order_modify_x_cpu = self%equation_base%order_modify_x
+        self%ep_ord_change_cpu = self%equation_base%ep_ord_change
+        self%ep_ord_change_x_cpu = self%equation_base%ep_ord_change_x
         self%winf_cpu       = self%equation_base%winf
         self%winf_past_shock_cpu = self%equation_base%winf_past_shock
 
@@ -726,6 +893,7 @@ contains
         !! Use base_cpu as pointee
         !self%field         => self%base_cpu%field
         !self%grid          => self%base_cpu%field%grid
+
     endsubroutine initialize
 
     subroutine alloc(self)
@@ -756,8 +924,8 @@ contains
         allocate(self%gplus_z_cpu (nv,2*weno_scheme,nx,ny))
         allocate(self%gminus_z_cpu(nv,2*weno_scheme,nx,ny))
         allocate(self%fluid_mask_cpu(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))
-        allocate(self%order_modify_cpu(0:nx, 0:ny, 0:nz, 2:3))
-        allocate(self%order_modify_x_cpu(0:ny, 0:nx, 0:nz))
+        allocate(self%ep_ord_change_cpu(0:nx, 0:ny, 0:nz, 2:3))
+        allocate(self%ep_ord_change_x_cpu(0:ny, 0:nx, 0:nz))
 
         allocate(self%wrecyc_cpu(ng,ny,nz,nv))
         allocate(self%wrecycav_cpu(ng,ny,nv))
@@ -864,17 +1032,21 @@ contains
                   indx_cp_l    => self%equation_base%indx_cp_l, &
                   indx_cp_r    => self%equation_base%indx_cp_r, &
                   cv0 => self%equation_base%cv0, &
-                                    time_from_last_rst    => self%equation_base%time_from_last_rst,    &
+                                    mode_async => self%equation_base%mode_async, &
+                  time_from_last_rst    => self%equation_base%time_from_last_rst,    &
                   time_from_last_write  => self%equation_base%time_from_last_write,  &
                   time_from_last_stat   => self%equation_base%time_from_last_stat,   &
                   time_from_last_slice  => self%equation_base%time_from_last_slice,  &
                                     time_is_freezed => self%equation_base%time_is_freezed)
 
         call self%update_ghost()
-        call compute_aux_cpu(nx, ny, nz, ng, self%base_cpu%w_cpu, self%w_aux_cpu, &
-                             visc_model, mu0, t0, sutherland_S, T_ref_dim, &
-                             powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_cpu, &
-                             indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
+        call self%compute_aux()
+
+        if (mode_async >= 0) then
+         call self%visflx(mode=3)
+         call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,8:8 )) ! ducros
+        endif
+
         if (self%equation_base%restart_type==0) then
          self%equation_base%w_aux = self%w_aux_cpu
          if (self%equation_base%enable_plot3d>0) then
@@ -903,16 +1075,18 @@ contains
              icyc = icyc + 1
 
              if(mod(icyc-icyc0, iter_dt_recompute)==0) then
+                 call self%compute_aux(central=1, ghost=0)
                  call self%compute_dt()
              endif
 
 !            select case(self%equation_base%rk_type)
 !            case(RK_WRAY,RK_JAMESON)
-             call self%rk() 
+             if(mode_async == -1) call self%rk_sync_old() 
+             if(mode_async ==  0) call self%rk_sync() 
 !            case(RK_SHU)
 !             call self%rk() 
 !            end select
-             call self%compute_residual()
+             if (mod(icyc-icyc0, self%equation_base%print_control)==0) call self%compute_residual()
             endif
 !
             call self%manage_output()

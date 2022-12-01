@@ -4,9 +4,10 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Understading output files &mdash; STREAmS 2.0 documentation</title>
+  <title>Understanding output files &mdash; STREAmS 2.0 documentation</title>
       <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/graphviz.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
@@ -44,7 +45,7 @@
 <li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
 <li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS flow cases</a></li>
 <li class="toctree-l1"><a class="reference internal" href="input.html">Setting input file</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Understading output files</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Understanding output files</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#restart-files">Restart files</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#flow-fields">Flow fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#mean-flow-statistics">Mean flow statistics</a></li>
@@ -53,6 +54,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_to_cite.html">How to cite STREAmS</a></li>
 <li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
 </ul>
 
@@ -70,7 +72,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home"></a></li>
-      <li class="breadcrumb-item active">Understading output files</li>
+      <li class="breadcrumb-item active">Understanding output files</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/manual/output.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -80,14 +82,14 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="understading-output-files">
-<h1>Understading output files<a class="headerlink" href="#understading-output-files" title="Permalink to this heading"></a></h1>
+  <section id="understanding-output-files">
+<h1>Understanding output files<a class="headerlink" href="#understanding-output-files" title="Permalink to this heading"></a></h1>
 <section id="restart-files">
 <h2>Restart files<a class="headerlink" href="#restart-files" title="Permalink to this heading"></a></h2>
 <div class="line-block">
 <div class="line">In order to restart a simulation, STREAmS needs at least two files, <cite>rst.bin</cite> and <cite>field_info.dat</cite>.</div>
 </div>
-<p>The file <cite>rst.bin</cite> contains the flow field of the conserved variables.
+<p>The file <cite>rst.bin</cite> contains the flow field in terms of conserved variables.
 For a single-species, ideal gas, these are <span class="math notranslate nohighlight">\(\rho\)</span>, <span class="math notranslate nohighlight">\(\rho\,u\)</span>, <span class="math notranslate nohighlight">\(\rho\,v\)</span>, <span class="math notranslate nohighlight">\(\rho\,w\)</span>, and <span class="math notranslate nohighlight">\(\rho\,E\)</span>,
 where <span class="math notranslate nohighlight">\(\rho\)</span> is the density, <span class="math notranslate nohighlight">\(u,v,w\)</span> are the streamwise, wall-normal and spanwise velocity components,
 and <span class="math notranslate nohighlight">\(E\)</span> is the total energy.</p>
@@ -112,14 +114,14 @@ VTK files are stored in <cite>flow_nnnn.vtr</cite>, which contains both the mesh
 <cite>nnnn</cite> is the file number.
 Both Plot3d and VTK files contain the same primitive variables, namely <span class="math notranslate nohighlight">\(\rho\)</span>, <span class="math notranslate nohighlight">\(u\)</span>,
 <span class="math notranslate nohighlight">\(v\)</span>, <span class="math notranslate nohighlight">\(w\)</span> and <span class="math notranslate nohighlight">\(T\)</span>.</p>
-<p>Solutions is VTK format are printed only if the input flag <cite>enable_vtk=1</cite>, whereas
+<p>Solutions in VTK format are printed only if the input flag <cite>enable_vtk=1</cite>, whereas
 Plot3D files are printed only if <cite>enable_plot3d=1</cite>.
 The frequency with which these solutions are stored is controlled by the variable <cite>dtsave</cite> in the input file.</p>
 </section>
 <section id="mean-flow-statistics">
 <h2>Mean flow statistics<a class="headerlink" href="#mean-flow-statistics" title="Permalink to this heading"></a></h2>
-<p>Flow statistics are collected at runtime and stored in <cite>stat.bin</cite> and <cite>stat3d.bin</cite>.
-The file <cite>stat.bin</cite> contains statistics averaged in time and in the spanwise direction, for a total of 68 variables:</p>
+<p>Flow statistics are collected at runtime and stored in <cite>stat.bin</cite> and <cite>stat3d.bin</cite>.</p>
+<p>The file <cite>stat.bin</cite> contains statistics averaged in time and in the spanwise direction, for a total of 68 variables:</p>
 <table class="colwidths-given docutils align-default" id="id1">
 <caption><span class="caption-text">Mean flow statistics</span><a class="headerlink" href="#id1" title="Permalink to this table"></a></caption>
 <colgroup>
@@ -459,7 +461,7 @@ The file <cite>stat.bin</cite> contains statistics averaged in time and in the s
 <li><p><span class="math notranslate nohighlight">\(\langle\rho T^2\rangle\quad\quad\)</span></p></li>
 <li><p><span class="math notranslate nohighlight">\(\langle p^2\rangle\quad\quad\)</span></p></li>
 </ol>
-<p>The output frequency of the statistics files is controlled by the input parameter <cite>dtsave_restart</cite>. If <cite>restart_type=0</cite>, <cite>stat.bin</cite> and
+<p>The output frequency of the statistics files is controlled by the input parameter <cite>dtsave_restart</cite>. If <cite>restart_type=2</cite>, <cite>stat.bin</cite> and
 <cite>stat3d.bin</cite> are read and renamed as <cite>stat.bak</cite> and <cite>stat3d.bak</cite>.</p>
 </section>
 <section id="progress-out">

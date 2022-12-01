@@ -1,5 +1,5 @@
 module streams_equation_singleideal_gpu_object
-! < STREAmS, Euler equations system class definition, GPU backend.
+! < STREAmS, Navier-Stokes equations, GPU backend.
 !
   use streams_base_gpu_object
   use streams_field_object
@@ -16,16 +16,13 @@ module streams_equation_singleideal_gpu_object
   private
   public :: equation_singleideal_gpu_object
 !
+  integer(kind=cuda_stream_kind) :: stream1
+!
   integer, parameter :: EULERCENTRAL_THREADS_X=128,EULERCENTRAL_THREADS_Y=3
   integer, parameter :: EULERWENO_THREADS_X=128   ,EULERWENO_THREADS_Y=2
 !
   type :: equation_singleideal_gpu_object
-!   < Flame single-step class definition, GPU backend.
 !   <
-!   < Arrenhius form for reaction term.
-!   <
-!   < The conservative variables are arranged as follows:
-!   <```
 !   < w(1): rho
 !   < w(2): rho * u
 !   < w(3): rho * v
@@ -43,7 +40,6 @@ module streams_equation_singleideal_gpu_object
 !   < w_aux(9) : |omega|
 !   < w_aux(10): div
 !   <```
-!   type(file_ini)              :: file_input             !< Nasto input file handler.
     type(base_gpu_object)       :: base_gpu               !< The base GPU handler.
     type(equation_singleideal_object)    :: equation_base  !< The equation base.
     type(field_object), pointer :: field=>null()          !< The field.
@@ -54,11 +50,9 @@ module streams_equation_singleideal_gpu_object
     integer(ikind)              :: nz                     !< Number of cells in k direction.
     integer(ikind)              :: nv                     !< Number of variables.
     integer(ikind)              :: nv_aux                 !< Number of auxiliary variables.
-    integer(ikind)              :: ns                 !< Number of auxiliary variables.
-    integer(ikind)              :: procs_number                 !< Number of auxiliary variables.
     integer(ikind)              :: nprocs                 !< Number of auxiliary variables.
     integer(ikind)              :: myrank                 !< Number of auxiliary variables.
-    integer(ikind)              :: error                 !< Number of auxiliary variables.
+    integer(ikind)              :: error                  !< Number of auxiliary variables.
     real(rkind)                 :: time0
     real(rkind), allocatable, dimension(:,:), device :: coeff_deriv1_gpu
     real(rkind), allocatable, dimension(:,:), device :: coeff_deriv2_gpu
@@ -79,8 +73,8 @@ module streams_equation_singleideal_gpu_object
     real(rkind), allocatable, dimension(:,:,:,:), device :: gplus_y_gpu, gminus_y_gpu
     real(rkind), allocatable, dimension(:,:,:,:), device :: gplus_z_gpu, gminus_z_gpu
     integer, allocatable, dimension(:,:,:), device :: fluid_mask_gpu
-    integer, allocatable, dimension(:,:,:,:), device :: order_modify_gpu
-    integer, allocatable, dimension(:,:,:), device :: order_modify_x_gpu
+    integer, allocatable, dimension(:,:,:,:), device :: ep_ord_change_gpu
+    integer, allocatable, dimension(:,:,:), device :: ep_ord_change_x_gpu
 !
     real(rkind), allocatable, dimension(:,:,:,:), device :: wrecyc_gpu
     real(rkind), allocatable, dimension(:,:,:), device :: wrecycav_gpu
@@ -110,25 +104,27 @@ module streams_equation_singleideal_gpu_object
     procedure, pass(self) :: compute_dt
     procedure, pass(self) :: initialize
     procedure, pass(self) :: compute_residual
-!   procedure, pass(self) :: parse_input
     procedure, pass(self) :: print_progress
     procedure, pass(self) :: run
-    procedure, pass(self) :: rk
+    procedure, pass(self) :: rk_sync_old
+    procedure, pass(self) :: rk_sync
+    procedure, pass(self) :: rk_async
     procedure, pass(self) :: point_to_field
     procedure, pass(self) :: point_to_grid
     procedure, pass(self) :: alloc
     procedure, pass(self) :: update_ghost
     procedure, pass(self) :: force_rhs
     procedure, pass(self) :: force_var
-    procedure, pass(self) :: euler_x_fluxes
-!   procedure, pass(self) :: euler_x_update
+    procedure, pass(self) :: euler_x
     procedure, pass(self) :: euler_y
     procedure, pass(self) :: euler_z
-!   procedure, pass(self) :: compute_residuals_gpu
+    procedure, pass(self) :: visflx
+    procedure, pass(self) :: compute_aux
     procedure, pass(self) :: recyc_exchange
     procedure, pass(self) :: bcrecyc
     procedure, pass(self) :: bc_nr
     procedure, pass(self) :: manage_output
+!
 !
 !
   endtype equation_singleideal_gpu_object
@@ -156,10 +152,64 @@ contains
 !
 !
 !
-  subroutine rk(self)
+  subroutine rk_sync_old(self)
     class(equation_singleideal_gpu_object), intent(inout) :: self              !< The equation.
-    integer :: istep
+    integer :: istep, iercuda
     real(rkind) :: rhodt, gamdt, alpdt
+    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
+      nv => self%nv,  nv_aux => self%nv_aux, &
+      dt => self%equation_base%dt, &
+      eul_imin => self%equation_base%eul_imin, eul_imax => self%equation_base%eul_imax, &
+      eul_jmin => self%equation_base%eul_jmin, eul_jmax => self%equation_base%eul_jmax, &
+      eul_kmin => self%equation_base%eul_kmin, eul_kmax => self%equation_base%eul_kmax, &
+      channel_case => self%equation_base%channel_case)
+!     
+!     
+      if (channel_case) self%equation_base%dpdx = 0._rkind
+!     
+      do istep=1,self%equation_base%nrk
+        rhodt = self%equation_base%rhork(istep)*dt
+        gamdt = self%equation_base%gamrk(istep)*dt
+        alpdt = self%equation_base%alprk(istep)*dt
+!
+        call init_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, rhodt)
+        if (self%equation_base%conservative_viscous==1) then
+          call self%visflx(mode=2)
+        else
+          call self%visflx(mode=0)
+        endif
+        call bcextr_var_cuf(nx, ny, nz, ng, self%w_aux_gpu(:,:,:,10:10))
+        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,10:10)) ! div/3
+        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,8:8 )) ! ducros
+        if (self%equation_base%conservative_viscous==1) then
+          call self%visflx(mode=7)
+        else
+          call self%visflx(mode=1)
+        endif
+        !@cuf iercuda=cudaDeviceSynchronize()
+        call self%euler_x(eul_imin, eul_imax, 1-ng, nx+ng)
+        !@cuf iercuda=cudaDeviceSynchronize()
+        call self%euler_y(eul_jmin,eul_jmax)
+        !@cuf iercuda=cudaDeviceSynchronize()
+        call self%euler_z(eul_kmin,eul_kmax)
+        if (self%equation_base%conservative_viscous==1) then
+          call self%visflx(mode=5)
+        endif
+        call self%bc_nr()
+        call update_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, gamdt)
+        if (channel_case) call self%force_rhs()
+        call update_field_cuf(nx, ny, nz, ng, nv, self%base_gpu%w_gpu, self%fln_gpu, self%fluid_mask_gpu)
+        if (channel_case) call self%force_var()
+        call self%update_ghost()
+        call self%compute_aux()
+        !@cuf iercuda=cudaDeviceSynchronize()
+      enddo
+    endassociate
+  endsubroutine rk_sync_old
+!
+  subroutine visflx(self, mode)
+    class(equation_singleideal_gpu_object), intent(inout) :: self              !< The equation.
+    integer, intent(in) :: mode
     associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
       nv => self%nv,  nv_aux => self%nv_aux, &
       dt => self%equation_base%dt, &
@@ -181,6 +231,9 @@ contains
       dcsidx2_gpu => self%base_gpu%dcsidx2_gpu, &
       detady2_gpu => self%base_gpu%detady2_gpu, &
       dzitdz2_gpu => self%base_gpu%dzitdz2_gpu, &
+      x_gpu => self%base_gpu%x_gpu, &
+      y_gpu => self%base_gpu%y_gpu, &
+      z_gpu => self%base_gpu%z_gpu, &
       eul_imin => self%equation_base%eul_imin, eul_imax => self%equation_base%eul_imax, &
       eul_jmin => self%equation_base%eul_jmin, eul_jmax => self%equation_base%eul_jmax, &
       eul_kmin => self%equation_base%eul_kmin, eul_kmax => self%equation_base%eul_kmax, &
@@ -192,17 +245,7 @@ contains
       cv0 => self%equation_base%cv0, &
       cp0 => self%equation_base%cp0, &
       channel_case => self%equation_base%channel_case)
-!     
-!     
-      if (channel_case) self%equation_base%dpdx = 0._rkind
-!     
-      do istep=1,self%equation_base%nrk
-        rhodt = self%equation_base%rhork(istep)*dt
-        gamdt = self%equation_base%gamrk(istep)*dt
-        alpdt = self%equation_base%alprk(istep)*dt
-!
-        call init_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, rhodt)
-!
+      if (mode == 0) then ! laplacian
         call visflx_cuf(nx, ny, nz, ng, visc_order, &
           Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
@@ -210,48 +253,259 @@ contains
           dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
           dcsidxs_gpu, detadys_gpu, dzitdzs_gpu,  &
           dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, self%wallprop_gpu)
-        call bcextr_var_cuf(nx, ny, nz, ng, self%w_aux_gpu(:,:,:,10:10))
-        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,10:10)) ! div/3
-        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,8:8 )) ! ducros
+      elseif (mode == 1) then ! div
         call visflx_div_cuf(nx, ny, nz, ng, visc_order, &
           self%w_aux_gpu, self%fl_gpu, coeff_deriv1_gpu, &
-          dcsidx_gpu, detady_gpu, dzitdz_gpu)
+          dcsidx_gpu, detady_gpu, dzitdz_gpu, stream1)
+      elseif (mode == 2) then ! reduced
+!       call visflx_reduced_cuf(nx, ny, nz, ng, visc_order, &
+!         Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+!         u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
+!         coeff_deriv1_gpu, coeff_deriv2_gpu, &
+!         dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
+!         dcsidxs_gpu, detadys_gpu, dzitdzs_gpu,  &
+!         dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, self%wallprop_gpu, 1)
+        call visflx_reduced_ord2_cuf(nx, ny, nz, ng, &
+          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
+          x_gpu, y_gpu, z_gpu, self%wallprop_gpu, 1)
+      elseif (mode == 3) then ! only sensor
+        call sensor_cuf(nx, ny, nz, ng, u0, l0, self%w_aux_gpu)
+      elseif (mode == 4) then ! laplacian
+        call visflx_nosensor_cuf(nx, ny, nz, ng, visc_order, &
+          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
+          coeff_deriv1_gpu, coeff_deriv2_gpu, &
+          dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
+          dcsidxs_gpu, detadys_gpu, dzitdzs_gpu,  &
+          dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, self%wallprop_gpu)
+      elseif (mode == 5) then ! staggered
+        call visflx_x_cuf(nx, ny, nz, nv, ng, &
+          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          self%base_gpu%x_gpu, w_aux_trans_gpu, fl_trans_gpu, self%fl_gpu)
+        call visflx_y_cuf(nx, ny, nz, nv, ng, &
+          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          self%base_gpu%y_gpu, self%w_aux_gpu, self%fl_gpu)
+        call visflx_z_cuf(nx, ny, nz, nv, ng, &
+          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          self%base_gpu%z_gpu, self%w_aux_gpu, self%fl_gpu)
+      elseif (mode == 6) then ! reduce_nosensor
+!       call visflx_reduced_cuf(nx, ny, nz, ng, visc_order, &
+!         Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+!         u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
+!         coeff_deriv1_gpu, coeff_deriv2_gpu, &
+!         dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
+!         dcsidxs_gpu, detadys_gpu, dzitdzs_gpu,  &
+!         dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, self%wallprop_gpu, 0)
+        call visflx_reduced_ord2_cuf(nx, ny, nz, ng, &
+          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
+          x_gpu, y_gpu, z_gpu, self%wallprop_gpu, 0)
+      elseif (mode == 7) then ! div_ord2
+        call visflx_div_ord2_cuf(nx, ny, nz, ng, &
+          self%w_aux_gpu, self%fl_gpu, &
+          x_gpu, y_gpu, z_gpu, stream1)
+      endif
+    endassociate
+  endsubroutine visflx
 !
-        call euler_x_transpose_cuf(nx, ny, nz, ng, nv_aux, w_aux_gpu, w_aux_trans_gpu)
+  subroutine compute_aux(self, central, ghost)
+    class(equation_singleideal_gpu_object), intent(inout) :: self              !< The equation.
+    integer, intent(in), optional :: central, ghost
+    integer :: central_, ghost_
+    central_ = 1 ; if(present(central)) central_ = central
+    ghost_ = 1   ; if(present(ghost))   ghost_ = ghost
+    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
+      visc_model => self%visc_model, mu0 => self%mu0, &
+      t0 => self%t0, T_ref_dim => self%T_ref_dim, &
+      sutherland_S => self%sutherland_S, &
+      powerlaw_vtexp => self%powerlaw_vtexp, &
+      cv_coeff_gpu => self%cv_coeff_gpu, &
+      cp_coeff_gpu => self%cp_coeff_gpu, &
+      indx_cp_l => self%equation_base%indx_cp_l, &
+      indx_cp_r => self%equation_base%indx_cp_r, &
+      calorically_perfect => self%equation_base%calorically_perfect, &
+      cv0 => self%equation_base%cv0)
+      if(central_ == 1 .and. ghost_ == 1) then
+        call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+      elseif(central_ == 1 .and. ghost_ == 0) then
+        call eval_aux_cuf(nx, ny, nz, ng, 1, nx, 1, ny, 1, nz, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+      elseif(central_ == 0 .and. ghost_ == 1) then
+        call eval_aux_cuf(nx, ny, nz, ng, 1-ng, 0, 1-ng, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        call eval_aux_cuf(nx, ny, nz, ng, nx+1, nx+ng, 1-ng, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, 0, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, ny+1, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, 1-ng, 0, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+        call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, nz+1, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
+          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
+          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
+          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+      endif
+    endassociate
+  endsubroutine compute_aux
 !
-!       async call self%euler_x_fluxes(lmax+1,eul_imax-lmax)
-!       async if(lmax-i1 >= 0)      call self%euler_x_fluxes(i1,lmax)
-!       async if(eul_imax-nx+lmax-1 >= 0) call self%euler_x_fluxes(nx-lmax+1,eul_imax)
+  subroutine rk_sync(self)
+    class(equation_singleideal_gpu_object), intent(inout) :: self              !< The equation.
+    integer :: istep, lmax, iercuda
+    real(rkind) :: rhodt, gamdt, alpdt
+!   
+    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, nv => self%nv, &
+      dt => self%equation_base%dt, ep_order => self%equation_base%ep_order, &
+      weno_scheme => self%equation_base%weno_scheme, &
+      conservative_viscous => self%equation_base%conservative_viscous, &
+      eul_imin => self%equation_base%eul_imin, eul_imax => self%equation_base%eul_imax, &
+      eul_jmin => self%equation_base%eul_jmin, eul_jmax => self%equation_base%eul_jmax, &
+      eul_kmin => self%equation_base%eul_kmin, eul_kmax => self%equation_base%eul_kmax, &
+      channel_case => self%equation_base%channel_case, &
+      nv_aux => self%nv_aux)
 !
-        call self%euler_x_fluxes(eul_imin,eul_imax)
-        call euler_x_update_cuf(nx, ny, nz, ng, nv, eul_imin, eul_imax, fhat_trans_gpu, fl_trans_gpu, fl_gpu, dcsidx_gpu)
+!     
+!     
 !
+      if (channel_case) self%equation_base%dpdx = 0._rkind
+!
+      do istep=1,self%equation_base%nrk
+        rhodt = self%equation_base%rhork(istep)*dt
+        gamdt = self%equation_base%gamrk(istep)*dt
+        alpdt = self%equation_base%alprk(istep)*dt
+!
+        call init_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, rhodt)
+        call self%update_ghost()
+        call self%compute_aux()
+        !@cuf iercuda=cudaDeviceSynchronize()
+        call self%euler_x(eul_imin, eul_imax, 1-ng, nx+ng)
+        !@cuf iercuda=cudaDeviceSynchronize()
+        if (conservative_viscous== 1) then
+          call self%visflx(mode=6) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+          call self%visflx(mode=5) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+        else
+          call self%visflx(mode=4) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+        endif
+        call bcextr_var_cuf(nx, ny, nz, ng, self%w_aux_gpu(:,:,:,10:10))
+        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,10:10)) ! div/3
         call self%euler_y(eul_jmin,eul_jmax)
-!
+        !@cuf iercuda=cudaDeviceSynchronize()
         call self%euler_z(eul_kmin,eul_kmax)
-!
+        if(istep == 3) then
+          call self%visflx(mode=3) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+          call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,8:8)) ! ducros
+        endif
+        if (conservative_viscous==1) then
+          call self%visflx(mode=7)  ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+        else
+          call self%visflx(mode=1)
+        endif
+        !@cuf iercuda=cudaDeviceSynchronize()
         call self%bc_nr()
         call update_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, gamdt)
         if (channel_case) call self%force_rhs()
         call update_field_cuf(nx, ny, nz, ng, nv, self%base_gpu%w_gpu, self%fln_gpu, self%fluid_mask_gpu)
         if (channel_case) call self%force_var()
-        call self%update_ghost()
-        call compute_aux_cuf(nx, ny, nz, ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
-          visc_model, mu0, t0, sutherland_S, T_ref_dim, &
-          powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu, &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
+      enddo
 !
+    endassociate
+  endsubroutine rk_sync
+!
+  subroutine rk_async(self)
+    class(equation_singleideal_gpu_object), intent(inout) :: self              !< The equation.
+    integer :: istep, lmax, iercuda
+    real(rkind) :: rhodt, gamdt, alpdt
+!   
+    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, nv => self%nv, &
+      dt => self%equation_base%dt, ep_order => self%equation_base%ep_order, &
+      weno_scheme => self%equation_base%weno_scheme, &
+      conservative_viscous => self%equation_base%conservative_viscous, &
+      eul_imin => self%equation_base%eul_imin, eul_imax => self%equation_base%eul_imax, &
+      eul_jmin => self%equation_base%eul_jmin, eul_jmax => self%equation_base%eul_jmax, &
+      eul_kmin => self%equation_base%eul_kmin, eul_kmax => self%equation_base%eul_kmax, &
+      channel_case => self%equation_base%channel_case, &
+      nv_aux => self%nv_aux)
+!
+!
+      if (channel_case) self%equation_base%dpdx = 0._rkind
+      lmax = max(ep_order/2, weno_scheme) ! max stencil width
+!
+      do istep=1,self%equation_base%nrk
+        rhodt = self%equation_base%rhork(istep)*dt
+        gamdt = self%equation_base%gamrk(istep)*dt
+        alpdt = self%equation_base%alprk(istep)*dt
+!
+        call init_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, rhodt)
+        call self%update_ghost(do_swap=0)
+!
+!
+        call self%compute_aux(central=1, ghost=0)
+        !@cuf iercuda=cudaDeviceSynchronize()
+        call self%base_gpu%bcswap(steps=[.true.,.false.,.false.])
+        call self%euler_x(lmax+1,nx-lmax,1,nx)
+        call self%base_gpu%bcswap(steps=[.false.,.true.,.true.])
+        call self%compute_aux(central=0, ghost=1)
+        if (lmax-eul_imin >= 0)      call self%euler_x(eul_imin,lmax,1-ng,0)
+        if (eul_imax-nx+lmax-1 >= 0) call self%euler_x(nx-lmax+1,eul_imax,nx+1,nx+ng)
+        if (conservative_viscous == 1) then
+          call self%visflx(mode=6) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+          call self%visflx(mode=5) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+        else
+          call self%visflx(mode=4) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+        endif
+        call bcextr_var_cuf(nx, ny, nz, ng, self%w_aux_gpu(:,:,:,10:10))
+        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,10:10), steps=[.true.,.false.,.false.]) ! div/3
+        call self%euler_y(eul_jmin,eul_jmax)
+        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,10:10), steps=[.false.,.true.,.true.]) ! div/3
+        call self%euler_z(eul_kmin,eul_kmax)
+        if(istep == 3) then
+          call self%visflx(mode=3) ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag
+          call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,8:8), steps=[.true.,.false.,.false.]) ! ducros
+          if (conservative_viscous==1) then
+            call self%visflx(mode=7)  ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+          else
+            call self%visflx(mode=1)
+          endif
+          call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,8:8), steps=[.false.,.true.,.true.]) ! ducros
+        else
+          if (conservative_viscous==1) then
+            call self%visflx(mode=7)  ! 0=lapl, 1=div, 2=reduced, 3=sensor, 4=lapl_nosensor, 5=stag, 6=reduce_nosens
+          else
+            call self%visflx(mode=1)
+          endif
+          !@cuf iercuda=cudaDeviceSynchronize()
+        endif
+        call self%bc_nr()
+        call update_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, gamdt)
+        if (channel_case) call self%force_rhs()
+        call update_field_cuf(nx, ny, nz, ng, nv, self%base_gpu%w_gpu, self%fln_gpu, self%fluid_mask_gpu)
+        if (channel_case) call self%force_var()
       enddo
     endassociate
-  endsubroutine rk
+  endsubroutine rk_async
 !
-  subroutine euler_x_fluxes(self, eul_imin, eul_imax)
+  subroutine euler_x(self, istart, iend, istart_trans, iend_trans)
     class(equation_singleideal_gpu_object), intent(inout) :: self
-    integer, intent(in) :: eul_imin, eul_imax
-    integer :: lmax,weno_size
+    integer, intent(in) :: istart, iend, istart_trans, iend_trans
+    integer :: lmax, weno_size
     type(dim3) :: grid, tBlock
-    integer :: force_zero_flux_min, force_zero_flux_max
-!
+    integer :: force_zero_flux_min,force_zero_flux_max
     associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
       nv => self%nv,  nv_aux => self%nv_aux, &
       ep_order => self%equation_base%ep_order, &
@@ -259,40 +513,40 @@ contains
       coeff_deriv1_gpu => self%coeff_deriv1_gpu,  dcsidx_gpu => self%base_gpu%dcsidx_gpu, &
       fhat_gpu => self%fhat_gpu, w_gpu => self%base_gpu%w_gpu, w_aux_gpu => self%w_aux_gpu, &
       fl_gpu => self%fl_gpu, sensor_threshold => self%equation_base%sensor_threshold, &
+      fl_trans_gpu => self%fl_trans_gpu, &
       weno_scheme => self%equation_base%weno_scheme, &
+      weno_version => self%equation_base%weno_version, &
       gplus_x_gpu => self%gplus_x_gpu, gminus_x_gpu => self%gminus_x_gpu, &
       w_aux_trans_gpu => self%w_aux_trans_gpu, fhat_trans_gpu => self%fhat_trans_gpu, &
       cp_coeff_gpu => self%cp_coeff_gpu, &
       indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
       calorically_perfect => self%equation_base%calorically_perfect, &
-      order_modify_x_gpu => self%order_modify_x_gpu, nkeep => self%equation_base%nkeep, &
+      ep_ord_change_x_gpu => self%ep_ord_change_x_gpu, nkeep => self%equation_base%nkeep, &
       cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
+!
+      call euler_x_transp_cuf(nx, ny, nz, ng, istart_trans, iend_trans, nv_aux, w_aux_gpu, w_aux_trans_gpu, stream1)
+!
       weno_size  = 2*weno_scheme
       lmax = ep_order/2 ! max stencil width
       force_zero_flux_min = force_zero_flux(1)
       force_zero_flux_max = force_zero_flux(2)
-      if (sensor_threshold<1._rkind) then
-        tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
-        grid = dim3(ceiling(real(ny)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
-        call euler_x_fluxes_hybrid_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
-          eul_imin, eul_imax, lmax, nkeep, cp0, cv0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
-          force_zero_flux_min, force_zero_flux_max, &
-          weno_scheme, sensor_threshold, weno_size, gplus_x_gpu, gminus_x_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-          order_modify_x_gpu, calorically_perfect, tol_iter_nr)
-      else
-        tBlock = dim3(EULERCENTRAL_THREADS_X,EULERCENTRAL_THREADS_Y,1)
-        grid = dim3(ceiling(real(ny)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
-        call euler_x_fluxes_central_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
-          eul_imin, eul_imax, lmax, w_aux_trans_gpu, coeff_deriv1_gpu, dcsidx_gpu, fhat_trans_gpu, &
-          force_zero_flux_min, force_zero_flux_max)
-      endif
+      tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
+      grid = dim3(ceiling(real(ny)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
+!
+      call euler_x_fluxes_hybrid_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
+        istart, iend, lmax, nkeep, cp0, cv0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
+        force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+        sensor_threshold, weno_size, gplus_x_gpu, gminus_x_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+        ep_ord_change_x_gpu, calorically_perfect, tol_iter_nr)
+!
+      call euler_x_update_cuf(nx, ny, nz, ng, nv, istart, iend, fhat_trans_gpu, fl_trans_gpu, fl_gpu, dcsidx_gpu, stream1)
     endassociate
-  endsubroutine euler_x_fluxes
+  endsubroutine euler_x
 !
   subroutine euler_y(self, eul_jmin, eul_jmax)
     class(equation_singleideal_gpu_object), intent(inout) :: self
     integer, intent(in) :: eul_jmin, eul_jmax
-    integer :: lmax,weno_size
+    integer :: lmax, weno_size
     type(dim3) :: grid, tBlock
     integer :: force_zero_flux_min,force_zero_flux_max
 !
@@ -304,39 +558,32 @@ contains
       fhat_gpu => self%fhat_gpu, w_gpu => self%base_gpu%w_gpu, w_aux_gpu => self%w_aux_gpu, &
       fl_gpu => self%fl_gpu, sensor_threshold => self%equation_base%sensor_threshold, &
       weno_scheme => self%equation_base%weno_scheme, &
+      weno_version => self%equation_base%weno_version, &
       gplus_y_gpu => self%gplus_y_gpu, gminus_y_gpu => self%gminus_y_gpu, &
       indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
       calorically_perfect => self%equation_base%calorically_perfect, &
       cp_coeff_gpu => self%cp_coeff_gpu, &
-      order_modify_gpu => self%order_modify_gpu, nkeep => self%equation_base%nkeep, &
+      ep_ord_change_gpu => self%ep_ord_change_gpu, nkeep => self%equation_base%nkeep, &
       cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
       weno_size = 2*weno_scheme
       lmax  = ep_order/2 ! max stencil width
       force_zero_flux_min = force_zero_flux(3)
       force_zero_flux_max = force_zero_flux(4)
 !
-      if (sensor_threshold<1._rkind) then
-        tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
-        grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
-        call euler_y_hybrid_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
-          eul_jmin, eul_jmax, lmax, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
-          force_zero_flux_min, force_zero_flux_max, &
-          weno_scheme, sensor_threshold, weno_size, w_gpu, gplus_y_gpu, gminus_y_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-          order_modify_gpu, calorically_perfect, tol_iter_nr)
-      else
-        tBlock = dim3(EULERCENTRAL_THREADS_X,EULERCENTRAL_THREADS_Y,1)
-        grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
-        call euler_y_central_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
-          eul_jmin, eul_jmax, lmax, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
-          force_zero_flux_min, force_zero_flux_max)
-      endif
+      tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
+      grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
+      call euler_y_hybrid_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
+        eul_jmin, eul_jmax, lmax, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
+        force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+        sensor_threshold, weno_size, w_gpu, gplus_y_gpu, gminus_y_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+        ep_ord_change_gpu, calorically_perfect, tol_iter_nr)
     endassociate
   endsubroutine euler_y
 !
   subroutine euler_z(self, eul_kmin, eul_kmax)
     class(equation_singleideal_gpu_object), intent(inout) :: self
     integer, intent(in) :: eul_kmin, eul_kmax
-    integer :: lmax,weno_size
+    integer :: lmax, weno_size
     type(dim3) :: grid, tBlock
     integer :: force_zero_flux_min, force_zero_flux_max
 !
@@ -348,31 +595,24 @@ contains
       fhat_gpu => self%fhat_gpu, w_gpu => self%base_gpu%w_gpu, w_aux_gpu => self%w_aux_gpu, &
       fl_gpu => self%fl_gpu, sensor_threshold => self%equation_base%sensor_threshold, &
       weno_scheme => self%equation_base%weno_scheme, &
+      weno_version => self%equation_base%weno_version, &
       gplus_z_gpu => self%gplus_z_gpu, gminus_z_gpu => self%gminus_z_gpu, &
       cp_coeff_gpu => self%cp_coeff_gpu, &
       indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
       calorically_perfect => self%equation_base%calorically_perfect, &
-      order_modify_gpu => self%order_modify_gpu, nkeep => self%equation_base%nkeep, &
+      ep_ord_change_gpu => self%ep_ord_change_gpu, nkeep => self%equation_base%nkeep, &
       cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
       weno_size = 2*weno_scheme
       lmax = ep_order/2 ! max stencil width
       force_zero_flux_min = force_zero_flux(5)
       force_zero_flux_max = force_zero_flux(6)
-      if (sensor_threshold<1._rkind) then
-        tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
-        grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(ny)/tBlock%y),1)
-        call euler_z_hybrid_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
-          eul_kmin, eul_kmax, lmax, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
-          force_zero_flux_min, force_zero_flux_max, &
-          weno_scheme, sensor_threshold, weno_size, w_gpu, gplus_z_gpu, gminus_z_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-          order_modify_gpu, calorically_perfect, tol_iter_nr)
-      else
-        tBlock = dim3(EULERCENTRAL_THREADS_X,EULERCENTRAL_THREADS_Y,1)
-        grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(ny)/tBlock%y),1)
-        call euler_z_central_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
-          eul_kmin, eul_kmax, lmax, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
-          force_zero_flux_min, force_zero_flux_max)
-      endif
+      tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
+      grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(ny)/tBlock%y),1)
+      call euler_z_hybrid_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
+        eul_kmin, eul_kmax, lmax, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
+        force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+        sensor_threshold, weno_size, w_gpu, gplus_z_gpu, gminus_z_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+        ep_ord_change_gpu, calorically_perfect, tol_iter_nr)
     endassociate
   endsubroutine euler_z
 !
@@ -550,9 +790,13 @@ contains
 !
   endsubroutine bc_nr
 !
-  subroutine update_ghost(self)
+  subroutine update_ghost(self, do_swap)
     class(equation_singleideal_gpu_object), intent(inout) :: self
+    integer, intent(in), optional :: do_swap
+    integer :: do_swap_
     integer :: ilat
+!
+    do_swap_ = 1 ; if (present(do_swap)) do_swap_ = do_swap
 !
     if (self%equation_base%recyc) call self%recyc_exchange()
 !
@@ -565,6 +809,9 @@ contains
       case(2)
         call bcextr_cuf(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%base_gpu%w_gpu)
       case(4)
+        call bcextr_sub_cuf(ilat, self%nx, self%ny, self%nz, self%ng, &
+          self%equation_base%p0, self%base_gpu%w_gpu, self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, &
+          self%cv_coeff_gpu, self%equation_base%cv0, self%equation_base%calorically_perfect)
       case(5)
         call bcsym_cuf(ilat, self%nx, self%ny, self%nz, self%ng, &
           self%equation_base%T_wall, self%base_gpu%w_gpu, self%w_aux_gpu, &
@@ -590,12 +837,15 @@ contains
       case(8)
 !
       case(9)
+        call bclam_cuf(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%base_gpu%w_gpu, self%wmean_gpu, &
+          self%equation_base%p0, self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, self%cv_coeff_gpu, &
+          self%equation_base%cv0, self%equation_base%calorically_perfect)
       case(10)
         call self%bcrecyc(ilat)
       endselect
     enddo
 !
-    call self%base_gpu%bcswap()
+    if (do_swap_ == 1) call self%base_gpu%bcswap()
 !
   endsubroutine update_ghost
 !
@@ -689,8 +939,8 @@ contains
 !
     self%w_aux_gpu = self%equation_base%w_aux
     self%fluid_mask_gpu = self%equation_base%fluid_mask
-    self%order_modify_gpu = self%equation_base%order_modify
-    self%order_modify_x_gpu = self%equation_base%order_modify_x
+    self%ep_ord_change_gpu = self%equation_base%ep_ord_change
+    self%ep_ord_change_x_gpu = self%equation_base%ep_ord_change_x
     self%winf_gpu       = self%equation_base%winf
     self%winf_past_shock_gpu = self%equation_base%winf_past_shock
 !
@@ -732,6 +982,8 @@ contains
 !   ! Use base_gpu as pointee
 !   self%field         => self%base_gpu%field
 !   self%grid          => self%base_gpu%field%grid
+!
+    self%mpi_err = cudaStreamCreate(stream1)
   endsubroutine initialize
 !
   subroutine alloc(self)
@@ -762,8 +1014,8 @@ contains
       allocate(self%gplus_z_gpu (nv,2*weno_scheme,nx,ny))
       allocate(self%gminus_z_gpu(nv,2*weno_scheme,nx,ny))
       allocate(self%fluid_mask_gpu(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))
-      allocate(self%order_modify_gpu(0:nx, 0:ny, 0:nz, 2:3))
-      allocate(self%order_modify_x_gpu(0:ny, 0:nx, 0:nz))
+      allocate(self%ep_ord_change_gpu(0:nx, 0:ny, 0:nz, 2:3))
+      allocate(self%ep_ord_change_x_gpu(0:ny, 0:nx, 0:nz))
 !
       allocate(self%wrecyc_gpu(ng,ny,nz,nv))
       allocate(self%wrecycav_gpu(ng,ny,nv))
@@ -852,7 +1104,7 @@ contains
     character(*)                    , intent(in)          :: filename          !< Input file name.
     real(rkind)                                           :: timing(1:2)       !< Tic toc timing.
     real(rkind)                                           :: timing_step(1:2)  !< Tic toc timing.
-    integer :: icyc_loop
+    integer :: icyc_loop, iercuda
 !
     call self%initialize(filename=filename)
 !
@@ -870,6 +1122,7 @@ contains
       indx_cp_l    => self%equation_base%indx_cp_l, &
       indx_cp_r    => self%equation_base%indx_cp_r, &
       cv0 => self%equation_base%cv0, &
+      mode_async => self%equation_base%mode_async, &
       time_from_last_rst    => self%equation_base%time_from_last_rst,    &
       time_from_last_write  => self%equation_base%time_from_last_write,  &
       time_from_last_stat   => self%equation_base%time_from_last_stat,   &
@@ -877,10 +1130,14 @@ contains
       time_is_freezed => self%equation_base%time_is_freezed)
 !
       call self%update_ghost()
-      call compute_aux_cuf(nx, ny, nz, ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
-        visc_model, mu0, t0, sutherland_S, T_ref_dim, &
-        powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu, &
-        indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
+      call self%compute_aux()
+      !@cuf iercuda=cudaDeviceSynchronize()
+!
+      if (mode_async >= 0) then
+        call self%visflx(mode=3)
+        call self%base_gpu%bcswap_var(self%w_aux_gpu(:,:,:,8:8 )) ! ducros
+      endif
+!
       if (self%equation_base%restart_type==0) then
         self%equation_base%w_aux = self%w_aux_gpu
         if (self%equation_base%enable_plot3d>0) then
@@ -909,16 +1166,20 @@ contains
           icyc = icyc + 1
 !
           if(mod(icyc-icyc0, iter_dt_recompute)==0) then
+            call self%compute_aux(central=1, ghost=0)
+            !@cuf iercuda=cudaDeviceSynchronize()
             call self%compute_dt()
           endif
 !
 !         select case(self%equation_base%rk_type)
 !         case(RK_WRAY,RK_JAMESON)
-            call self%rk()
+            if(mode_async == -1) call self%rk_sync_old()
+            if(mode_async ==  0) call self%rk_sync()
+            if(mode_async ==  1) call self%rk_async()
 !         case(RK_SHU)
 !           call self%rk()
 !         end select
-          call self%compute_residual()
+          if (mod(icyc-icyc0, self%equation_base%print_control)==0) call self%compute_residual()
         endif
 !       
         call self%manage_output()
