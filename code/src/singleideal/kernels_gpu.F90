@@ -2158,9 +2158,9 @@ contains
     real(rkind) :: cploc
 !
     !$cuf kernel do(3) <<<*,*>>>
-    do j=1,ny
-      do i=1,nx
-        do k=1,nz
+    do k=1,nz
+      do j=1,ny
+        do i=1,nx
 !
           uu = w_aux_gpu(i,j,k,2)
           vv = w_aux_gpu(i,j,k,3)
@@ -2299,9 +2299,9 @@ contains
     lmax = visc_order/2
 !
     !$cuf kernel do(3) <<<*,*>>>
-    do j=1,ny
-      do i=1,nx
-        do k=1,nz
+    do k=1,nz
+      do j=1,ny
+        do i=1,nx
 !
           uu = w_aux_gpu(i,j,k,2)
           vv = w_aux_gpu(i,j,k,3)
@@ -2435,9 +2435,9 @@ contains
     real(rkind) :: div, omod2
 !
     !$cuf kernel do(3) <<<*,*>>>
-    do j=1,ny
-      do i=1,nx
-        do k=1,nz
+    do k=1,nz
+      do j=1,ny
+        do i=1,nx
 !
           omod2 = w_aux_gpu(i,j,k,9)**2
           div   = 3._rkind*w_aux_gpu(i,j,k,10)

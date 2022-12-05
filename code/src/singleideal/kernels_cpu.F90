@@ -2148,9 +2148,9 @@ endsubroutine euler_y_hybrid_kernel
         real(rkind) :: div, div3l, omegax, omegay, omegaz, omod2
         real(rkind) :: cploc
 
-        do j=1,ny
-         do i=1,nx
-          do k=1,nz
+        do k=1,nz
+         do j=1,ny
+          do i=1,nx
       
            uu = w_aux_cpu(i,j,k,2)
            vv = w_aux_cpu(i,j,k,3)
@@ -2287,9 +2287,9 @@ endsubroutine euler_y_hybrid_kernel
 
         lmax = visc_order/2
      
-        do j=1,ny
-         do i=1,nx
-          do k=1,nz
+        do k=1,nz
+         do j=1,ny
+          do i=1,nx
       
            uu = w_aux_cpu(i,j,k,2)
            vv = w_aux_cpu(i,j,k,3)
@@ -2421,9 +2421,9 @@ endsubroutine euler_y_hybrid_kernel
         integer     :: i,j,k
         real(rkind) :: div, omod2
      
-        do j=1,ny
-         do i=1,nx
-          do k=1,nz
+        do k=1,nz
+         do j=1,ny
+          do i=1,nx
       
            omod2 = w_aux_cpu(i,j,k,9)**2 
            div   = 3._rkind*w_aux_cpu(i,j,k,10)
