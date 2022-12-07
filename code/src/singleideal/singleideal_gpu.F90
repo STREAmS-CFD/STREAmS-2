@@ -391,7 +391,7 @@ contains
         alpdt = self%equation_base%alprk(istep)*dt
 !
         call init_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, rhodt)
-        call self%update_ghost()
+        call self%base_gpu%bcswap()
         call self%compute_aux()
         !@cuf iercuda=cudaDeviceSynchronize()
         call self%euler_x(eul_imin, eul_imax, 1-ng, nx+ng)
@@ -422,6 +422,7 @@ contains
         if (channel_case) call self%force_rhs()
         call update_field_cuf(nx, ny, nz, ng, nv, self%base_gpu%w_gpu, self%fln_gpu, self%fluid_mask_gpu)
         if (channel_case) call self%force_var()
+        call self%update_ghost(do_swap=0)
       enddo
 !
     endassociate
@@ -452,7 +453,6 @@ contains
         alpdt = self%equation_base%alprk(istep)*dt
 !
         call init_flux_cuf(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, rhodt)
-        call self%update_ghost(do_swap=0)
 !
 !
         call self%compute_aux(central=1, ghost=0)
@@ -496,6 +496,7 @@ contains
         if (channel_case) call self%force_rhs()
         call update_field_cuf(nx, ny, nz, ng, nv, self%base_gpu%w_gpu, self%fln_gpu, self%fluid_mask_gpu)
         if (channel_case) call self%force_var()
+        call self%update_ghost(do_swap=0)
       enddo
     endassociate
   endsubroutine rk_async

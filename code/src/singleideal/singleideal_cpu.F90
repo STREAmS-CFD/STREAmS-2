@@ -383,7 +383,7 @@ contains
                 alpdt = self%equation_base%alprk(istep)*dt
 
                 call init_flux_cpu(nx, ny, nz, nv, self%fl_cpu, self%fln_cpu, rhodt) 
-                call self%update_ghost()
+                call self%base_cpu%bcswap()
                 call self%compute_aux()
                 call self%euler_x(eul_imin, eul_imax, 1-ng, nx+ng)
                 if (conservative_viscous== 1) then
@@ -410,6 +410,7 @@ contains
                 if (channel_case) call self%force_rhs()
                 call update_field_cpu(nx, ny, nz, ng, nv, self%base_cpu%w_cpu, self%fln_cpu, self%fluid_mask_cpu)
                 if (channel_case) call self%force_var()
+                call self%update_ghost(do_swap=0)
             enddo
 
         endassociate
