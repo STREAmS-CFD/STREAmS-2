@@ -174,11 +174,11 @@ contains
   endsubroutine get_deriv_coeffs
 ! 
   subroutine initialize(self, periodic, nxmax, nymax, nzmax, ng, grid_type, &
-    domain_size_x, domain_size_y, domain_size_z, &
+    domain_size_x, domain_size_y, domain_size_z, l0, &
     grid_vars, metrics_order, rebuild_ghost, ystaggering)
     class(grid_object)  :: self
     integer             :: nxmax, nymax, nzmax, ng, grid_type
-    real(rkind)         :: domain_size_x, domain_size_y, domain_size_z
+    real(rkind)         :: domain_size_x, domain_size_y, domain_size_z, l0
     integer             :: nxmax_tot, nymax_tot, nzmax_tot
     integer             :: metrics_order
     logical             :: rebuild_ghost,ystaggering
@@ -236,9 +236,15 @@ contains
       end select
     endif
 !   
-    call self%compute_metrics()
-!   
     if (self%masterproc.and.write_grid) call self%write_grid()
+!   
+    self%xg = self%xg*l0
+    self%yg = self%yg*l0
+    self%zg = self%zg*l0
+    self%yn = self%yn*l0
+    self%domain_size = self%domain_size*l0
+!   
+    call self%compute_metrics()
 !   
   endsubroutine initialize
 ! 

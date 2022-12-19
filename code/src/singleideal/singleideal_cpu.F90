@@ -1044,9 +1044,14 @@ contains
         call self%compute_aux()
 
         if (mode_async >= 0) then
-         call self%visflx(mode=3)
+         if (self%equation_base%conservative_viscous==1) then
+          call self%visflx(mode=2)
+         else
+          call self%visflx(mode=0)
+         endif
          call self%base_cpu%bcswap_var(self%w_aux_cpu(:,:,:,8:8 )) ! ducros
         endif
+        call zero_flux_cpu(self%nx,self%ny,self%nz,self%nv,self%fl_cpu)
 
         if (self%equation_base%restart_type==0) then
          self%equation_base%w_aux = self%w_aux_cpu
@@ -1132,6 +1137,7 @@ contains
                   rhobulk => self%equation_base%rhobulk, ubulk => self%equation_base%ubulk, &
                   tbulk => self%equation_base%tbulk)
 !
+        residual_rhou = residual_rhou/(self%equation_base%u0**2)/self%equation_base%rho0*self%equation_base%l0
         pos_io = 'append'
         if (self%equation_base%icyc==1) pos_io = 'rewind'
         if (self%masterproc) then

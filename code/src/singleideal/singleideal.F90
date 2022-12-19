@@ -291,8 +291,9 @@ contains
       call self%cfg%get("grid","ysmoosteps",rtemp) ; grid_vars(6) = rtemp
     end select
 !
+    self%l0 = 1._rkind
     call self%grid%initialize(periodic, nxmax, nymax, nzmax, ng, grid_type, &
-      domain_size_x, domain_size_y, domain_size_z, &
+      domain_size_x, domain_size_y, domain_size_z, self%l0, &
       grid_vars, metrics_order, rebuild_ghost, ystaggering)
 !
 !   Number of variables and auxiliary variables
@@ -1401,6 +1402,7 @@ contains
     real(rkind) :: gamloc,gamlocold,gamlocgm1
     integer :: num_coeff_cp
     integer :: ig_shock
+    integer :: max_iter
 !
     allocate(self%winf(self%nv))
     allocate(self%winf_past_shock(self%nv))
@@ -1424,7 +1426,6 @@ contains
 !     
       t0    = 1._rkind
       p0    = 1._rkind
-      l0    = 1._rkind
 !     
       call cfg%get("flow","Reynolds",Reynolds)
       call cfg%get("flow","Mach",Mach)
@@ -1511,21 +1512,21 @@ contains
 !         if (self%masterproc) write(*,*) 'Target bulk temperature: ', T_bulk_target
 !         Mach          = rmtw
 !         
-          gamlocold = gam
           gamloc    = gam
+          max_iter = 50
 !         Iterative loop to find gamma at bulk temperature
-          do
+          do l=1,max_iter
+            gamlocold = gamloc
             gamlocgm1 = gamloc-1._rkind
             trec_over_tb  = 1._rkind+gamlocgm1/2._rkind*rfac*rmb**2
             tw_over_tb    = 1._rkind+thtmp*(trec_over_tb-1._rkind)
             tb_over_tw    = 1._rkind/tw_over_tb
             tw_over_tr    = 1._rkind/(trec_over_tb*tb_over_tw)
             T_bulk_target = tb_over_tw*T_wall
-            if (self%masterproc) write(*,*) 'Target bulk temperature: ', T_bulk_target
-            gamlocold = gamloc
             gamloc = get_gamloc(T_bulk_target,indx_cp_l,indx_cp_r,self%cp_coeff,calorically_perfect)
             if (abs(gamloc-gamlocold)<1.D-9) exit
           enddo
+          if (self%masterproc) write(*,*) 'Target bulk temperature: ', T_bulk_target
           rmtw          = rmb*sqrt(tb_over_tw) ! Bulk Mach number based on T_wall
           Mach          = rmtw
         else
@@ -2171,6 +2172,7 @@ contains
       do l=2,5
         synth_params(l,1) = synth_params(l,1) * deltavec(1)
         synth_params(l,4) = synth_params(l,4) * u0 / deltavec(1)
+        synth_params(l,5) = synth_params(l,5) * u0
         synth_params(l,6) = synth_params(l,6) * lz
         call get_crandom_f(rr)
 !       rr = 0._rkind
@@ -2208,7 +2210,7 @@ contains
 !           
             ii     = self%field%ncoords(1)*nx+i
             delta  = deltavec(ii)
-            if (delta<1._rkind) then
+            if (y(j)<delta) then
               call get_crandom_f(rr3)
               rr3 = rr3-0.5_rkind
               up = up+0.03_rkind*u0*rr3(1)*y(j)
@@ -3029,8 +3031,8 @@ contains
 !
   function get_gamloc(tt,indx_cp_l,indx_cp_r,cp_coeff,calorically_perfect)
     real(rkind) :: get_gamloc
-    integer, value :: indx_cp_l,indx_cp_r,calorically_perfect
-    real(rkind), value :: tt
+    integer :: indx_cp_l,indx_cp_r,calorically_perfect
+    real(rkind) :: tt
     real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff
     real(rkind) :: cploc, gamloc
     integer :: l

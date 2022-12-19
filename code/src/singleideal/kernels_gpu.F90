@@ -6,6 +6,23 @@ module streams_kernels_gpu
 !
 contains
 !
+  subroutine zero_flux_cuf(nx, ny, nz, nv, fl_gpu)
+    integer :: nx, ny, nz, nv
+    real(rkind), dimension(1:,1:,1:,1:), intent(inout), device :: fl_gpu
+    integer :: i,j,k,m,iercuda
+    !$cuf kernel do(3) <<<*,*>>>
+    do k=1,nz
+      do j=1,ny
+        do i=1,nx
+          do m=1,nv
+            fl_gpu(i,j,k,m)  = 0._rkind
+          enddo
+        enddo
+      enddo
+    enddo
+    !@cuf iercuda=cudaDeviceSynchronize()
+  endsubroutine zero_flux_cuf
+!
   subroutine init_flux_cuf(nx, ny, nz, nv, fl_gpu, fln_gpu, rhodt)
     integer :: nx, ny, nz, nv
     real(rkind) :: rhodt
@@ -3769,7 +3786,7 @@ contains
     real(rkind), dimension(1:), intent(in), device :: dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
     real(rkind) :: dtxi, dtyi, dtzi, dtxv, dtyv, dtzv, dtxk, dtyk, dtzk
     integer     :: i,j,k,ll,iercuda
-    real(rkind) :: rho, ri, uu, vv, ww, tt, mu, nu, k_over_rho, c
+    real(rkind) :: rho, ri, uu, vv, ww, tt, mu, nu, k_over_rhocp, c
     real(rkind) :: dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max
     real(rkind) :: gamloc, cploc
 !
@@ -3790,25 +3807,6 @@ contains
 !         
           if (fluid_mask_gpu(i,j,k)==0) then
 !           
-!           rho  = w_gpu(i,j,k,1)
-!           ri   = 1._rkind/rho
-!           uu   = w_gpu(i,j,k,2)*ri
-!           vv   = w_gpu(i,j,k,3)*ri
-!           ww   = w_gpu(i,j,k,4)*ri
-!           rhoe = w_gpu(i,j,k,5)
-!           qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
-!           !       pp   = gm1*(rhoe-rho*qq)
-!           !       tt   = pp*ri
-!           tt   = w_aux_gpu(i,j,k,6)
-!           pp   = rho*tt
-!           if(visc_model == VISC_POWER) then
-!             mu = mu0 * (tt / t0)**powerlaw_vtexp
-!           elseif(visc_model == VISC_SUTHERLAND) then
-!             mu = mu0 * (tt / t0)**1.5_rkind * &
-!             (1._rkind+sutherland_S/T_ref_dim)/(tt/t0 +
-!             sutherland_S/T_ref_dim)
-!           endif
-!           
             rho  = w_gpu(i,j,k,1)
             ri   = 1._rkind/rho
             uu   = w_aux_gpu(i,j,k,2)
@@ -3817,17 +3815,17 @@ contains
             tt   = w_aux_gpu(i,j,k,6)
             mu   = w_aux_gpu(i,j,k,7)
 !           
-            if (calorically_perfect==1) then
-              cploc = cp0
-            else
-              cploc = 0._rkind
-              do ll=indx_cp_l,indx_cp_r
-                cploc = cploc+cp_coeff_gpu(ll)*tt**ll
-              enddo
-            endif
+!           if (calorically_perfect==1) then
+!             cploc = cp0
+!           else
+!             cploc = 0._rkind
+!             do ll=indx_cp_l,indx_cp_r
+!               cploc = cploc+cp_coeff_gpu(ll)*tt**ll
+!             enddo
+!           endif
 !           
             nu  = ri*mu
-            k_over_rho = nu*cploc/Prandtl
+            k_over_rhocp = nu/Prandtl
             gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
             c      = sqrt (gamloc*tt)
             dtxi = (abs(uu)+c)*dcsidx_gpu(i)
@@ -3836,9 +3834,9 @@ contains
             dtxv  = nu*dcsidxs_gpu(i)
             dtyv  = nu*detadys_gpu(j)
             dtzv  = nu*dzitdzs_gpu(k)
-            dtxk  = k_over_rho*dcsidxs_gpu(i)
-            dtyk  = k_over_rho*detadys_gpu(j)
-            dtzk  = k_over_rho*dzitdzs_gpu(k)
+            dtxk  = k_over_rhocp*dcsidxs_gpu(i)
+            dtyk  = k_over_rhocp*detadys_gpu(j)
+            dtzk  = k_over_rhocp*dzitdzs_gpu(k)
 !
             dtxi_max = max(dtxi_max, dtxi)
             dtyi_max = max(dtyi_max, dtyi)
@@ -3857,66 +3855,6 @@ contains
     enddo
     !@cuf iercuda=cudaDeviceSynchronize()
   endsubroutine compute_dt_cuf
-!
-  subroutine compute_aux_cuf(nx, ny, nz, ng, w_gpu, w_aux_gpu, &
-    visc_model, mu0, t0, sutherland_S, T_ref_dim, &
-    powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, &
-    cv_coeff_gpu, indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
-    integer(ikind), intent(in) :: nx, ny, nz, ng, visc_model
-    integer(ikind), intent(in) :: VISC_POWER, VISC_SUTHERLAND, VISC_NO, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind),    intent(in) :: mu0, t0, sutherland_S, T_ref_dim, powerlaw_vtexp, cv0, tol_iter_nr
-    real(rkind),    dimension(indx_cp_l:), intent(in),  device   :: cv_coeff_gpu
-    real(rkind),    dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in),  device   :: w_gpu
-    real(rkind),    dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
-    integer(ikind)                        :: i, j, k
-    real(rkind)                           :: rho, rhou, rhov, rhow, rhoe, ri, uu, vv, ww, qq, pp, tt, mu, ee
-    integer(ikind)                        :: iercuda
-!
-!   real(rkind) :: T_start, T_old, ee, ebar, den, num, T_pow, T_powp, tt2
-!   integer :: l
-!
-    !$cuf kernel do(3) <<<*,*>>>
-    do k=1-ng, nz+ng
-      do j=1-ng, ny+ng
-        do i=1-ng, nx+ng
-!         w_aux(:) : rho, u, v, w, h, T, viscosity, div, |omega|, ducros
-          rho  = w_gpu(i,j,k,1)
-          rhou = w_gpu(i,j,k,2)
-          rhov = w_gpu(i,j,k,3)
-          rhow = w_gpu(i,j,k,4)
-          rhoe = w_gpu(i,j,k,5)
-          ri   = 1._rkind/rho
-          uu   = rhou*ri
-          vv   = rhov*ri
-          ww   = rhow*ri
-          qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
-          ee = rhoe/rho-qq
-          tt = get_temperature_from_e_dev(ee, w_aux_gpu(i,j,k,6), cv0, cv_coeff_gpu, indx_cp_l, indx_cp_r, &
-          calorically_perfect, tol_iter_nr)
-          pp = rho*tt
-!
-          w_aux_gpu(i,j,k,1) = rho
-          w_aux_gpu(i,j,k,2) = uu
-          w_aux_gpu(i,j,k,3) = vv
-          w_aux_gpu(i,j,k,4) = ww
-          w_aux_gpu(i,j,k,5) = (rhoe+pp)/rho
-          w_aux_gpu(i,j,k,6) = tt
-!
-          if (visc_model == VISC_POWER) then
-            mu = mu0 * (tt / t0)**powerlaw_vtexp
-          elseif (visc_model == VISC_SUTHERLAND) then
-            mu = mu0 * (tt / t0)**1.5_rkind * &
-            (1._rkind+sutherland_S/T_ref_dim)/(tt/t0 + sutherland_S/T_ref_dim)
-          elseif (visc_model == VISC_NO) then
-            mu = 0._rkind
-          endif
-          w_aux_gpu(i,j,k,7) = mu
-!         STREAMS v1.0 : mu0 = sqgmr  ;  ggmopr = cp/Pr ; k = sqgmr * ggmopr
-        enddo
-      enddo
-    enddo
-    !@cuf iercuda=cudaDeviceSynchronize()
-  endsubroutine compute_aux_cuf
 !
   subroutine eval_aux_cuf(nx, ny, nz, ng, istart, iend, jstart, jend, kstart, kend, w_gpu, w_aux_gpu, &
     visc_model, mu0, t0, sutherland_S, T_ref_dim, &
