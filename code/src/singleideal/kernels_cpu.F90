@@ -56,23 +56,25 @@ contains
     endsubroutine euler_x_transp_cpu
 
       subroutine euler_x_fluxes_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-        eul_imin, eul_imax, lmax_base, nkeep, cp0, cv0, coeff_deriv1_cpu, dcsidx_cpu, w_aux_trans_cpu, fhat_trans_cpu, &
+        eul_imin, eul_imax, lmax_base, nkeep, rgas0, coeff_deriv1_cpu, dcsidx_cpu, w_aux_trans_cpu, fhat_trans_cpu, &
         force_zero_flux_min, force_zero_flux_max, &
         weno_scheme, weno_version, sensor_threshold, weno_size, gplus_x_cpu, gminus_x_cpu, cp_coeff_cpu, &
-        indx_cp_l, indx_cp_r, ep_ord_change_x_cpu, calorically_perfect, tol_iter_nr)
+        indx_cp_l, indx_cp_r, ep_ord_change_x_cpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
 
         implicit none
         ! Passed arguments
         integer :: nv, nx, ny, nz, ng, nv_aux
         integer :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+        integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_cpu
         real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:8) :: w_aux_trans_cpu
         real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:nv) :: fhat_trans_cpu
-        integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_cpu
-        real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff_cpu
+        real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gplus_x_cpu
+        real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gminus_x_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
         real(rkind), dimension(4,4) :: coeff_deriv1_cpu
         real(rkind), dimension(nx) :: dcsidx_cpu
         integer :: force_zero_flux_min, force_zero_flux_max
-        real(rkind) :: sensor_threshold, cp0, cv0, tol_iter_nr
+        real(rkind) :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
         integer :: weno_scheme, weno_size, weno_version
         ! Local variables
         integer :: i, j, k, m, l
@@ -86,9 +88,7 @@ contains
         integer :: ishk
         real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
         real(rkind), dimension(5,5) :: el, er
-        real(rkind), dimension(5) :: ev, evmax, fi, ghat, gl, gr
-        real(rkind), dimension(nv,2*weno_scheme,ny,nz) :: gplus_x_cpu
-        real(rkind), dimension(nv,2*weno_scheme,ny,nz) :: gminus_x_cpu
+        real(rkind), dimension(5) :: evmax, fi
         integer :: ll, mm
         real(rkind) :: rho, pp, wc, gc, rhou
         real(rkind) :: tt, gamloc
@@ -138,8 +138,8 @@ do k=1,nz
                          wwi   = w_aux_trans_cpu(j,i-m,k,4)
                          enti  = w_aux_trans_cpu(j,i-m,k,5)
                          tti   = w_aux_trans_cpu(j,i-m,k,6)
-                         ppi   = tti*rhoi
-                         eei   = enti-tti-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+                         ppi   = tti*rhoi*rgas0
+                         eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
  
                          rhoip = w_aux_trans_cpu(j,i-m+l,k,1)
                          uuip  = w_aux_trans_cpu(j,i-m+l,k,2)
@@ -147,8 +147,8 @@ do k=1,nz
                          wwip  = w_aux_trans_cpu(j,i-m+l,k,4)
                          entip = w_aux_trans_cpu(j,i-m+l,k,5)
                          ttip  = w_aux_trans_cpu(j,i-m+l,k,6)
-                         ppip  = ttip*rhoip
-                         eeip  = entip-ttip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+                         ppip  = ttip*rhoip*rgas0
+                         eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
 
                          rhom  = rhoi+rhoip
                          eem   = eei + eeip
@@ -201,7 +201,7 @@ do k=1,nz
                          wwi   = w_aux_trans_cpu(j,i-m,k,4)
                          enti  = w_aux_trans_cpu(j,i-m,k,5)
                          tti   = w_aux_trans_cpu(j,i-m,k,6)
-                         ppi   = tti*rhoi
+                         ppi   = tti*rhoi*rgas0
  
                          rhoip = w_aux_trans_cpu(j,i-m+l,k,1)
                          uuip  = w_aux_trans_cpu(j,i-m+l,k,2)
@@ -209,7 +209,7 @@ do k=1,nz
                          wwip  = w_aux_trans_cpu(j,i-m+l,k,4)
                          entip = w_aux_trans_cpu(j,i-m+l,k,5)
                          ttip  = w_aux_trans_cpu(j,i-m+l,k,6)
-                         ppip  = ttip*rhoip
+                         ppip  = ttip*rhoip*rgas0
 
                          rhom  = rhoi+rhoip
                          uv_part = (uui+uuip) * rhom
@@ -250,9 +250,9 @@ do k=1,nz
                 fhat_trans_cpu(j,i,k,4) = fh4
                 fhat_trans_cpu(j,i,k,5) = fh5
             else
-                call compute_roe_average(nx, ny, nz, ng, j, j, i, i+1, k, k, w_aux_trans_cpu, cp0, cv0, &
+                call compute_roe_average(nx, ny, nz, ng, j, j, i, i+1, k, k, w_aux_trans_cpu, rgas0, &
                                          b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
-                                         calorically_perfect, tol_iter_nr)
+                                         calorically_perfect, tol_iter_nr,t0)
 
                 call eigenvectors_x(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
 
@@ -263,16 +263,13 @@ do k=1,nz
                     ll   = i + l - weno_scheme
                     uu   = w_aux_trans_cpu(j,ll,k,2)
                     tt   = w_aux_trans_cpu(j,ll,k,6)
-                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
-                    c    = sqrt (gamloc*tt)
-                    ev(1) = abs(uu-c)
-                    ev(2) = abs(uu)
-                    ev(3) = abs(uu+c)
-                    ev(4) = ev(2)
-                    ev(5) = ev(2)
-                    do m=1,5
-                        evmax(m) = max(ev(m),evmax(m))
-                    enddo
+                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+                    c    = sqrt (gamloc*rgas0*tt)
+                    evmax(1) = max(abs(uu-c),evmax(1))
+                    evmax(2) = max(abs(uu  ),evmax(2))
+                    evmax(3) = max(abs(uu+c),evmax(3))
+                    evmax(4) = evmax(2)
+                    evmax(5) = evmax(2)
                 enddo
                 do l=1,weno_size ! loop over the stencil centered at face i
                     ll = i + l - weno_scheme
@@ -283,7 +280,7 @@ do k=1,nz
                     ww     = w_aux_trans_cpu(j,ll,k,4)
                     h      = w_aux_trans_cpu(j,ll,k,5) 
                     rhou   = rho*uu
-                    pp     = rho*w_aux_trans_cpu(j,ll,k,6)
+                    pp     = rho*w_aux_trans_cpu(j,ll,k,6)*rgas0
                     fi(1)  =      rhou
                     fi(2)  = uu * rhou + pp
                     fi(3)  = vv * rhou
@@ -304,25 +301,22 @@ do k=1,nz
                         wc = wc + el(5,m) * (rho*h-pp)
                         gc = gc + el(5,m) * fi(5)
 
-                        gplus_x_cpu (m,l,j,k) = 0.5_rkind * (gc + evmax(m) * wc)
-                        gminus_x_cpu(m,l,j,k) = gc - gplus_x_cpu(m,l,j,k)
+                        c = 0.5_rkind * (gc + evmax(m) * wc)
+                        gplus_x_cpu (j,k,m,l) = c
+                        gminus_x_cpu(j,k,m,l) = gc - c
                     enddo
                 enddo
 !
 !               Reconstruction of the '+' and '-' fluxes
 !
                 wenorec_ord = max(weno_scheme+ep_ord_change_x_cpu(j,i,k),1)
-                call wenorec(nv,gplus_x_cpu(:,:,j,k),gminus_x_cpu(:,:,j,k),gl,gr,weno_scheme,wenorec_ord,weno_version)
+                call wenorec(j,k,nv,ny,nz,gplus_x_cpu,gminus_x_cpu,fi,weno_scheme,wenorec_ord,weno_version,rho0,u0)
 !
-                do m=1,5
-                    ghat(m) = gl(m) + gr(m) ! char. flux
-                enddo
-
 !               !Return to conservative fluxes
                 do m=1,5
                     fhat_trans_cpu(j,i,k,m) = 0._rkind
                     do mm=1,5
-                       fhat_trans_cpu(j,i,k,m) = fhat_trans_cpu(j,i,k,m) + er(mm,m) * ghat(mm)
+                       fhat_trans_cpu(j,i,k,m) = fhat_trans_cpu(j,i,k,m) + er(mm,m) * fi(mm)
                     enddo
                 enddo
 
@@ -332,6 +326,258 @@ do k=1,nz
     enddo
 enddo
 endsubroutine euler_x_fluxes_hybrid_kernel
+
+
+      subroutine euler_x_fluxes_hybrid_rusanov_kernel(nv, nv_aux, nx, ny, nz, ng, &
+        eul_imin, eul_imax, lmax_base, nkeep, rgas0, coeff_deriv1_cpu, dcsidx_cpu, w_aux_trans_cpu, fhat_trans_cpu, &
+        force_zero_flux_min, force_zero_flux_max, &
+        weno_scheme, weno_version, sensor_threshold, weno_size, gplus_x_cpu, gminus_x_cpu, cp_coeff_cpu, &
+        indx_cp_l, indx_cp_r, ep_ord_change_x_cpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
+
+        implicit none
+        ! Passed arguments
+        integer :: nv, nx, ny, nz, ng, nv_aux
+        integer :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+        real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:8) :: w_aux_trans_cpu
+        real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:nv) :: fhat_trans_cpu
+        integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
+        real(rkind), dimension(4,4) :: coeff_deriv1_cpu
+        real(rkind), dimension(nx) :: dcsidx_cpu
+        integer :: force_zero_flux_min, force_zero_flux_max
+        real(rkind) :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
+        integer :: weno_scheme, weno_size, weno_version
+        ! Local variables
+        integer :: i, j, k, m, l
+        real(rkind) :: fh1, fh2, fh3, fh4, fh5
+        real(rkind) :: rhom, uui, vvi, wwi, ppi, enti, rhoi, tti
+        real(rkind) :: uuip, vvip, wwip, ppip, entip, rhoip, ttip
+        real(rkind) :: ft1, ft2, ft3, ft4, ft5, ft6
+        real(rkind) :: uvs1, uvs2, uvs3, uvs4, uvs6, uv_part
+        real(rkind) :: uvs5
+        integer :: ii, lmax, wenorec_ord
+        integer :: ishk
+        real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
+        real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gplus_x_cpu
+        real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gminus_x_cpu
+        integer :: ll, mm
+        real(rkind) :: evm,evmax,rhoevm
+        real(rkind) :: rho, pp, rhou
+        real(rkind) :: tt, gamloc
+        real(rkind) :: uvs5_i,uvs5_k,uvs5_p,eei,eeip
+        real(rkind) :: drho, dee, eem
+        real(rkind) :: drhof, deef
+        real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
+        integer :: n,n2
+
+
+
+        do j=1,ny
+do k=1,nz
+
+
+        do i=eul_imin-1,eul_imax
+
+            ishk = 0
+            do ii=i-weno_scheme+1,i+weno_scheme
+                if (w_aux_trans_cpu(j,ii,k,8) > sensor_threshold) ishk = 1
+            enddo
+
+            if (ishk == 0) then
+
+                ft1  = 0._rkind
+                ft2  = 0._rkind
+                ft3  = 0._rkind
+                ft4  = 0._rkind
+                ft5  = 0._rkind
+                ft6  = 0._rkind
+                lmax = max(lmax_base+ep_ord_change_x_cpu(j,i,k),1)
+                if (nkeep>=0) then
+                 do l=1,lmax
+                     uvs1 = 0._rkind
+                     uvs2 = 0._rkind
+                     uvs3 = 0._rkind
+                     uvs4 = 0._rkind
+                     uvs5_i = 0._rkind
+                     uvs5_k = 0._rkind
+                     uvs5_p = 0._rkind
+                     uvs6 = 0._rkind
+                     do m=0,l-1
+ 
+                         rhoi  = w_aux_trans_cpu(j,i-m,k,1)
+                         uui   = w_aux_trans_cpu(j,i-m,k,2)
+                         vvi   = w_aux_trans_cpu(j,i-m,k,3)
+                         wwi   = w_aux_trans_cpu(j,i-m,k,4)
+                         enti  = w_aux_trans_cpu(j,i-m,k,5)
+                         tti   = w_aux_trans_cpu(j,i-m,k,6)
+                         ppi   = tti*rhoi*rgas0
+                         eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+ 
+                         rhoip = w_aux_trans_cpu(j,i-m+l,k,1)
+                         uuip  = w_aux_trans_cpu(j,i-m+l,k,2)
+                         vvip  = w_aux_trans_cpu(j,i-m+l,k,3)
+                         wwip  = w_aux_trans_cpu(j,i-m+l,k,4)
+                         entip = w_aux_trans_cpu(j,i-m+l,k,5)
+                         ttip  = w_aux_trans_cpu(j,i-m+l,k,6)
+                         ppip  = ttip*rhoip*rgas0
+                         eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+
+                         rhom  = rhoi+rhoip
+                         eem   = eei + eeip
+ 
+                         drho   = 2._rkind*(rhoip-rhoi)/rhom
+                         dee    = 2._rkind*(eeip - eei)/eem
+                         sumnumrho = 1._rkind
+                         sumdenrho = 1._rkind
+                         sumnumee  = 1._rkind
+                         sumdenee  = 1._rkind
+                         do n = 1, nkeep
+                          n2 = 2*n
+                          sumdenrho = sumdenrho + (0.5_rkind*drho)**n2 / (1._rkind+n2)
+                          sumdenee  = sumdenee  + (0.5_rkind*dee )**n2
+                          sumnumee  = sumnumee  + (0.5_rkind*dee )**n2 / (1._rkind+n2)
+                         enddo
+                         drhof = sumnumrho/sumdenrho
+                         deef  = sumnumee /sumdenee
+
+                         uv_part = (uui+uuip) * rhom * drhof
+                         uvs1 = uvs1 + uv_part * (2._rkind)
+                         uvs2 = uvs2 + uv_part * (uui+uuip)
+                         uvs3 = uvs3 + uv_part * (vvi+vvip)
+                         uvs4 = uvs4 + uv_part * (wwi+wwip)
+                         uvs5_i = uvs5_i + uv_part * eem * deef
+                         uvs5_k = uvs5_k + uv_part * (uui*uuip+vvi*vvip+wwi*wwip)
+                         uvs5_p = uvs5_p + 4._rkind*(uui*ppip+uuip*ppi)
+                         uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+                     enddo
+                     ft1  = ft1  + coeff_deriv1_cpu(l,lmax)*uvs1
+                     ft2  = ft2  + coeff_deriv1_cpu(l,lmax)*uvs2
+                     ft3  = ft3  + coeff_deriv1_cpu(l,lmax)*uvs3
+                     ft4  = ft4  + coeff_deriv1_cpu(l,lmax)*uvs4
+                     ft5  = ft5  + coeff_deriv1_cpu(l,lmax)*(uvs5_i+uvs5_k+uvs5_p)
+                     ft6  = ft6  + coeff_deriv1_cpu(l,lmax)*uvs6
+                 enddo
+                else
+                 do l=1,lmax
+                     uvs1 = 0._rkind
+                     uvs2 = 0._rkind
+                     uvs3 = 0._rkind
+                     uvs4 = 0._rkind
+                     uvs5 = 0._rkind
+                     uvs6 = 0._rkind
+                     do m=0,l-1
+ 
+                         rhoi  = w_aux_trans_cpu(j,i-m,k,1)
+                         uui   = w_aux_trans_cpu(j,i-m,k,2)
+                         vvi   = w_aux_trans_cpu(j,i-m,k,3)
+                         wwi   = w_aux_trans_cpu(j,i-m,k,4)
+                         enti  = w_aux_trans_cpu(j,i-m,k,5)
+                         tti   = w_aux_trans_cpu(j,i-m,k,6)
+                         ppi   = tti*rhoi*rgas0
+ 
+                         rhoip = w_aux_trans_cpu(j,i-m+l,k,1)
+                         uuip  = w_aux_trans_cpu(j,i-m+l,k,2)
+                         vvip  = w_aux_trans_cpu(j,i-m+l,k,3)
+                         wwip  = w_aux_trans_cpu(j,i-m+l,k,4)
+                         entip = w_aux_trans_cpu(j,i-m+l,k,5)
+                         ttip  = w_aux_trans_cpu(j,i-m+l,k,6)
+                         ppip  = ttip*rhoip*rgas0
+
+                         rhom  = rhoi+rhoip
+                         uv_part = (uui+uuip) * rhom
+                         uvs1 = uvs1 + uv_part * (2._rkind)
+                         uvs2 = uvs2 + uv_part * (uui+uuip)
+                         uvs3 = uvs3 + uv_part * (vvi+vvip)
+                         uvs4 = uvs4 + uv_part * (wwi+wwip)
+                         uvs5 = uvs5 + uv_part * (enti+entip)
+                         uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+                     enddo
+                     ft1 = ft1 + coeff_deriv1_cpu(l,lmax)*uvs1
+                     ft2 = ft2 + coeff_deriv1_cpu(l,lmax)*uvs2
+                     ft3 = ft3 + coeff_deriv1_cpu(l,lmax)*uvs3
+                     ft4 = ft4 + coeff_deriv1_cpu(l,lmax)*uvs4
+                     ft5 = ft5 + coeff_deriv1_cpu(l,lmax)*uvs5
+                     ft6 = ft6 + coeff_deriv1_cpu(l,lmax)*uvs6
+                 enddo
+                endif
+
+                fh1 = 0.25_rkind*ft1
+                fh2 = 0.25_rkind*ft2 
+                fh3 = 0.25_rkind*ft3
+                fh4 = 0.25_rkind*ft4
+                fh5 = 0.25_rkind*ft5
+
+                if ((i==0 .and. force_zero_flux_min == 1).or.(i==nx .and. force_zero_flux_max == 1)) then
+                   fh1 = 0._rkind
+                   fh2 = 0._rkind
+                   fh3 = 0._rkind
+                   fh4 = 0._rkind
+                   fh5 = 0._rkind
+                endif
+                fh2 = fh2 + 0.5_rkind*ft6
+
+                fhat_trans_cpu(j,i,k,1) = fh1
+                fhat_trans_cpu(j,i,k,2) = fh2
+                fhat_trans_cpu(j,i,k,3) = fh3
+                fhat_trans_cpu(j,i,k,4) = fh4
+                fhat_trans_cpu(j,i,k,5) = fh5
+            else
+
+                evmax = -1._rkind
+                do l=1,weno_size ! LLF
+                    ll   = i + l - weno_scheme
+                    uu   = w_aux_trans_cpu(j,ll,k,2)
+                    tt   = w_aux_trans_cpu(j,ll,k,6)
+                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+                    c      = sqrt (gamloc*rgas0*tt)
+                    evm    = max(abs(uu-c),abs(uu+c))
+                    evmax  = max(evm,evmax)
+                enddo
+                do l=1,weno_size ! loop over the stencil centered at face i
+                    ll = i + l - weno_scheme
+                    rho    = w_aux_trans_cpu(j,ll,k,1)
+                    uu     = w_aux_trans_cpu(j,ll,k,2)
+                    vv     = w_aux_trans_cpu(j,ll,k,3)
+                    ww     = w_aux_trans_cpu(j,ll,k,4)
+                    h      = w_aux_trans_cpu(j,ll,k,5) 
+                    rhou   = rho*uu
+                    pp     = rho*w_aux_trans_cpu(j,ll,k,6)*rgas0
+                    rhoevm = rho*evmax
+
+                    evm    = rhou
+                    c = 0.5_rkind * (evm + rhoevm)
+                    gplus_x_cpu (j,k,1,l) = c
+                    gminus_x_cpu(j,k,1,l) = evm - c
+                    evm    = uu * rhou + pp
+                    c = 0.5_rkind * (evm + rhoevm * uu)
+                    gplus_x_cpu (j,k,2,l) = c
+                    gminus_x_cpu(j,k,2,l) = evm - c
+                    evm    = vv * rhou
+                    c = 0.5_rkind * (evm + rhoevm * vv)
+                    gplus_x_cpu (j,k,3,l) = c
+                    gminus_x_cpu(j,k,3,l) = evm - c
+                    evm    = ww * rhou
+                    c = 0.5_rkind * (evm + rhoevm * ww)
+                    gplus_x_cpu (j,k,4,l) = c
+                    gminus_x_cpu(j,k,4,l) = evm - c
+                    evm    = h  * rhou
+                    c = 0.5_rkind * (evm + evmax * (rho*h-pp))
+                    gplus_x_cpu (j,k,5,l) = c
+                    gminus_x_cpu(j,k,5,l) = evm - c
+                enddo
+!
+!               Reconstruction of the '+' and '-' fluxes
+!
+                wenorec_ord = max(weno_scheme+ep_ord_change_x_cpu(j,i,k),1)
+                call wenorec_rusanov(j,k,nv,ny,nz,gplus_x_cpu,gminus_x_cpu,fhat_trans_cpu,&
+                     weno_scheme,wenorec_ord,weno_version,ng,ny,nx,nz,j,i,k)
+!
+            endif
+        enddo
+
+    enddo
+enddo
+endsubroutine euler_x_fluxes_hybrid_rusanov_kernel
 
 
     subroutine euler_x_update_cpu(nx, ny, nz, ng, nv, eul_imin, eul_imax, &
@@ -367,11 +613,11 @@ endsubroutine euler_x_fluxes_hybrid_kernel
     endsubroutine euler_x_update_cpu
 
       subroutine euler_z_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-        eul_kmin, eul_kmax, lmax_base, nkeep, cp0, cv0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, dzitdz_cpu, fhat_cpu, &
+        eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, dzitdz_cpu, fhat_cpu, &
         force_zero_flux_min, force_zero_flux_max, &
         weno_scheme, weno_version, sensor_threshold, weno_size, w_cpu, gplus_z_cpu, gminus_z_cpu, cp_coeff_cpu, indx_cp_l, indx_cp&
 &_r, &
-        ep_ord_change_cpu, calorically_perfect, tol_iter_nr)
+        ep_ord_change_cpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
         implicit none
         ! Passed arguments
         integer :: nv, nx, ny, nz, ng, nv_aux
@@ -380,12 +626,12 @@ endsubroutine euler_x_fluxes_hybrid_kernel
         real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_cpu
         real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_cpu
         integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_cpu
-        real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
         real(rkind), dimension(nx,ny,nz,nv) :: fl_cpu
         real(rkind), dimension(4,4) :: coeff_deriv1_cpu
         real(rkind), dimension(nz) :: dzitdz_cpu
         integer :: force_zero_flux_min, force_zero_flux_max
-        real(rkind) :: sensor_threshold, cp0, cv0, tol_iter_nr
+        real(rkind) :: sensor_threshold, rgas0, tol_iter_nr, rho0, u0, t0
         integer :: weno_scheme, weno_size, weno_version
         ! Local variables
         integer :: i, j, k, m, l
@@ -399,9 +645,9 @@ endsubroutine euler_x_fluxes_hybrid_kernel
         integer :: ishk
         real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
         real(rkind), dimension(5,5) :: el, er
-        real(rkind), dimension(5) :: ev, evmax, fk, ghat, gl, gr
-        real(rkind), dimension(nv,2*weno_scheme,nx,ny) :: gplus_z_cpu
-        real(rkind), dimension(nv,2*weno_scheme,nx,ny) :: gminus_z_cpu
+        real(rkind), dimension(5) :: evmax, fk
+        real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gplus_z_cpu
+        real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gminus_z_cpu
         integer :: ll, mm
         real(rkind) :: rho, pp, wc, gc, rhow
         real(rkind) :: tt, gamloc
@@ -449,8 +695,8 @@ do j=1,ny
                          wwi   = w_aux_cpu(i,j,k-m,4)
                          enti  = w_aux_cpu(i,j,k-m,5)
                          tti   = w_aux_cpu(i,j,k-m,6)
-                         ppi   = tti*rhoi
-                         eei   = enti-tti-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+                         ppi   = tti*rhoi*rgas0
+                         eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
  
                          rhoip = w_aux_cpu(i,j,k-m+l,1)
                          uuip  = w_aux_cpu(i,j,k-m+l,2)
@@ -458,8 +704,8 @@ do j=1,ny
                          wwip  = w_aux_cpu(i,j,k-m+l,4)
                          entip = w_aux_cpu(i,j,k-m+l,5)
                          ttip  = w_aux_cpu(i,j,k-m+l,6)
-                         ppip  = ttip*rhoip
-                         eeip  = entip-ttip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+                         ppip  = ttip*rhoip*rgas0
+                         eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
 
                          rhom  = rhoi + rhoip
                          eem   = eei  + eeip
@@ -512,7 +758,7 @@ do j=1,ny
                          wwi   = w_aux_cpu(i,j,k-m,4)
                          enti  = w_aux_cpu(i,j,k-m,5)
                          tti   = w_aux_cpu(i,j,k-m,6)
-                         ppi   = tti*rhoi
+                         ppi   = tti*rhoi*rgas0
  
                          rhoip = w_aux_cpu(i,j,k-m+l,1)
                          uuip  = w_aux_cpu(i,j,k-m+l,2)
@@ -520,7 +766,7 @@ do j=1,ny
                          wwip  = w_aux_cpu(i,j,k-m+l,4)
                          entip = w_aux_cpu(i,j,k-m+l,5)
                          ttip  = w_aux_cpu(i,j,k-m+l,6)
-                         ppip  = ttip*rhoip
+                         ppip  = ttip*rhoip*rgas0
 
                          rhom  = rhoi+rhoip
                          uv_part = (wwi+wwip) * rhom
@@ -559,9 +805,9 @@ do j=1,ny
                 fhat_cpu(i,j,k,4) = fh4
                 fhat_cpu(i,j,k,5) = fh5
             else
-                call compute_roe_average(nx, ny, nz, ng, i, i, j, j, k, k+1, w_aux_cpu, cp0, cv0, &
+                call compute_roe_average(nx, ny, nz, ng, i, i, j, j, k, k+1, w_aux_cpu, rgas0, &
                                          b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
-                                         calorically_perfect, tol_iter_nr)
+                                         calorically_perfect, tol_iter_nr,t0)
 
                 call eigenvectors_z(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
 
@@ -572,16 +818,13 @@ do j=1,ny
                     ll = k + l - weno_scheme
                     ww   = w_aux_cpu(i,j,ll,4)
                     tt   = w_aux_cpu(i,j,ll,6)
-                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
-                    c    = sqrt (gamloc*tt)
-                    ev(1) = abs(ww-c)
-                    ev(2) = abs(ww)
-                    ev(3) = abs(ww+c)
-                    ev(4) = ev(2)
-                    ev(5) = ev(2)
-                    do m=1,5
-                        evmax(m) = max(ev(m),evmax(m))
-                    enddo
+                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+                    c    = sqrt (gamloc*rgas0*tt)
+                    evmax(1) = max(abs(ww-c),evmax(1))
+                    evmax(2) = max(abs(ww  ),evmax(2))
+                    evmax(3) = max(abs(ww+c),evmax(3))
+                    evmax(4) = evmax(2)
+                    evmax(5) = evmax(2)
                 enddo
                 do l=1,weno_size ! loop over the stencil centered at face i
                     ll = k + l - weno_scheme
@@ -592,7 +835,7 @@ do j=1,ny
                     ww     = w_aux_cpu(i,j,ll,4)
                     h      = w_aux_cpu(i,j,ll,5) 
                     rhow   = rho*ww
-                    pp     = rho*w_aux_cpu(i,j,ll,6)
+                    pp     = rho*w_aux_cpu(i,j,ll,6)*rgas0
                     fk(1)  =      rhow
                     fk(2)  = uu * rhow
                     fk(3)  = vv * rhow 
@@ -602,29 +845,37 @@ do j=1,ny
                         wc = 0._rkind
                         gc = 0._rkind
 
-                        do mm=1,5
-                            wc = wc + el(mm,m) * w_cpu(i,j,ll,mm)
-                            gc = gc + el(mm,m) * fk(mm)
-                        enddo
-                        gplus_z_cpu (m,l,i,j) = 0.5_rkind * (gc + evmax(m) * wc)
-                        gminus_z_cpu(m,l,i,j) = gc - gplus_z_cpu(m,l,i,j)
+                        wc = wc + el(1,m) * rho
+                        gc = gc + el(1,m) * fk(1)
+                        wc = wc + el(2,m) * rho*uu
+                        gc = gc + el(2,m) * fk(2)
+                        wc = wc + el(3,m) * rho*vv
+                        gc = gc + el(3,m) * fk(3)
+                        wc = wc + el(4,m) * rho*ww
+                        gc = gc + el(4,m) * fk(4)
+                        wc = wc + el(5,m) * (rho*h-pp)
+                        gc = gc + el(5,m) * fk(5)
+                        !do mm=1,5
+                        ! wc = wc + el(mm,m) * w_cpu(i,j,ll,mm)
+                        ! gc = gc + el(mm,m) * fk(mm)
+                        !enddo
+
+                        c = 0.5_rkind * (gc + evmax(m) * wc)
+                        gplus_z_cpu (i,j,m,l) = c
+                        gminus_z_cpu(i,j,m,l) = gc - c
                     enddo
                 enddo
 !
 !               Reconstruction of the '+' and '-' fluxes
 !
                 wenorec_ord = max(weno_scheme+ep_ord_change_cpu(i,j,k,3),1)
-                call wenorec(nv,gplus_z_cpu(:,:,i,j),gminus_z_cpu(:,:,i,j),gl,gr,weno_scheme,wenorec_ord,weno_version)
+                call wenorec(i,j,nv,nx,ny,gplus_z_cpu,gminus_z_cpu,fk,weno_scheme,wenorec_ord,weno_version,rho0,u0)
 !
-                do m=1,5
-                    ghat(m) = gl(m) + gr(m) ! char. flux
-                enddo
-
 !               !Return to conservative fluxes
                 do m=1,5
                     fhat_cpu(i,j,k,m) = 0._rkind
                     do mm=1,5
-                       fhat_cpu(i,j,k,m) = fhat_cpu(i,j,k,m) + er(mm,m) * ghat(mm)
+                       fhat_cpu(i,j,k,m) = fhat_cpu(i,j,k,m) + er(mm,m) * fk(mm)
                     enddo
                 enddo
 
@@ -643,12 +894,270 @@ enddo
 endsubroutine euler_z_hybrid_kernel
 
 
+      subroutine euler_z_hybrid_rusanov_kernel(nv, nv_aux, nx, ny, nz, ng, &
+        eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, dzitdz_cpu, fhat_cpu, &
+        force_zero_flux_min, force_zero_flux_max, &
+        weno_scheme, weno_version, sensor_threshold, weno_size, w_cpu, gplus_z_cpu, gminus_z_cpu, cp_coeff_cpu, indx_cp_l, indx_cp&
+&_r, &
+        ep_ord_change_cpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
+        implicit none
+        ! Passed arguments
+        integer :: nv, nx, ny, nz, ng, nv_aux
+        integer :: eul_kmin, eul_kmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+        real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv_aux) :: w_aux_cpu
+        real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_cpu
+        real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_cpu
+        integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
+        real(rkind), dimension(nx,ny,nz,nv) :: fl_cpu
+        real(rkind), dimension(4,4) :: coeff_deriv1_cpu
+        real(rkind), dimension(nz) :: dzitdz_cpu
+        integer :: force_zero_flux_min, force_zero_flux_max
+        real(rkind) :: sensor_threshold, rgas0, tol_iter_nr, rho0, u0, t0
+        integer :: weno_scheme, weno_size, weno_version
+        ! Local variables
+        integer :: i, j, k, m, l
+        real(rkind) :: fh1, fh2, fh3, fh4, fh5
+        real(rkind) :: rhom, uui, vvi, wwi, ppi, enti, rhoi, tti
+        real(rkind) :: uuip, vvip, wwip, ppip, entip, rhoip, ttip
+        real(rkind) :: ft1, ft2, ft3, ft4, ft5, ft6
+        real(rkind) :: uvs1, uvs2, uvs3, uvs4, uvs6, uv_part
+        real(rkind) :: uvs5
+        integer :: kk, lmax, wenorec_ord
+        integer :: ishk
+        real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
+        real(rkind), dimension(5) :: fk
+        real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gplus_z_cpu
+        real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gminus_z_cpu
+        integer :: ll, mm
+        real(rkind) :: evm, evmax, rhoevm
+        real(rkind) :: rho, pp, rhow
+        real(rkind) :: tt, gamloc
+        real(rkind) :: uvs5_i,uvs5_k,uvs5_p,eei,eeip
+        real(rkind) :: drho, dee, eem
+        real(rkind) :: drhof, deef
+        real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
+        integer :: n,n2
+ 
+
+
+        do i=1,nx
+do j=1,ny
+
+
+        do k=eul_kmin-1,eul_kmax
+            ishk = 0
+            do kk=k-weno_scheme+1,k+weno_scheme
+                if (w_aux_cpu(i,j,kk,8) > sensor_threshold) ishk = 1
+            enddo
+
+            if (ishk == 0) then
+                ft1  = 0._rkind
+                ft2  = 0._rkind
+                ft3  = 0._rkind
+                ft4  = 0._rkind
+                ft5  = 0._rkind
+                ft6  = 0._rkind
+                lmax = max(lmax_base+ep_ord_change_cpu(i,j,k,3),1)
+                if (nkeep>=0) then
+                 do l=1,lmax
+                     uvs1 = 0._rkind
+                     uvs2 = 0._rkind
+                     uvs3 = 0._rkind
+                     uvs4 = 0._rkind
+                     uvs5_i = 0._rkind
+                     uvs5_k = 0._rkind
+                     uvs5_p = 0._rkind
+                     uvs6 = 0._rkind
+                     do m=0,l-1
+
+                         rhoi  = w_aux_cpu(i,j,k-m,1)
+                         uui   = w_aux_cpu(i,j,k-m,2)
+                         vvi   = w_aux_cpu(i,j,k-m,3)
+                         wwi   = w_aux_cpu(i,j,k-m,4)
+                         enti  = w_aux_cpu(i,j,k-m,5)
+                         tti   = w_aux_cpu(i,j,k-m,6)
+                         ppi   = tti*rhoi*rgas0
+                         eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+ 
+                         rhoip = w_aux_cpu(i,j,k-m+l,1)
+                         uuip  = w_aux_cpu(i,j,k-m+l,2)
+                         vvip  = w_aux_cpu(i,j,k-m+l,3)
+                         wwip  = w_aux_cpu(i,j,k-m+l,4)
+                         entip = w_aux_cpu(i,j,k-m+l,5)
+                         ttip  = w_aux_cpu(i,j,k-m+l,6)
+                         ppip  = ttip*rhoip*rgas0
+                         eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+
+                         rhom  = rhoi + rhoip
+                         eem   = eei  + eeip
+
+                         drho   = 2._rkind*(rhoip-rhoi)/rhom
+                         dee    = 2._rkind*(eeip - eei)/eem
+                         sumnumrho = 1._rkind
+                         sumdenrho = 1._rkind
+                         sumnumee  = 1._rkind
+                         sumdenee  = 1._rkind
+                         do n = 1, nkeep
+                          n2 = 2*n
+                          sumdenrho = sumdenrho + (0.5_rkind*drho)**n2 / (1._rkind+n2)
+                          sumdenee  = sumdenee  + (0.5_rkind*dee )**n2
+                          sumnumee  = sumnumee  + (0.5_rkind*dee )**n2 / (1._rkind+n2)
+                         enddo
+                         drhof = sumnumrho/sumdenrho
+                         deef  = sumnumee /sumdenee
+
+                         uv_part = (wwi+wwip) * rhom * drhof
+                         uvs1 = uvs1 + uv_part * (2._rkind)
+                         uvs2 = uvs2 + uv_part * (uui+uuip)
+                         uvs3 = uvs3 + uv_part * (vvi+vvip)
+                         uvs4 = uvs4 + uv_part * (wwi+wwip)
+                         uvs5_i = uvs5_i + uv_part * eem * deef
+                         uvs5_k = uvs5_k + uv_part * (uui*uuip+vvi*vvip+wwi*wwip)
+                         uvs5_p = uvs5_p + 4._rkind*(wwi*ppip+wwip*ppi)
+                         uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+                     enddo
+                     ft1  = ft1  + coeff_deriv1_cpu(l,lmax)*uvs1
+                     ft2  = ft2  + coeff_deriv1_cpu(l,lmax)*uvs2
+                     ft3  = ft3  + coeff_deriv1_cpu(l,lmax)*uvs3
+                     ft4  = ft4  + coeff_deriv1_cpu(l,lmax)*uvs4
+                     ft5  = ft5  + coeff_deriv1_cpu(l,lmax)*(uvs5_i+uvs5_k+uvs5_p)
+                     ft6  = ft6  + coeff_deriv1_cpu(l,lmax)*uvs6
+                 enddo
+                else
+                 do l=1,lmax
+                     uvs1 = 0._rkind
+                     uvs2 = 0._rkind
+                     uvs3 = 0._rkind
+                     uvs4 = 0._rkind
+                     uvs5 = 0._rkind
+                     uvs6 = 0._rkind
+                     do m=0,l-1
+
+                         rhoi  = w_aux_cpu(i,j,k-m,1)
+                         uui   = w_aux_cpu(i,j,k-m,2)
+                         vvi   = w_aux_cpu(i,j,k-m,3)
+                         wwi   = w_aux_cpu(i,j,k-m,4)
+                         enti  = w_aux_cpu(i,j,k-m,5)
+                         tti   = w_aux_cpu(i,j,k-m,6)
+                         ppi   = tti*rhoi*rgas0
+ 
+                         rhoip = w_aux_cpu(i,j,k-m+l,1)
+                         uuip  = w_aux_cpu(i,j,k-m+l,2)
+                         vvip  = w_aux_cpu(i,j,k-m+l,3)
+                         wwip  = w_aux_cpu(i,j,k-m+l,4)
+                         entip = w_aux_cpu(i,j,k-m+l,5)
+                         ttip  = w_aux_cpu(i,j,k-m+l,6)
+                         ppip  = ttip*rhoip*rgas0
+
+                         rhom  = rhoi+rhoip
+                         uv_part = (wwi+wwip) * rhom
+                         uvs1 = uvs1 + uv_part * (2._rkind)
+                         uvs2 = uvs2 + uv_part * (uui+uuip)
+                         uvs3 = uvs3 + uv_part * (vvi+vvip)
+                         uvs4 = uvs4 + uv_part * (wwi+wwip)
+                         uvs5 = uvs5 + uv_part * (enti+entip)
+                         uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+                     enddo
+                     ft1 = ft1 + coeff_deriv1_cpu(l,lmax)*uvs1
+                     ft2 = ft2 + coeff_deriv1_cpu(l,lmax)*uvs2
+                     ft3 = ft3 + coeff_deriv1_cpu(l,lmax)*uvs3
+                     ft4 = ft4 + coeff_deriv1_cpu(l,lmax)*uvs4
+                     ft5 = ft5 + coeff_deriv1_cpu(l,lmax)*uvs5
+                     ft6 = ft6 + coeff_deriv1_cpu(l,lmax)*uvs6
+                 enddo
+                endif
+                fh1 = 0.25_rkind*ft1
+                fh2 = 0.25_rkind*ft2
+                fh3 = 0.25_rkind*ft3
+                fh4 = 0.25_rkind*ft4
+                fh5 = 0.25_rkind*ft5
+                if ((k==0 .and. force_zero_flux_min == 1).or.(k==nz .and. force_zero_flux_max == 1)) then
+                   fh1 = 0._rkind
+                   fh2 = 0._rkind
+                   fh3 = 0._rkind
+                   fh4 = 0._rkind
+                   fh5 = 0._rkind
+                endif
+                fh4 = fh4 + 0.5_rkind*ft6
+
+                fhat_cpu(i,j,k,1) = fh1
+                fhat_cpu(i,j,k,2) = fh2
+                fhat_cpu(i,j,k,3) = fh3
+                fhat_cpu(i,j,k,4) = fh4
+                fhat_cpu(i,j,k,5) = fh5
+            else
+                evmax = -1._rkind
+                do l=1,weno_size ! LLF
+                    ll = k + l - weno_scheme
+                    ww   = w_aux_cpu(i,j,ll,4)
+                    tt   = w_aux_cpu(i,j,ll,6)
+                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+                    c     = sqrt (gamloc*rgas0*tt)
+                    evm   = max(abs(ww-c),abs(ww+c))
+                    evmax = max(evm,evmax)
+                enddo
+                do l=1,weno_size ! loop over the stencil centered at face i
+                    ll = k + l - weno_scheme
+
+                    rho    = w_aux_cpu(i,j,ll,1)
+                    uu     = w_aux_cpu(i,j,ll,2)
+                    vv     = w_aux_cpu(i,j,ll,3)
+                    ww     = w_aux_cpu(i,j,ll,4)
+                    h      = w_aux_cpu(i,j,ll,5) 
+                    rhow   = rho*ww
+                    pp     = rho*w_aux_cpu(i,j,ll,6)*rgas0
+                    rhoevm = rho*evmax
+
+                    evm = rhow
+                    c = 0.5_rkind * (evm + rhoevm)
+                    gplus_z_cpu (i,j,1,l) = c
+                    gminus_z_cpu(i,j,1,l) = evm-c
+                    evm  = uu * rhow
+                    c = 0.5_rkind * (evm + rhoevm * uu)
+                    gplus_z_cpu (i,j,2,l) = c
+                    gminus_z_cpu(i,j,2,l) = evm-c
+                    evm = vv * rhow
+                    c = 0.5_rkind * (evm + rhoevm * vv)
+                    gplus_z_cpu (i,j,3,l) = c
+                    gminus_z_cpu(i,j,3,l) = evm-c
+                    evm = ww * rhow + pp
+                    c = 0.5_rkind * (evm + rhoevm * ww)
+                    gplus_z_cpu (i,j,4,l) = c
+                    gminus_z_cpu(i,j,4,l) = evm-c
+                    evm = h  * rhow
+                    c = 0.5_rkind * (evm + evmax * (rho*h-pp))
+                    gplus_z_cpu (i,j,5,l) = c
+                    gminus_z_cpu(i,j,5,l) = evm-c
+                enddo
+!
+!               Reconstruction of the '+' and '-' fluxes
+!
+                wenorec_ord = max(weno_scheme+ep_ord_change_cpu(i,j,k,3),1)
+                call wenorec_rusanov(i,j,nv,nx,ny,gplus_z_cpu,gminus_z_cpu,fhat_cpu,&
+                     weno_scheme,wenorec_ord,weno_version,ng,nx,ny,nz,i,j,k)
+
+            endif
+        enddo
+
+!       Update net flux 
+        do k=eul_kmin,eul_kmax ! loop on the inner nodes
+            do m=1,5
+                fl_cpu(i,j,k,m) = fl_cpu(i,j,k,m) + (fhat_cpu(i,j,k,m)-fhat_cpu(i,j,k-1,m))*dzitdz_cpu(k)
+            enddo
+        enddo
+
+    enddo
+enddo
+endsubroutine euler_z_hybrid_rusanov_kernel
+
+
       subroutine euler_y_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-        eul_jmin, eul_jmax, lmax_base, nkeep, cp0, cv0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, detady_cpu, fhat_cpu, &
+        eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, detady_cpu, fhat_cpu, &
         force_zero_flux_min, force_zero_flux_max, &
         weno_scheme, weno_version, sensor_threshold, weno_size, w_cpu, gplus_y_cpu, gminus_y_cpu, cp_coeff_cpu, indx_cp_l, indx_cp&
 &_r, &
-        ep_ord_change_cpu, calorically_perfect, tol_iter_nr)
+        ep_ord_change_cpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
         implicit none
         ! Passed arguments
         integer :: nv, nx, ny, nz, ng, nv_aux
@@ -657,12 +1166,12 @@ endsubroutine euler_z_hybrid_kernel
         real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_cpu
         real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_cpu
         integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_cpu
-        real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
         real(rkind), dimension(nx,ny,nz,nv) :: fl_cpu
         real(rkind), dimension(4,4) :: coeff_deriv1_cpu
         real(rkind), dimension(ny) :: detady_cpu
         integer :: force_zero_flux_min, force_zero_flux_max
-        real(rkind) :: sensor_threshold, cp0, cv0, tol_iter_nr
+        real(rkind) :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
         integer :: weno_scheme, weno_size, weno_version
         ! Local variables
         integer :: i, j, k, m, l
@@ -676,9 +1185,9 @@ endsubroutine euler_z_hybrid_kernel
         integer :: ishk
         real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
         real(rkind), dimension(5,5) :: el, er
-        real(rkind), dimension(5) :: ev, evmax, fj, ghat, gl, gr
-        real(rkind), dimension(nv,2*weno_scheme,nx,nz) :: gplus_y_cpu
-        real(rkind), dimension(nv,2*weno_scheme,nx,nz) :: gminus_y_cpu
+        real(rkind), dimension(5) :: evmax, fj
+        real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gplus_y_cpu
+        real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gminus_y_cpu
         integer :: ll, mm, lmax, wenorec_ord
         real(rkind) :: rho, pp, wc, gc, rhov
         real(rkind) :: tt, gamloc
@@ -727,8 +1236,8 @@ do k=1,nz
                          wwi   = w_aux_cpu(i,j-m,k,4)
                          enti  = w_aux_cpu(i,j-m,k,5)
                          tti   = w_aux_cpu(i,j-m,k,6)
-                         ppi   = tti*rhoi
-                         eei   = enti-tti-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+                         ppi   = tti*rhoi*rgas0
+                         eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
 
                          rhoip = w_aux_cpu(i,j-m+l,k,1)
                          uuip  = w_aux_cpu(i,j-m+l,k,2)
@@ -736,8 +1245,8 @@ do k=1,nz
                          wwip  = w_aux_cpu(i,j-m+l,k,4)
                          entip = w_aux_cpu(i,j-m+l,k,5)
                          ttip  = w_aux_cpu(i,j-m+l,k,6)
-                         ppip  = ttip*rhoip
-                         eeip  = entip-ttip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+                         ppip  = ttip*rhoip*rgas0
+                         eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
 
                          rhom  = rhoi + rhoip
                          eem   = eei  + eeip
@@ -790,7 +1299,7 @@ do k=1,nz
                          wwi   = w_aux_cpu(i,j-m,k,4)
                          enti  = w_aux_cpu(i,j-m,k,5)
                          tti   = w_aux_cpu(i,j-m,k,6)
-                         ppi   = tti*rhoi
+                         ppi   = tti*rhoi*rgas0
 
                          rhoip = w_aux_cpu(i,j-m+l,k,1)
                          uuip  = w_aux_cpu(i,j-m+l,k,2)
@@ -798,7 +1307,7 @@ do k=1,nz
                          wwip  = w_aux_cpu(i,j-m+l,k,4)
                          entip = w_aux_cpu(i,j-m+l,k,5)
                          ttip  = w_aux_cpu(i,j-m+l,k,6)
-                         ppip  = ttip*rhoip
+                         ppip  = ttip*rhoip*rgas0
 
                          rhom  = rhoi + rhoip
                          uv_part = (vvi+vvip) * rhom
@@ -838,9 +1347,9 @@ do k=1,nz
                 fhat_cpu(i,j,k,4) = fh4
                 fhat_cpu(i,j,k,5) = fh5
             else
-                call compute_roe_average(nx, ny, nz, ng, i, i, j, j+1, k, k, w_aux_cpu, cp0, cv0, &
+                call compute_roe_average(nx, ny, nz, ng, i, i, j, j+1, k, k, w_aux_cpu, rgas0, &
                                          b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_cpu, indx_cp_l, indx_cp_r, &
-                                         calorically_perfect, tol_iter_nr)
+                                         calorically_perfect, tol_iter_nr,t0)
 
                 call eigenvectors_y(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
 
@@ -851,16 +1360,13 @@ do k=1,nz
                     ll = j + l - weno_scheme
                     vv   = w_aux_cpu(i,ll,k,3)
                     tt   = w_aux_cpu(i,ll,k,6)
-                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
-                    c    = sqrt (gamloc*tt)
-                    ev(1) = abs(vv-c)
-                    ev(2) = abs(vv)
-                    ev(3) = abs(vv+c)
-                    ev(4) = ev(2)
-                    ev(5) = ev(2)
-                    do m=1,5
-                        evmax(m) = max(ev(m),evmax(m))
-                    enddo
+                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+                    c    = sqrt (gamloc*rgas0*tt)
+                    evmax(1) = max(abs(vv-c),evmax(1))
+                    evmax(2) = max(abs(vv  ),evmax(2))
+                    evmax(3) = max(abs(vv+c),evmax(3))
+                    evmax(4) = evmax(2)
+                    evmax(5) = evmax(2)
                 enddo
                 do l=1,weno_size ! loop over the stencil centered at face i
                     ll = j + l - weno_scheme
@@ -871,7 +1377,7 @@ do k=1,nz
                     ww     = w_aux_cpu(i,ll,k,4)
                     h      = w_aux_cpu(i,ll,k,5) 
                     rhov   = rho*vv
-                    pp     = rho*w_aux_cpu(i,ll,k,6)
+                    pp     = rho*w_aux_cpu(i,ll,k,6)*rgas0
                     fj(1)  =      rhov
                     fj(2)  = uu * rhov
                     fj(3)  = vv * rhov + pp
@@ -881,32 +1387,295 @@ do k=1,nz
                         wc = 0._rkind
                         gc = 0._rkind
 
-                        do mm=1,5
-                            wc = wc + el(mm,m) * w_cpu(i,ll,k,mm)
-                            gc = gc + el(mm,m) * fj(mm)
-                        enddo
-                        gplus_y_cpu (m,l,i,k) = 0.5_rkind * (gc + evmax(m) * wc)
-                        gminus_y_cpu(m,l,i,k) = gc - gplus_y_cpu(m,l,i,k)
+                        wc = wc + el(1,m) * rho
+                        gc = gc + el(1,m) * fj(1)
+                        wc = wc + el(2,m) * rho*uu
+                        gc = gc + el(2,m) * fj(2)
+                        wc = wc + el(3,m) * rho*vv
+                        gc = gc + el(3,m) * fj(3)
+                        wc = wc + el(4,m) * rho*ww
+                        gc = gc + el(4,m) * fj(4)
+                        wc = wc + el(5,m) * (rho*h-pp)
+                        gc = gc + el(5,m) * fj(5)
+
+                        c = 0.5_rkind * (gc + evmax(m) * wc)
+                        gplus_y_cpu (i,k,m,l) = c
+                        gminus_y_cpu(i,k,m,l) = gc - c
                     enddo
                 enddo
 !
 !               Reconstruction of the '+' and '-' fluxes
 !
                 wenorec_ord = max(weno_scheme+ep_ord_change_cpu(i,j,k,2),1)
-                call wenorec(nv,gplus_y_cpu(:,:,i,k),gminus_y_cpu(:,:,i,k),gl,gr,weno_scheme,wenorec_ord,weno_version)
+                call wenorec(i,k,nv,nx,nz,gplus_y_cpu,gminus_y_cpu,fj,weno_scheme,wenorec_ord,weno_version,rho0,u0)
 !
-                do m=1,5
-                    ghat(m) = gl(m) + gr(m) ! char. flux
-                enddo
-
 !               !Return to conservative fluxes
                 do m=1,5
                     fhat_cpu(i,j,k,m) = 0._rkind
                     do mm=1,5
-                       fhat_cpu(i,j,k,m) = fhat_cpu(i,j,k,m) + er(mm,m) * ghat(mm)
+                       fhat_cpu(i,j,k,m) = fhat_cpu(i,j,k,m) + er(mm,m) * fj(mm)
                     enddo
                 enddo
 
+            endif
+        enddo
+
+!       Update net flux 
+        do j=eul_jmin,eul_jmax ! loop on the inner nodes
+           do m=1,5
+               fl_cpu(i,j,k,m) = fl_cpu(i,j,k,m) + (fhat_cpu(i,j,k,m)-fhat_cpu(i,j-1,k,m))*detady_cpu(j)
+           enddo
+        enddo
+
+    enddo
+enddo
+endsubroutine euler_y_hybrid_kernel
+
+
+      subroutine euler_y_hybrid_rusanov_kernel(nv, nv_aux, nx, ny, nz, ng, &
+        eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_cpu, fl_cpu, coeff_deriv1_cpu, detady_cpu, fhat_cpu, &
+        force_zero_flux_min, force_zero_flux_max, &
+        weno_scheme, weno_version, sensor_threshold, weno_size, w_cpu, gplus_y_cpu, gminus_y_cpu, cp_coeff_cpu, indx_cp_l, indx_cp&
+&_r, &
+        ep_ord_change_cpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
+        implicit none
+        ! Passed arguments
+        integer :: nv, nx, ny, nz, ng, nv_aux
+        integer :: eul_jmin, eul_jmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+        real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv_aux) :: w_aux_cpu
+        real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_cpu
+        real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_cpu
+        integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
+        real(rkind), dimension(nx,ny,nz,nv) :: fl_cpu
+        real(rkind), dimension(4,4) :: coeff_deriv1_cpu
+        real(rkind), dimension(ny) :: detady_cpu
+        integer :: force_zero_flux_min, force_zero_flux_max
+        real(rkind) :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
+        integer :: weno_scheme, weno_size, weno_version
+        ! Local variables
+        integer :: i, j, k, m, l
+        real(rkind) :: fh1, fh2, fh3, fh4, fh5
+        real(rkind) :: rhom, uui, vvi, wwi, ppi, enti, rhoi, tti
+        real(rkind) :: uuip, vvip, wwip, ppip, entip, rhoip, ttip
+        real(rkind) :: ft1, ft2, ft3, ft4, ft5, ft6
+        real(rkind) :: uvs1, uvs2, uvs3, uvs4, uvs6, uv_part
+        real(rkind) :: uvs5
+        integer :: jj
+        integer :: ishk
+        real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
+        real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gplus_y_cpu
+        real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gminus_y_cpu
+        integer :: ll, mm, lmax, wenorec_ord
+        real(rkind) :: evm, evmax, rhoevm
+        real(rkind) :: rho, pp, rhov
+        real(rkind) :: tt, gamloc
+        real(rkind) :: uvs5_i,uvs5_k,uvs5_p,eei,eeip
+        real(rkind) :: drho, dee, eem
+        real(rkind) :: drhof, deef
+        real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
+        integer :: n,n2
+ 
+
+
+        do i=1,nx
+do k=1,nz
+
+
+        do j=eul_jmin-1,eul_jmax
+
+            ishk = 0
+            do jj=j-weno_scheme+1,j+weno_scheme
+                if (w_aux_cpu(i,jj,k,8) > sensor_threshold) ishk = 1
+            enddo
+
+            if (ishk == 0) then
+                ft1  = 0._rkind
+                ft2  = 0._rkind
+                ft3  = 0._rkind
+                ft4  = 0._rkind
+                ft5  = 0._rkind
+                ft6  = 0._rkind
+                lmax = max(lmax_base+ep_ord_change_cpu(i,j,k,2),1)
+                if (nkeep>=0) then 
+                 do l=1,lmax
+                     uvs1 = 0._rkind
+                     uvs2 = 0._rkind
+                     uvs3 = 0._rkind
+                     uvs4 = 0._rkind
+                     uvs5_i = 0._rkind
+                     uvs5_k = 0._rkind
+                     uvs5_p = 0._rkind
+                     uvs6 = 0._rkind
+                     do m=0,l-1
+
+                         rhoi  = w_aux_cpu(i,j-m,k,1)
+                         uui   = w_aux_cpu(i,j-m,k,2)
+                         vvi   = w_aux_cpu(i,j-m,k,3)
+                         wwi   = w_aux_cpu(i,j-m,k,4)
+                         enti  = w_aux_cpu(i,j-m,k,5)
+                         tti   = w_aux_cpu(i,j-m,k,6)
+                         ppi   = tti*rhoi*rgas0
+                         eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+
+                         rhoip = w_aux_cpu(i,j-m+l,k,1)
+                         uuip  = w_aux_cpu(i,j-m+l,k,2)
+                         vvip  = w_aux_cpu(i,j-m+l,k,3)
+                         wwip  = w_aux_cpu(i,j-m+l,k,4)
+                         entip = w_aux_cpu(i,j-m+l,k,5)
+                         ttip  = w_aux_cpu(i,j-m+l,k,6)
+                         ppip  = ttip*rhoip*rgas0
+                         eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+
+                         rhom  = rhoi + rhoip
+                         eem   = eei  + eeip
+
+                         drho   = 2._rkind*(rhoip-rhoi)/rhom
+                         dee    = 2._rkind*(eeip - eei)/eem
+                         sumnumrho = 1._rkind
+                         sumdenrho = 1._rkind
+                         sumnumee  = 1._rkind
+                         sumdenee  = 1._rkind
+                         do n = 1, nkeep
+                          n2 = 2*n
+                          sumdenrho = sumdenrho + (0.5_rkind*drho)**n2 / (1._rkind+n2)
+                          sumdenee  = sumdenee  + (0.5_rkind*dee )**n2
+                          sumnumee  = sumnumee  + (0.5_rkind*dee )**n2 / (1._rkind+n2)
+                         enddo
+                         drhof = sumnumrho/sumdenrho
+                         deef  = sumnumee /sumdenee
+
+                         uv_part = (vvi+vvip) * rhom * drhof
+                         uvs1 = uvs1 + uv_part * (2._rkind)
+                         uvs2 = uvs2 + uv_part * (uui+uuip)
+                         uvs3 = uvs3 + uv_part * (vvi+vvip)
+                         uvs4 = uvs4 + uv_part * (wwi+wwip)
+                         uvs5_i = uvs5_i + uv_part * eem * deef
+                         uvs5_k = uvs5_k + uv_part * (uui*uuip+vvi*vvip+wwi*wwip)
+                         uvs5_p = uvs5_p + 4._rkind*(vvi*ppip+vvip*ppi)
+                         uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+                     enddo
+                     ft1  = ft1  + coeff_deriv1_cpu(l,lmax)*uvs1
+                     ft2  = ft2  + coeff_deriv1_cpu(l,lmax)*uvs2
+                     ft3  = ft3  + coeff_deriv1_cpu(l,lmax)*uvs3
+                     ft4  = ft4  + coeff_deriv1_cpu(l,lmax)*uvs4
+                     ft5  = ft5  + coeff_deriv1_cpu(l,lmax)*(uvs5_i+uvs5_k+uvs5_p)
+                     ft6  = ft6  + coeff_deriv1_cpu(l,lmax)*uvs6
+                 enddo
+                else
+                 do l=1,lmax
+                     uvs1 = 0._rkind
+                     uvs2 = 0._rkind
+                     uvs3 = 0._rkind
+                     uvs4 = 0._rkind
+                     uvs5 = 0._rkind
+                     uvs6 = 0._rkind
+                     do m=0,l-1
+
+                         rhoi  = w_aux_cpu(i,j-m,k,1)
+                         uui   = w_aux_cpu(i,j-m,k,2)
+                         vvi   = w_aux_cpu(i,j-m,k,3)
+                         wwi   = w_aux_cpu(i,j-m,k,4)
+                         enti  = w_aux_cpu(i,j-m,k,5)
+                         tti   = w_aux_cpu(i,j-m,k,6)
+                         ppi   = tti*rhoi*rgas0
+
+                         rhoip = w_aux_cpu(i,j-m+l,k,1)
+                         uuip  = w_aux_cpu(i,j-m+l,k,2)
+                         vvip  = w_aux_cpu(i,j-m+l,k,3)
+                         wwip  = w_aux_cpu(i,j-m+l,k,4)
+                         entip = w_aux_cpu(i,j-m+l,k,5)
+                         ttip  = w_aux_cpu(i,j-m+l,k,6)
+                         ppip  = ttip*rhoip*rgas0
+
+                         rhom  = rhoi + rhoip
+                         uv_part = (vvi+vvip) * rhom
+                         uvs1 = uvs1 + uv_part * (2._rkind)
+                         uvs2 = uvs2 + uv_part * (uui+uuip)
+                         uvs3 = uvs3 + uv_part * (vvi+vvip)
+                         uvs4 = uvs4 + uv_part * (wwi+wwip)
+                         uvs5 = uvs5 + uv_part * (enti+entip)
+                         uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+                     enddo
+                     ft1 = ft1 + coeff_deriv1_cpu(l,lmax)*uvs1
+                     ft2 = ft2 + coeff_deriv1_cpu(l,lmax)*uvs2
+                     ft3 = ft3 + coeff_deriv1_cpu(l,lmax)*uvs3
+                     ft4 = ft4 + coeff_deriv1_cpu(l,lmax)*uvs4
+                     ft5 = ft5 + coeff_deriv1_cpu(l,lmax)*uvs5
+                     ft6 = ft6 + coeff_deriv1_cpu(l,lmax)*uvs6
+                 enddo
+                endif
+                fh1 = 0.25_rkind*ft1
+                fh2 = 0.25_rkind*ft2
+                fh3 = 0.25_rkind*ft3
+                fh4 = 0.25_rkind*ft4
+                fh5 = 0.25_rkind*ft5
+                if ((j==0 .and. force_zero_flux_min == 1).or.(j==ny .and. force_zero_flux_max == 1)) then
+                   fh1 = 0._rkind
+                   fh2 = 0._rkind
+                   fh3 = 0._rkind
+                   fh4 = 0._rkind
+                   fh5 = 0._rkind
+                endif
+
+                fh3 = fh3 + 0.5_rkind*ft6
+
+                fhat_cpu(i,j,k,1) = fh1
+                fhat_cpu(i,j,k,2) = fh2
+                fhat_cpu(i,j,k,3) = fh3
+                fhat_cpu(i,j,k,4) = fh4
+                fhat_cpu(i,j,k,5) = fh5
+            else
+                evmax = -1._rkind
+                do l=1,weno_size ! LLF
+                    ll = j + l - weno_scheme
+                    vv   = w_aux_cpu(i,ll,k,3)
+                    tt   = w_aux_cpu(i,ll,k,6)
+                    gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+                    c     = sqrt (gamloc*rgas0*tt)
+                    evm   = max(abs(vv-c),abs(vv+c))
+                    evmax = max(evm,evmax)
+                enddo
+                do l=1,weno_size ! loop over the stencil centered at face i
+                    ll = j + l - weno_scheme
+
+                    rho    = w_aux_cpu(i,ll,k,1)
+                    uu     = w_aux_cpu(i,ll,k,2)
+                    vv     = w_aux_cpu(i,ll,k,3)
+                    ww     = w_aux_cpu(i,ll,k,4)
+                    h      = w_aux_cpu(i,ll,k,5) 
+                    rhov   = rho*vv
+                    pp     = rho*w_aux_cpu(i,ll,k,6)*rgas0
+
+                    rhoevm = rho*evmax
+                    evm = rhov
+                    c = 0.5_rkind * (evm + rhoevm)
+                    gplus_y_cpu (i,k,1,l) = c
+                    gminus_y_cpu(i,k,1,l) = evm-c
+                    evm = uu * rhov
+                    c = 0.5_rkind * (evm + rhoevm * uu)
+                    gplus_y_cpu (i,k,2,l) = c
+                    gminus_y_cpu(i,k,2,l) = evm-c
+                    evm = vv * rhov + pp
+                    c = 0.5_rkind * (evm + rhoevm * vv)
+                    gplus_y_cpu (i,k,3,l) = c
+                    gminus_y_cpu(i,k,3,l) = evm-c
+                    evm = ww * rhov
+                    c = 0.5_rkind * (evm + rhoevm * ww)
+                    gplus_y_cpu (i,k,4,l) = c
+                    gminus_y_cpu(i,k,4,l) = evm-c
+                    evm =  h  * rhov
+                    c = 0.5_rkind * (evm + evmax * (rho*h-pp))
+                    gplus_y_cpu (i,k,5,l) = c
+                    gminus_y_cpu(i,k,5,l) = evm-c
+                enddo
+!
+!               Reconstruction of the '+' and '-' fluxes
+!
+                wenorec_ord = max(weno_scheme+ep_ord_change_cpu(i,j,k,2),1)
+                call wenorec_rusanov(i,k,nv,nx,nz,gplus_y_cpu,gminus_y_cpu,fhat_cpu,&
+                     weno_scheme,wenorec_ord,weno_version,ng,nx,ny,nz,i,j,k)
+!
             endif
         enddo
 
@@ -919,34 +1688,36 @@ do k=1,nz
 
     enddo
 enddo
-endsubroutine euler_y_hybrid_kernel
+endsubroutine euler_y_hybrid_rusanov_kernel
 
 
-     subroutine wenorec(nvar,vp,vm,vminus,vplus,iweno,wenorec_ord,weno_version)
+     subroutine wenorec_rusanov(ii,jj,nvar,n1,n2,vp,vm,vhat,&
+                       iweno,wenorec_ord,weno_version,ng,mx,my,mz,iii,jjj,kkk)
     
     !    Passed arguments
-         integer :: nvar, iweno, wenorec_ord, weno_version
-         real(rkind), dimension(nvar,2*iweno) :: vm,vp
-         real(rkind), dimension(nvar) :: vminus,vplus
+         integer :: nvar, iweno, wenorec_ord, weno_version, ii, jj, n1, n2
+         integer :: ng,mx,my,mz,iii,jjj,kkk
+         real(rkind), dimension(n1,n2,nvar,2*iweno) :: vm,vp
+         real(rkind), dimension(1-ng:mx+ng,1-ng:my+ng,1-ng:mz+ng,nvar) :: vhat
     
     !    Local variables
          real(rkind), dimension(-1:4) :: dwe           ! linear weights
-         real(rkind), dimension(-1:4) :: alfp,alfm     ! alpha_l
-!        real(rkind), dimension(-1:4) :: alfp_map,alfm_map ! alpha_l
          real(rkind), dimension(-1:4) :: betap,betam   ! beta_l
-         real(rkind), dimension(-1:4) :: betazp,betazm ! betaz_l
-         real(rkind), dimension(-1:4) :: omp,omm       ! WENO weights
+         real(rkind) :: vminus, vplus
     !    
          integer :: i,l,m
          real(rkind) :: c0,c1,c2,c3,c4,d0,d1,d2,d3,summ,sump
-         real(rkind) :: eps40,tau5p,tau5m
-    !    
+         real(rkind) :: tau5p,tau5m,eps40
+    !
          if (wenorec_ord==1) then ! Godunov
     !    
              i = iweno ! index of intermediate node to perform reconstruction
     !    
-             vminus(1:nvar) = vp(1:nvar,i)
-             vplus (1:nvar) = vm(1:nvar,i+1)
+             do m=1,nvar
+              vminus  = vp(ii,jj,m,i)
+              vplus   = vm(ii,jj,m,i+1)
+              vhat(iii,jjj,kkk,m) = vminus+vplus
+             enddo
     !    
          elseif (wenorec_ord==2) then ! WENO-3
     !    
@@ -957,33 +1728,30 @@ endsubroutine euler_y_hybrid_kernel
     !    
              do m=1,nvar
     !    
-                 betap(0)  = (vp(m,i  )-vp(m,i-1))**2
-                 betap(1)  = (vp(m,i+1)-vp(m,i  ))**2
-                 betam(0)  = (vm(m,i+2)-vm(m,i+1))**2
-                 betam(1)  = (vm(m,i+1)-vm(m,i  ))**2
+                 betap(0)  = (vp(ii,jj,m,i  )-vp(ii,jj,m,i-1))**2
+                 betap(1)  = (vp(ii,jj,m,i+1)-vp(ii,jj,m,i  ))**2
+
+                 betam(0)  = (vm(ii,jj,m,i+2)-vm(ii,jj,m,i+1))**2
+                 betam(1)  = (vm(ii,jj,m,i+1)-vm(ii,jj,m,i  ))**2
     !    
                  sump = 0._rkind
                  summ = 0._rkind
                  do l=0,1
-                     alfp(l) = dwe(l)/(0.000001_rkind+betap(l))**2
-                     alfm(l) = dwe(l)/(0.000001_rkind+betam(l))**2
-                     sump = sump + alfp(l)
-                     summ = summ + alfm(l)
+                     betap(l) = dwe(l)/(0.000001_rkind+betap(l))**2
+                     betam(l) = dwe(l)/(0.000001_rkind+betam(l))**2
+                     sump = sump + betap(l)
+                     summ = summ + betam(l)
                  enddo
                  do l=0,1
-                     omp(l) = alfp(l)/sump
-                     omm(l) = alfm(l)/summ
+                     betap(l) = betap(l)/sump
+                     betam(l) = betam(l)/summ
                  enddo
     !    
-                 vminus(m) = omp(0) *(-vp(m,i-1)+3*vp(m,i  )) + omp(1) *( vp(m,i  )+ vp(m,i+1))
-                 vplus(m)  = omm(0) *(-vm(m,i+2)+3*vm(m,i+1)) + omm(1) *( vm(m,i  )+ vm(m,i+1))
+                 vminus = betap(0) *(-vp(ii,jj,m,i-1)+3*vp(ii,jj,m,i  )) + betap(1) *( vp(ii,jj,m,i  )+ vp(ii,jj,m,i+1))
+                 vplus  = betam(0) *(-vm(ii,jj,m,i+2)+3*vm(ii,jj,m,i+1)) + betam(1) *( vm(ii,jj,m,i  )+ vm(ii,jj,m,i+1))
+                 vhat(iii,jjj,kkk,m) = 0.5_rkind*(vminus+vplus)
     !    
              enddo ! end of m-loop
-    !    
-             do m=1,nvar
-                 vminus(m) = 0.5_rkind*vminus(m)
-                 vplus(m)  = 0.5_rkind*vplus(m)
-             enddo
     !    
          elseif (wenorec_ord==3) then ! WENO-5
     !    
@@ -1007,72 +1775,92 @@ endsubroutine euler_y_hybrid_kernel
     !
            do m=1,nvar
     !    
-            betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
-            betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*(     vp(m,i-1)-vp(m,i+1) )**2
-            betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
+            betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+            betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+                       d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+            betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
     !    
-            betam(2) = d0*(vm(m,i+1)-2._rkind*vm(m,i)+vm(m,i-1))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i)+vm(m,i-1))**2
-            betam(1) = d0*(vm(m,i+2)-2._rkind*vm(m,i+1)+vm(m,i))**2+d1*(     vm(m,i+2)-vm(m,i) )**2
-            betam(0) = d0*(vm(m,i+1)-2._rkind*vm(m,i+2)+vm(m,i+3))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i+2)+vm(m,i+3))**2
+            betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+            betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+                       d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+            betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
     !    
             sump = 0._rkind
             summ = 0._rkind
             do l=0,2
-             alfp(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
-             alfm(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
-             sump = sump + alfp(l)
-             summ = summ + alfm(l)
+             betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+             betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+             sump = sump + betap(l)
+             summ = summ + betam(l)
             enddo
             do l=0,2
-             omp(l) = alfp(l)/sump
-             omm(l) = alfm(l)/summ
+             betap(l) = betap(l)/sump
+             betam(l) = betam(l)/summ
             enddo
     !
-            vminus(m)   = omp(2)*(c0*vp(m,i  )+c1*vp(m,i+1)+c2*vp(m,i+2)) + &
-              & omp(1)*(c2*vp(m,i-1)+c1*vp(m,i  )+c0*vp(m,i+1)) + omp(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i  ))
-            vplus(m)   = omm(2)*(c0*vm(m,i+1)+c1*vm(m,i  )+c2*vm(m,i-1)) +  &
-              & omm(1)*(c2*vm(m,i+2)+c1*vm(m,i+1)+c0*vm(m,i  )) + omm(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
+            vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+                     betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+                     betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+            vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+                     betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+                     betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
     !    
+            vhat(iii,jjj,kkk,m) = vminus+vplus
+    !
            enddo ! end of m-loop 
     !
           else ! WENO 5Z 
     !              
            do m=1,nvar
     !
-            betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
-            betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*(     vp(m,i-1)-vp(m,i+1) )**2
-            betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
+            betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+            betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+                       d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+            betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
     !
-            betam(2) = d0*(vm(m,i+1)-2._rkind*vm(m,i)+vm(m,i-1))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i)+vm(m,i-1))**2
-            betam(1) = d0*(vm(m,i+2)-2._rkind*vm(m,i+1)+vm(m,i))**2+d1*(     vm(m,i+2)-vm(m,i) )**2
-            betam(0) = d0*(vm(m,i+1)-2._rkind*vm(m,i+2)+vm(m,i+3))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i+2)+vm(m,i+3))**2
+            betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+            betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+                       d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+            betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
     !
-            tau5p = abs(betap(0)-betap(2))
-            tau5m = abs(betam(0)-betam(2))
             eps40 = 1.D-40
+            tau5p = abs(betap(0)-betap(2))+eps40
+            tau5m = abs(betam(0)-betam(2))+eps40
     !
             do l=0,2
-             betazp(l) = (betap(l)+eps40)/(betap(l)+eps40+tau5p)
-             betazm(l) = (betam(l)+eps40)/(betam(l)+eps40+tau5m)
+             betap(l) = (betap(l)+eps40)/(betap(l)+tau5p)
+             betam(l) = (betam(l)+eps40)/(betam(l)+tau5m)
             enddo
     !
             sump = 0._rkind
             summ = 0._rkind
             do l=0,2
-             alfp(l) = dwe(l)/betazp(l)
-             alfm(l) = dwe(l)/betazm(l)
-             sump = sump + alfp(l)
-             summ = summ + alfm(l)
+             betap(l) = dwe(l)/betap(l)
+             betam(l) = dwe(l)/betam(l)
+             sump = sump + betap(l)
+             summ = summ + betam(l)
             enddo
             do l=0,2
-             omp(l) = alfp(l)/sump
-             omm(l) = alfm(l)/summ
+             betap(l) = betap(l)/sump
+             betam(l) = betam(l)/summ
             enddo
     !
-            vminus(m)   = omp(2)*(c0*vp(m,i  )+c1*vp(m,i+1)+c2*vp(m,i+2)) + &
-              & omp(1)*(c2*vp(m,i-1)+c1*vp(m,i  )+c0*vp(m,i+1)) + omp(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i  ))
-            vplus(m)   = omm(2)*(c0*vm(m,i+1)+c1*vm(m,i  )+c2*vm(m,i-1)) +  &
-              & omm(1)*(c2*vm(m,i+2)+c1*vm(m,i+1)+c0*vm(m,i  )) + omm(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
+            vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+                     betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+                     betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+            vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+                     betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+                     betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
+    !
+            vhat(iii,jjj,kkk,m) = vminus+vplus
     !
            enddo ! end of m-loop
     
@@ -1094,58 +1882,341 @@ endsubroutine euler_y_hybrid_kernel
     !    
           do m=1,nvar
     !    
-           betap(3)= d1*(-11*vp(m,  i)+18*vp(m,i+1)- 9*vp(m,i+2)+ 2*vp(m,i+3))**2+&
-           &  d2*(  2*vp(m,  i)- 5*vp(m,i+1)+ 4*vp(m,i+2)-   vp(m,i+3))**2+ &
-           & d3*(   -vp(m,  i)+ 3*vp(m,i+1)- 3*vp(m,i+2)+   vp(m,i+3))**2
-           betap(2)= d1*(- 2*vp(m,i-1)- 3*vp(m,i  )+ 6*vp(m,i+1)-   vp(m,i+2))**2+&
-           &  d2*(    vp(m,i-1)- 2*vp(m,i  )+   vp(m,i+1)             )**2+&
-           &  d3*(   -vp(m,i-1)+ 3*vp(m,i  )- 3*vp(m,i+1)+   vp(m,i+2))**2
-           betap(1)= d1*(    vp(m,i-2)- 6*vp(m,i-1)+ 3*vp(m,i  )+ 2*vp(m,i+1))**2+&
-           &  d2*( vp(m,i-1)- 2*vp(m,i  )+   vp(m,i+1))**2+ &
-           &  d3*(   -vp(m,i-2)+ 3*vp(m,i-1)- 3*vp(m,i  )+   vp(m,i+1))**2
-           betap(0)= d1*(- 2*vp(m,i-3)+ 9*vp(m,i-2)-18*vp(m,i-1)+11*vp(m,i  ))**2+&
-           &  d2*(-   vp(m,i-3)+ 4*vp(m,i-2)- 5*vp(m,i-1)+ 2*vp(m,i  ))**2+&
-           &  d3*(   -vp(m,i-3)+ 3*vp(m,i-2)- 3*vp(m,i-1)+   vp(m,i  ))**2
+           betap(3)= d1*(-11*vp(ii,jj,m,  i)+18*vp(ii,jj,m,i+1)- 9*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))**2+&
+              d2*(  2*vp(ii,jj,m,  i)- 5*vp(ii,jj,m,i+1)+ 4*vp(ii,jj,m,i+2)-   vp(ii,jj,m,i+3))**2+ &
+             d3*(   -vp(ii,jj,m,  i)+ 3*vp(ii,jj,m,i+1)- 3*vp(ii,jj,m,i+2)+   vp(ii,jj,m,i+3))**2
+           betap(2)= d1*(- 2*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1)-   vp(ii,jj,m,i+2))**2+&
+              d2*(    vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1)             )**2+&
+              d3*(   -vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )- 3*vp(ii,jj,m,i+1)+   vp(ii,jj,m,i+2))**2
+           betap(1)= d1*(    vp(ii,jj,m,i-2)- 6*vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )+ 2*vp(ii,jj,m,i+1))**2+&
+              d2*( vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2+ &
+              d3*(   -vp(ii,jj,m,i-2)+ 3*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2
+           betap(0)= d1*(- 2*vp(ii,jj,m,i-3)+ 9*vp(ii,jj,m,i-2)-18*vp(ii,jj,m,i-1)+11*vp(ii,jj,m,i  ))**2+&
+              d2*(-   vp(ii,jj,m,i-3)+ 4*vp(ii,jj,m,i-2)- 5*vp(ii,jj,m,i-1)+ 2*vp(ii,jj,m,i  ))**2+&
+              d3*(   -vp(ii,jj,m,i-3)+ 3*vp(ii,jj,m,i-2)- 3*vp(ii,jj,m,i-1)+   vp(ii,jj,m,i  ))**2
     !    
-           betam(3)= d1*(-11*vm(m,i+1)+18*vm(m,i  )- 9*vm(m,i-1)+ 2*vm(m,i-2))**2+&
-           &  d2*(  2*vm(m,i+1)- 5*vm(m,i  )+ 4*vm(m,i-1)-   vm(m,i-2))**2+&
-           &  d3*(   -vm(m,i+1)+ 3*vm(m,i  )- 3*vm(m,i-1)+   vm(m,i-2))**2
-           betam(2)= d1*(- 2*vm(m,i+2)- 3*vm(m,i+1)+ 6*vm(m,i  )-   vm(m,i-1))**2+&
-           &  d2*(    vm(m,i+2)- 2*vm(m,i+1)+   vm(m,i  )             )**2+&
-           &  d3*(   -vm(m,i+2)+ 3*vm(m,i+1)- 3*vm(m,i  )+   vm(m,i-1))**2
-           betam(1)= d1*(    vm(m,i+3)- 6*vm(m,i+2)+ 3*vm(m,i+1)+ 2*vm(m,i  ))**2+&
-           &  d2*(                 vm(m,i+2)- 2*vm(m,i+1)+   vm(m,i  ))**2+&
-           &  d3*(   -vm(m,i+3)+ 3*vm(m,i+2)- 3*vm(m,i+1)+   vm(m,i  ))**2
-           betam(0)= d1*(- 2*vm(m,i+4)+ 9*vm(m,i+3)-18*vm(m,i+2)+11*vm(m,i+1))**2+&
-           &  d2*(-   vm(m,i+4)+ 4*vm(m,i+3)- 5*vm(m,i+2)+ 2*vm(m,i+1))**2+&
-           &  d3*(   -vm(m,i+4)+ 3*vm(m,i+3)- 3*vm(m,i+2)+   vm(m,i+1))**2 
+           betam(3)= d1*(-11*vm(ii,jj,m,i+1)+18*vm(ii,jj,m,i  )- 9*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))**2+&
+              d2*(  2*vm(ii,jj,m,i+1)- 5*vm(ii,jj,m,i  )+ 4*vm(ii,jj,m,i-1)-   vm(ii,jj,m,i-2))**2+&
+              d3*(   -vm(ii,jj,m,i+1)+ 3*vm(ii,jj,m,i  )- 3*vm(ii,jj,m,i-1)+   vm(ii,jj,m,i-2))**2
+           betam(2)= d1*(- 2*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  )-   vm(ii,jj,m,i-1))**2+&
+              d2*(    vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  )             )**2+&
+              d3*(   -vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)- 3*vm(ii,jj,m,i  )+   vm(ii,jj,m,i-1))**2
+           betam(1)= d1*(    vm(ii,jj,m,i+3)- 6*vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)+ 2*vm(ii,jj,m,i  ))**2+&
+              d2*(                 vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2+&
+              d3*(   -vm(ii,jj,m,i+3)+ 3*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2
+           betam(0)= d1*(- 2*vm(ii,jj,m,i+4)+ 9*vm(ii,jj,m,i+3)-18*vm(ii,jj,m,i+2)+11*vm(ii,jj,m,i+1))**2+&
+              d2*(-   vm(ii,jj,m,i+4)+ 4*vm(ii,jj,m,i+3)- 5*vm(ii,jj,m,i+2)+ 2*vm(ii,jj,m,i+1))**2+&
+              d3*(   -vm(ii,jj,m,i+4)+ 3*vm(ii,jj,m,i+3)- 3*vm(ii,jj,m,i+2)+   vm(ii,jj,m,i+1))**2 
     !    
            sump = 0._rkind
            summ = 0._rkind
            do l=0,3
-            alfp(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
-            alfm(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
-            sump = sump + alfp(l)
-            summ = summ + alfm(l)
+            betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+            betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+            sump = sump + betap(l)
+            summ = summ + betam(l)
            enddo
            do l=0,3
-            omp(l) = alfp(l)/sump
-            omm(l) = alfm(l)/summ
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
            enddo
     !    
-           vminus(m)   = omp(3)*( 6*vp(m,i  )+26*vp(m,i+1)-10*vp(m,i+2)+ 2*vp(m,i+3))+&
-            omp(2)*(-2*vp(m,i-1)+14*vp(m,i  )+14*vp(m,i+1)- 2*vp(m,i+2))+&
-            omp(1)*( 2*vp(m,i-2)-10*vp(m,i-1)+26*vp(m,i  )+ 6*vp(m,i+1))+&
-            omp(0)*(-6*vp(m,i-3)+26*vp(m,i-2)-46*vp(m,i-1)+50*vp(m,i  ))
-           vplus(m)   =  omm(3)*( 6*vm(m,i+1)+26*vm(m,i  )-10*vm(m,i-1)+ 2*vm(m,i-2))+&
-            omm(2)*(-2*vm(m,i+2)+14*vm(m,i+1)+14*vm(m,i  )- 2*vm(m,i-1))+&
-            omm(1)*( 2*vm(m,i+3)-10*vm(m,i+2)+26*vm(m,i+1)+ 6*vm(m,i  ))+&
-            omm(0)*(-6*vm(m,i+4)+26*vm(m,i+3)-46*vm(m,i+2)+50*vm(m,i+1))
+           vminus = betap(3)*( 6*vp(ii,jj,m,i  )+26*vp(ii,jj,m,i+1)-10*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))+&
+            betap(2)*(-2*vp(ii,jj,m,i-1)+14*vp(ii,jj,m,i  )+14*vp(ii,jj,m,i+1)- 2*vp(ii,jj,m,i+2))+&
+            betap(1)*( 2*vp(ii,jj,m,i-2)-10*vp(ii,jj,m,i-1)+26*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1))+&
+            betap(0)*(-6*vp(ii,jj,m,i-3)+26*vp(ii,jj,m,i-2)-46*vp(ii,jj,m,i-1)+50*vp(ii,jj,m,i  ))
+           vplus  =  betam(3)*( 6*vm(ii,jj,m,i+1)+26*vm(ii,jj,m,i  )-10*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))+&
+            betam(2)*(-2*vm(ii,jj,m,i+2)+14*vm(ii,jj,m,i+1)+14*vm(ii,jj,m,i  )- 2*vm(ii,jj,m,i-1))+&
+            betam(1)*( 2*vm(ii,jj,m,i+3)-10*vm(ii,jj,m,i+2)+26*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  ))+&
+            betam(0)*(-6*vm(ii,jj,m,i+4)+26*vm(ii,jj,m,i+3)-46*vm(ii,jj,m,i+2)+50*vm(ii,jj,m,i+1))
     !    
+            vhat(iii,jjj,kkk,m) = (vminus+vplus)/24._rkind
+    !
           enddo ! end of m-loop 
     !    
-          vminus = vminus/24._rkind
-          vplus  = vplus /24._rkind
+         else
+          write(*,*) 'Error! WENO scheme not implemented'
+          stop
+         endif
+    
+    endsubroutine wenorec_rusanov
+
+     subroutine wenorec(ii,jj,nvar,n1,n2,vp,vm,vhat,iweno,wenorec_ord,weno_version,rho0,u0)
+    
+    !    Passed arguments
+         integer :: nvar, iweno, wenorec_ord, weno_version, ii, jj, n1, n2
+         real(rkind), dimension(n1,n2,nvar,2*iweno) :: vm,vp
+         real(rkind), dimension(nvar) :: vhat
+         real(rkind) :: rho0, u0
+    
+    !    Local variables
+         real(rkind), dimension(-1:4) :: dwe           ! linear weights
+         real(rkind), dimension(-1:4) :: betap,betam   ! beta_l
+         real(rkind), dimension(   5) :: betascale
+         real(rkind) :: vminus, vplus
+    !    
+         integer :: i,l,m
+         real(rkind) :: c0,c1,c2,c3,c4,d0,d1,d2,d3,summ,sump
+         real(rkind) :: tau5p,tau5m,eps40
+         real(rkind) :: u0_2, rho0_2u0_2, rho0_2u0_4
+    !
+         u0_2       = u0*u0
+         rho0_2u0_2 = rho0*rho0*u0_2
+         rho0_2u0_4 = rho0_2u0_2*u0_2
+         betascale(1) = 1._rkind/rho0_2u0_2
+         betascale(2) = betascale(1)
+         betascale(3) = betascale(1)
+         betascale(4) = 1._rkind/rho0_2u0_4
+         betascale(5) = betascale(4)
+    !    
+         if (wenorec_ord==1) then ! Godunov
+    !    
+             i = iweno ! index of intermediate node to perform reconstruction
+    !    
+             do m=1,nvar
+              vminus  = vp(ii,jj,m,i)
+              vplus   = vm(ii,jj,m,i+1)
+              vhat(m) = vminus+vplus
+             enddo
+    !    
+         elseif (wenorec_ord==2) then ! WENO-3
+    !    
+             i = iweno ! index of intermediate node to perform reconstruction
+    !    
+             dwe(1)   = 2._rkind/3._rkind
+             dwe(0)   = 1._rkind/3._rkind
+    !    
+             do m=1,nvar
+    !    
+                 betap(0)  = (vp(ii,jj,m,i  )-vp(ii,jj,m,i-1))**2
+                 betap(1)  = (vp(ii,jj,m,i+1)-vp(ii,jj,m,i  ))**2
+                 betap(1) = betascale(m)*betap(1)
+                 betap(0) = betascale(m)*betap(0)
+
+                 betam(0)  = (vm(ii,jj,m,i+2)-vm(ii,jj,m,i+1))**2
+                 betam(1)  = (vm(ii,jj,m,i+1)-vm(ii,jj,m,i  ))**2
+                 betam(1) = betascale(m)*betam(1)
+                 betam(0) = betascale(m)*betam(0)
+    !    
+                 sump = 0._rkind
+                 summ = 0._rkind
+                 do l=0,1
+                     betap(l) = dwe(l)/(0.000001_rkind+betap(l))**2
+                     betam(l) = dwe(l)/(0.000001_rkind+betam(l))**2
+                     sump = sump + betap(l)
+                     summ = summ + betam(l)
+                 enddo
+                 do l=0,1
+                     betap(l) = betap(l)/sump
+                     betam(l) = betam(l)/summ
+                 enddo
+    !    
+                 vminus = betap(0) *(-vp(ii,jj,m,i-1)+3*vp(ii,jj,m,i  )) + betap(1) *( vp(ii,jj,m,i  )+ vp(ii,jj,m,i+1))
+                 vplus  = betam(0) *(-vm(ii,jj,m,i+2)+3*vm(ii,jj,m,i+1)) + betam(1) *( vm(ii,jj,m,i  )+ vm(ii,jj,m,i+1))
+                 vhat(m) = 0.5_rkind*(vminus+vplus)
+    !    
+             enddo ! end of m-loop
+    !    
+         elseif (wenorec_ord==3) then ! WENO-5
+    !    
+          i = iweno ! index of intermediate node to perform reconstruction
+    !    
+          dwe( 0) = 1._rkind/10._rkind
+          dwe( 1) = 6._rkind/10._rkind
+          dwe( 2) = 3._rkind/10._rkind
+    !      
+    !     JS
+          d0 = 13._rkind/12._rkind
+          d1 = 1._rkind/4._rkind
+    !     Weights for polynomial reconstructions
+          c0 = 1._rkind/3._rkind
+          c1 = 5._rkind/6._rkind
+          c2 =-1._rkind/6._rkind
+          c3 =-7._rkind/6._rkind
+          c4 =11._rkind/6._rkind
+    !
+          if (weno_version==0) then ! Standard JS WENO 5
+    !
+           do m=1,nvar
+    !    
+            betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+            betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+                       d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+            betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
+            betap(2) = betascale(m)*betap(2)
+            betap(1) = betascale(m)*betap(1)
+            betap(0) = betascale(m)*betap(0)
+    !    
+            betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+            betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+                       d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+            betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
+            betam(2) = betascale(m)*betam(2)
+            betam(1) = betascale(m)*betam(1)
+            betam(0) = betascale(m)*betam(0)
+    !    
+            sump = 0._rkind
+            summ = 0._rkind
+            do l=0,2
+             betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+             betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+             sump = sump + betap(l)
+             summ = summ + betam(l)
+            enddo
+            do l=0,2
+             betap(l) = betap(l)/sump
+             betam(l) = betam(l)/summ
+            enddo
+    !
+            vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+                     betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+                     betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+            vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+                     betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+                     betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
+    !    
+            vhat(m) = vminus+vplus
+    !
+           enddo ! end of m-loop 
+    !
+          else ! WENO 5Z 
+    !              
+           do m=1,nvar
+    !
+            betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+            betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+                       d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+            betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+                       d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
+            betap(2) = betascale(m)*betap(2)
+            betap(1) = betascale(m)*betap(1)
+            betap(0) = betascale(m)*betap(0)
+    !
+            betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+            betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+                       d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+            betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+                       d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
+            betam(2) = betascale(m)*betam(2)
+            betam(1) = betascale(m)*betam(1)
+            betam(0) = betascale(m)*betam(0)
+    !
+            eps40 = 1.D-40
+            tau5p = abs(betap(0)-betap(2))+eps40
+            tau5m = abs(betam(0)-betam(2))+eps40
+    !
+            do l=0,2
+             betap(l) = (betap(l)+eps40)/(betap(l)+tau5p)
+             betam(l) = (betam(l)+eps40)/(betam(l)+tau5m)
+            enddo
+    !
+            sump = 0._rkind
+            summ = 0._rkind
+            do l=0,2
+             betap(l) = dwe(l)/betap(l)
+             betam(l) = dwe(l)/betam(l)
+             sump = sump + betap(l)
+             summ = summ + betam(l)
+            enddo
+            do l=0,2
+             betap(l) = betap(l)/sump
+             betam(l) = betam(l)/summ
+            enddo
+    !
+            vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+                     betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+                     betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+            vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+                     betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+                     betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
+    !
+            vhat(m) = vminus+vplus
+    !
+           enddo ! end of m-loop
+    
+          endif
+    !    
+         elseif (wenorec_ord==4) then ! WENO-7
+    !    
+          i = iweno ! index of intermediate node to perform reconstruction
+    !    
+          dwe( 0) = 1._rkind/35._rkind
+          dwe( 1) = 12._rkind/35._rkind
+          dwe( 2) = 18._rkind/35._rkind
+          dwe( 3) = 4._rkind/35._rkind
+    !    
+    !     JS weights
+          d1 = 1._rkind/36._rkind
+          d2 = 13._rkind/12._rkind
+          d3 = 781._rkind/720._rkind
+    !    
+          do m=1,nvar
+    !    
+           betap(3)= d1*(-11*vp(ii,jj,m,  i)+18*vp(ii,jj,m,i+1)- 9*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))**2+&
+              d2*(  2*vp(ii,jj,m,  i)- 5*vp(ii,jj,m,i+1)+ 4*vp(ii,jj,m,i+2)-   vp(ii,jj,m,i+3))**2+ &
+             d3*(   -vp(ii,jj,m,  i)+ 3*vp(ii,jj,m,i+1)- 3*vp(ii,jj,m,i+2)+   vp(ii,jj,m,i+3))**2
+           betap(2)= d1*(- 2*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1)-   vp(ii,jj,m,i+2))**2+&
+              d2*(    vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1)             )**2+&
+              d3*(   -vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )- 3*vp(ii,jj,m,i+1)+   vp(ii,jj,m,i+2))**2
+           betap(1)= d1*(    vp(ii,jj,m,i-2)- 6*vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )+ 2*vp(ii,jj,m,i+1))**2+&
+              d2*( vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2+ &
+              d3*(   -vp(ii,jj,m,i-2)+ 3*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2
+           betap(0)= d1*(- 2*vp(ii,jj,m,i-3)+ 9*vp(ii,jj,m,i-2)-18*vp(ii,jj,m,i-1)+11*vp(ii,jj,m,i  ))**2+&
+              d2*(-   vp(ii,jj,m,i-3)+ 4*vp(ii,jj,m,i-2)- 5*vp(ii,jj,m,i-1)+ 2*vp(ii,jj,m,i  ))**2+&
+              d3*(   -vp(ii,jj,m,i-3)+ 3*vp(ii,jj,m,i-2)- 3*vp(ii,jj,m,i-1)+   vp(ii,jj,m,i  ))**2
+           betap(3) = betascale(m)*betap(3)
+           betap(2) = betascale(m)*betap(2)
+           betap(1) = betascale(m)*betap(1)
+           betap(0) = betascale(m)*betap(0)
+    !    
+           betam(3)= d1*(-11*vm(ii,jj,m,i+1)+18*vm(ii,jj,m,i  )- 9*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))**2+&
+              d2*(  2*vm(ii,jj,m,i+1)- 5*vm(ii,jj,m,i  )+ 4*vm(ii,jj,m,i-1)-   vm(ii,jj,m,i-2))**2+&
+              d3*(   -vm(ii,jj,m,i+1)+ 3*vm(ii,jj,m,i  )- 3*vm(ii,jj,m,i-1)+   vm(ii,jj,m,i-2))**2
+           betam(2)= d1*(- 2*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  )-   vm(ii,jj,m,i-1))**2+&
+              d2*(    vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  )             )**2+&
+              d3*(   -vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)- 3*vm(ii,jj,m,i  )+   vm(ii,jj,m,i-1))**2
+           betam(1)= d1*(    vm(ii,jj,m,i+3)- 6*vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)+ 2*vm(ii,jj,m,i  ))**2+&
+              d2*(                 vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2+&
+              d3*(   -vm(ii,jj,m,i+3)+ 3*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2
+           betam(0)= d1*(- 2*vm(ii,jj,m,i+4)+ 9*vm(ii,jj,m,i+3)-18*vm(ii,jj,m,i+2)+11*vm(ii,jj,m,i+1))**2+&
+              d2*(-   vm(ii,jj,m,i+4)+ 4*vm(ii,jj,m,i+3)- 5*vm(ii,jj,m,i+2)+ 2*vm(ii,jj,m,i+1))**2+&
+              d3*(   -vm(ii,jj,m,i+4)+ 3*vm(ii,jj,m,i+3)- 3*vm(ii,jj,m,i+2)+   vm(ii,jj,m,i+1))**2 
+           betam(3) = betascale(m)*betam(3)
+           betam(2) = betascale(m)*betam(2)
+           betam(1) = betascale(m)*betam(1)
+           betam(0) = betascale(m)*betam(0)
+    !    
+           sump = 0._rkind
+           summ = 0._rkind
+           do l=0,3
+            betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+            betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+            sump = sump + betap(l)
+            summ = summ + betam(l)
+           enddo
+           do l=0,3
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
+           enddo
+    !    
+           vminus = betap(3)*( 6*vp(ii,jj,m,i  )+26*vp(ii,jj,m,i+1)-10*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))+&
+            betap(2)*(-2*vp(ii,jj,m,i-1)+14*vp(ii,jj,m,i  )+14*vp(ii,jj,m,i+1)- 2*vp(ii,jj,m,i+2))+&
+            betap(1)*( 2*vp(ii,jj,m,i-2)-10*vp(ii,jj,m,i-1)+26*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1))+&
+            betap(0)*(-6*vp(ii,jj,m,i-3)+26*vp(ii,jj,m,i-2)-46*vp(ii,jj,m,i-1)+50*vp(ii,jj,m,i  ))
+           vplus  =  betam(3)*( 6*vm(ii,jj,m,i+1)+26*vm(ii,jj,m,i  )-10*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))+&
+            betam(2)*(-2*vm(ii,jj,m,i+2)+14*vm(ii,jj,m,i+1)+14*vm(ii,jj,m,i  )- 2*vm(ii,jj,m,i-1))+&
+            betam(1)*( 2*vm(ii,jj,m,i+3)-10*vm(ii,jj,m,i+2)+26*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  ))+&
+            betam(0)*(-6*vm(ii,jj,m,i+4)+26*vm(ii,jj,m,i+3)-46*vm(ii,jj,m,i+2)+50*vm(ii,jj,m,i+1))
+    !    
+            vhat(m) = (vminus+vplus)/24._rkind
+    !
+          enddo ! end of m-loop 
     !    
          else
           write(*,*) 'Error! WENO scheme not implemented'
@@ -1337,24 +2408,25 @@ endsubroutine euler_y_hybrid_kernel
         er(4,5)   =  uu ! -uu
         er(5,5)   =  vv
 
-
     endsubroutine eigenvectors_z
 
-     subroutine compute_roe_average(nx, ny, nz, ng, i, ip, j, jp, k, kp, w_aux_cpu, cp0, cv0, &
+     subroutine compute_roe_average(nx, ny, nz, ng, i, ip, j, jp, k, kp, w_aux_cpu, rgas0, &
                                                       b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_cpu, indx_cp_l, indx_cp_r,&
-                                                      calorically_perfect,tol_iter_nr)
+                                                      calorically_perfect,tol_iter_nr,t0)
         integer :: ng,i,ip,j,jp,k,kp,indx_cp_l,indx_cp_r,calorically_perfect
         integer :: nx,ny,nz
-        real(rkind), intent(in) :: cp0, cv0, tol_iter_nr
+        real(rkind), intent(in) :: rgas0, tol_iter_nr,t0
         real(rkind), intent(out) :: b1, b2, b3, uu, vv, ww, ci, h, c
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in) :: w_aux_cpu 
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         real(rkind) :: up, vp, wp, qqp, hp, r, rp1, cc, qq, gam, gm1
         integer :: ll,iter,max_iter
-        real(rkind) :: tt,gm1loc,hbar,ttp,told,num,den,gamloc,cploc,tpow,tpowp,p_rho,p_e,etot,rho
+        real(rkind) :: tt,gm1loc,hbar,ttp,told,num,den,gamloc,cploc,tpow,tpowp,p_rho,p_e,etot,rho,cp0,cv0
 !
         max_iter = 50
 !
+        cp0 = cp_coeff_cpu(0)
+        cv0 = cp_coeff_cpu(0)-rgas0
         gam = cp0/cv0
         gm1 = gam-1._rkind
 !       Compute Roe average
@@ -1388,49 +2460,50 @@ endsubroutine euler_y_hybrid_kernel
         qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !
         if (calorically_perfect==1) then
-         cc       = gm1 * (h - qq) 
-         tt       = cc/gam
+         cc       = gm1 * (h-qq+cv0*t0) ! cv0*t0 needed because e = cv*(tt-t0)
+         tt       = cc/gam/rgas0
          gm1loc   = gm1
         else
-         hbar      =  (h - qq) - cp0
-         tt        =  w_aux_cpu(i ,j ,k ,6)
-         ttp       =  w_aux_cpu(ip,jp,kp,6)
-         tt        =  (r*ttp +tt)*rp1
+         hbar      = h - qq - cp_coeff_cpu(indx_cp_r+1)*t0
+         tt        = w_aux_cpu(i ,j ,k ,6)
+         ttp       = w_aux_cpu(ip,jp,kp,6)
+         tt        = (r*ttp +tt)*rp1
          told      = tt ! First attempt computed as Roe average of temperature
          do iter=1,max_iter
           num = 0._rkind
           den = 0._rkind
           do ll=indx_cp_l,indx_cp_r
            if (ll==-1) then
-            tpow  = told**ll
+            tpow  = (told/t0)**ll
             den = den+cp_coeff_cpu(ll)*tpow
-            num = num+cp_coeff_cpu(ll)*log(told)
+            num = num+cp_coeff_cpu(ll)*log(told/t0)
            else
-            tpow  = told**ll
-            tpowp = told*tpow
+            tpow  = (told/t0)**ll
+            tpowp = (told/t0)*tpow
             den = den+cp_coeff_cpu(ll)*tpow
             num = num+cp_coeff_cpu(ll)*(tpowp-1._rkind)/(ll+1._rkind)
            endif
           enddo
+          num = num*t0
           tt = told+(hbar-num)/den
-          if (abs(tt-told)<tol_iter_nr) exit
-           told = tt
+          if (abs(tt-told) < tol_iter_nr) exit
+          told = tt
          enddo
          cploc = 0._rkind
          do ll=indx_cp_l,indx_cp_r
-          cploc = cploc+cp_coeff_cpu(ll)*tt**ll
+          cploc = cploc+cp_coeff_cpu(ll)*(tt/t0)**ll
          enddo
-         gamloc = cploc/(cploc-1._rkind)
+         gamloc = cploc/(cploc-rgas0)
          gm1loc = gamloc-1._rkind
-         cc     =  gamloc*tt
+         cc     = gamloc*tt*rgas0
         endif
 !
         c         =  sqrt(cc) 
         ci        =  1._rkind/c 
 !
-        p_rho     = tt
+        p_rho     = tt*rgas0
         p_e       = rho*gm1loc   ! p_e   = rho * R_gas / Cv
-        etot      = h - tt
+        etot      = h - tt*rgas0
 !
         b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
         b2        = p_e/(rho*cc)
@@ -1508,15 +2581,15 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine force_rhs_1_cpu
 
     subroutine force_var_1_cpu(nx, ny, nz, ng, yn_cpu, fln_cpu, w_cpu, w_aux_cpu, bulkt, fluid_mask_cpu, cv_coeff_cpu, &
-                               indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
+                               indx_cp_l, indx_cp_r, t0, calorically_perfect, tol_iter_nr)
         integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-        real(rkind), intent(in) :: cv0, tol_iter_nr
+        real(rkind), intent(in) :: t0, tol_iter_nr
         real(rkind), dimension(1:), intent(in) :: yn_cpu
         real(rkind), dimension(1:,1:,1:,1:), intent(in) :: fln_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in) :: w_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(inout) :: w_aux_cpu
         integer, dimension(1-ng:,1-ng:,1-ng:), intent(in) :: fluid_mask_cpu
-        real(rkind),    dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+        real(rkind),    dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
         real(rkind), intent(out) :: bulkt
         real(rkind) :: bulk_5,rho,rhou,rhov,rhow,rhoe,ri,uu,vv,ww,qq,ee,tt
         real(rkind) :: dy
@@ -1540,7 +2613,7 @@ endsubroutine euler_y_hybrid_kernel
             ww   = rhow*ri
             qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee = rhoe/rho-qq
-            tt = get_temperature_from_e_dev(ee,w_aux_cpu(i,j,k,6),cv0,cv_coeff_cpu,indx_cp_l,indx_cp_r, &
+            tt = get_temperature_from_e_dev(ee,w_aux_cpu(i,j,k,6),t0,cv_coeff_cpu,indx_cp_l,indx_cp_r, &
                                             calorically_perfect,tol_iter_nr)
             w_aux_cpu(i,j,k,6) = tt
             bulk_5 = bulk_5 + rhou*tt*dy
@@ -1554,13 +2627,13 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine force_var_1_cpu
 !
     subroutine force_var_2_cpu(nx, ny, nz, ng, w_cpu, w_aux_cpu, tbdiff, fluid_mask_cpu, cv_coeff_cpu, indx_cp_l, indx_cp_r, &
-                               cv0, calorically_perfect)
+                               t0, calorically_perfect)
         integer :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-        real(rkind), intent(in) :: tbdiff, cv0
+        real(rkind), intent(in) :: tbdiff, t0
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(inout) :: w_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in) :: w_aux_cpu
         integer, dimension(1-ng:,1-ng:,1-ng:), intent(in) :: fluid_mask_cpu
-        real(rkind),    dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+        real(rkind),    dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
         real(rkind) :: rho,rhou,rhov,rhow,tt,ttnew,ee
         integer :: i,j,k
 !
@@ -1574,7 +2647,7 @@ endsubroutine euler_y_hybrid_kernel
             rhow = w_cpu(i,j,k,4)
             tt   = w_aux_cpu(i,j,k,6)
             ttnew = tt+tbdiff
-            ee = get_e_from_temperature_dev(ttnew, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
+            ee = get_e_from_temperature_dev(ttnew, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
             w_cpu(i,j,k,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
            endif
           enddo
@@ -1722,7 +2795,7 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine visflx_div_cpu
 
     subroutine visflx_cpu(nx, ny, nz, ng, visc_order, &
-            Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+            Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
             u0, l0, w_cpu, w_aux_cpu, fl_cpu, &
             coeff_deriv1_cpu, coeff_deriv2_cpu, &
             dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
@@ -1731,7 +2804,7 @@ endsubroutine euler_y_hybrid_kernel
 
         integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
         integer, intent(in) :: indx_cp_l, indx_cp_r
-        real(rkind), intent(in) :: Prandtl, u0, l0, cp0
+        real(rkind), intent(in) :: Prandtl, u0, l0, t0
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in) :: w_cpu 
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout) :: w_aux_cpu 
         real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout) :: wallprop_cpu 
@@ -1741,7 +2814,7 @@ endsubroutine euler_y_hybrid_kernel
         real(rkind), dimension(1:), intent(in) :: dcsidx_cpu, detady_cpu, dzitdz_cpu 
         real(rkind), dimension(1:), intent(in) :: dcsidxs_cpu, detadys_cpu, dzitdzs_cpu
         real(rkind), dimension(1:), intent(in) :: dcsidx2_cpu, detady2_cpu, dzitdz2_cpu
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         integer     :: i,j,k,l,ll
         real(rkind) :: ccl,clapl
         real(rkind) :: sig11,sig12,sig13
@@ -1775,11 +2848,11 @@ endsubroutine euler_y_hybrid_kernel
            mu = w_aux_cpu(i,j,k,7)
 
            if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_cpu(0)
            else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-             cploc = cploc+cp_coeff_cpu(ll)*tt**ll
+             cploc = cploc+cp_coeff_cpu(ll)*(tt/t0)**ll
             enddo
            endif
      
@@ -1934,7 +3007,7 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine visflx_cpu
 
     subroutine visflx_nosensor_cpu(nx, ny, nz, ng, visc_order, &
-            Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+            Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
             u0, l0, w_cpu, w_aux_cpu, fl_cpu, &
             coeff_deriv1_cpu, coeff_deriv2_cpu, &
             dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
@@ -1943,7 +3016,7 @@ endsubroutine euler_y_hybrid_kernel
 
         integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
         integer, intent(in) :: indx_cp_l, indx_cp_r
-        real(rkind), intent(in) :: Prandtl, u0, l0, cp0
+        real(rkind), intent(in) :: Prandtl, u0, l0, t0
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in) :: w_cpu 
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout) :: w_aux_cpu 
         real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout) :: wallprop_cpu 
@@ -1953,7 +3026,7 @@ endsubroutine euler_y_hybrid_kernel
         real(rkind), dimension(1:), intent(in) :: dcsidx_cpu, detady_cpu, dzitdz_cpu 
         real(rkind), dimension(1:), intent(in) :: dcsidxs_cpu, detadys_cpu, dzitdzs_cpu
         real(rkind), dimension(1:), intent(in) :: dcsidx2_cpu, detady2_cpu, dzitdz2_cpu
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         integer     :: i,j,k,l,ll
         real(rkind) :: ccl,clapl
         real(rkind) :: sig11,sig12,sig13
@@ -1987,11 +3060,11 @@ endsubroutine euler_y_hybrid_kernel
            mu = w_aux_cpu(i,j,k,7)
 
            if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_cpu(0)
            else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-             cploc = cploc+cp_coeff_cpu(ll)*tt**ll
+             cploc = cploc+cp_coeff_cpu(ll)*(tt/t0)**ll
             enddo
            endif
      
@@ -2134,20 +3207,20 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine visflx_nosensor_cpu
 
     subroutine visflx_reduced_ord2_cpu(nx, ny, nz, ng, &
-            Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+            Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
             u0, l0, w_cpu, w_aux_cpu, fl_cpu, &
             x_cpu, y_cpu, z_cpu, wallprop_cpu, update_sensor)
 
         integer, intent(in) :: nx, ny, nz, ng, calorically_perfect
         integer, intent(in) :: indx_cp_l, indx_cp_r
-        real(rkind), intent(in) :: Prandtl, u0, l0, cp0 
+        real(rkind), intent(in) :: Prandtl, u0, l0, t0 
         integer, intent(in) :: update_sensor
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in) :: w_cpu 
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout) :: w_aux_cpu 
         real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout) :: wallprop_cpu 
         real(rkind), dimension(1:,1:,1:, 1:), intent(inout) :: fl_cpu
         real(rkind), dimension(1-ng:), intent(in) :: x_cpu, y_cpu, z_cpu
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         integer     :: i,j,k,l,ll
         real(rkind) :: dxl,dyl,dzl
         real(rkind) :: sig11,sig12,sig13
@@ -2174,11 +3247,11 @@ endsubroutine euler_y_hybrid_kernel
            mu = w_aux_cpu(i,j,k,7)
 
            if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_cpu(0)
            else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-             cploc = cploc+cp_coeff_cpu(ll)*tt**ll
+             cploc = cploc+cp_coeff_cpu(ll)*(tt/t0)**ll
             enddo
            endif
      
@@ -2259,7 +3332,7 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine visflx_reduced_ord2_cpu
 
     subroutine visflx_reduced_cpu(nx, ny, nz, ng, visc_order, &
-            Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+            Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
             u0, l0, w_cpu, w_aux_cpu, fl_cpu, &
             coeff_deriv1_cpu, coeff_deriv2_cpu, &
             dcsidx_cpu, detady_cpu, dzitdz_cpu,  &
@@ -2268,7 +3341,7 @@ endsubroutine euler_y_hybrid_kernel
 
         integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
         integer, intent(in) :: indx_cp_l, indx_cp_r
-        real(rkind), intent(in) :: Prandtl, u0, l0, cp0 
+        real(rkind), intent(in) :: Prandtl, u0, l0, t0 
         integer, intent(in) :: update_sensor
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in) :: w_cpu 
         real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout) :: w_aux_cpu 
@@ -2279,7 +3352,7 @@ endsubroutine euler_y_hybrid_kernel
         real(rkind), dimension(1:), intent(in) :: dcsidx_cpu, detady_cpu, dzitdz_cpu 
         real(rkind), dimension(1:), intent(in) :: dcsidxs_cpu, detadys_cpu, dzitdzs_cpu
         real(rkind), dimension(1:), intent(in) :: dcsidx2_cpu, detady2_cpu, dzitdz2_cpu
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         integer     :: i,j,k,l,ll
         real(rkind) :: ccl,clapl
         real(rkind) :: sig11,sig12,sig13
@@ -2313,11 +3386,11 @@ endsubroutine euler_y_hybrid_kernel
            mu = w_aux_cpu(i,j,k,7)
 
            if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_cpu(0)
            else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-             cploc = cploc+cp_coeff_cpu(ll)*tt**ll
+             cploc = cploc+cp_coeff_cpu(ll)*(tt/t0)**ll
             enddo
            endif
      
@@ -2461,17 +3534,17 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine sensor_cpu
 
     subroutine visflx_x_cpu(nx, ny, nz, nv, ng, &
-            Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+            Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
             x_cpu, w_aux_trans_cpu, fl_trans_cpu, fl_cpu)
 
         integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
         integer, intent(in) :: indx_cp_l, indx_cp_r
-        real(rkind), intent(in) :: Prandtl, cp0
+        real(rkind), intent(in) :: Prandtl, t0
         real(rkind), dimension(1:ny,1:nx,1:nz,1:nv), intent(inout) :: fl_trans_cpu
         real(rkind), dimension(1:nx,1:ny,1:nz,1:nv), intent(inout) :: fl_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in) :: w_aux_trans_cpu
         real(rkind), dimension(1-ng:), intent(in) :: x_cpu
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         integer     :: i,j,k,iv,ll
         real(rkind) :: uu,vv,ww,tt,mu,qq
         real(rkind) :: uup,vvp,wwp,ttp,mup,qqp
@@ -2498,12 +3571,12 @@ endsubroutine euler_y_hybrid_kernel
            qqp = 0.5_rkind*(uup*uup+vvp*vvp+wwp*wwp)
 !
            if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_cpu(0)
            else
             ttf = 0.5_rkind*(tt+ttp)
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-             cploc = cploc+cp_coeff_cpu(ll)*ttf**ll
+             cploc = cploc+cp_coeff_cpu(ll)*(ttf/t0)**ll
             enddo
            endif
 !
@@ -2551,16 +3624,16 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine visflx_x_cpu
 
     subroutine visflx_y_cpu(nx, ny, nz, nv, ng, &
-            Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+            Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
             y_cpu, w_aux_cpu, fl_cpu)
 
         integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
         integer, intent(in) :: indx_cp_l, indx_cp_r
-        real(rkind), intent(in) :: Prandtl, cp0
+        real(rkind), intent(in) :: Prandtl, t0
         real(rkind), dimension(1:nx,1:ny,1:nz,1:nv), intent(inout) :: fl_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in) :: w_aux_cpu
         real(rkind), dimension(1-ng:), intent(in) :: y_cpu
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         integer     :: i,j,k,iv,ll
         real(rkind) :: uu,vv,ww,tt,mu,qq
         real(rkind) :: uup,vvp,wwp,ttp,mup,qqp
@@ -2587,12 +3660,12 @@ endsubroutine euler_y_hybrid_kernel
            qqp = 0.5_rkind*(uup*uup+vvp*vvp+wwp*wwp)
 !
            if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_cpu(0)
            else
             ttf = 0.5_rkind*(tt+ttp)
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-             cploc = cploc+cp_coeff_cpu(ll)*ttf**ll
+             cploc = cploc+cp_coeff_cpu(ll)*(ttf/t0)**ll
             enddo
            endif
 !
@@ -2630,16 +3703,16 @@ endsubroutine euler_y_hybrid_kernel
     endsubroutine visflx_y_cpu
 !    
     subroutine visflx_z_cpu(nx, ny, nz, nv, ng, &
-            Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
+            Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect, &
             z_cpu, w_aux_cpu, fl_cpu)
 
         integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
         integer, intent(in) :: indx_cp_l, indx_cp_r
-        real(rkind), intent(in) :: Prandtl, cp0
+        real(rkind), intent(in) :: Prandtl, t0
         real(rkind), dimension(1:nx,1:ny,1:nz,1:nv), intent(inout) :: fl_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in) :: w_aux_cpu
         real(rkind), dimension(1-ng:), intent(in) :: z_cpu
-        real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
         integer     :: i,j,k,iv,ll
         real(rkind) :: uu,vv,ww,tt,mu,qq
         real(rkind) :: uup,vvp,wwp,ttp,mup,qqp
@@ -2666,12 +3739,12 @@ endsubroutine euler_y_hybrid_kernel
            qqp = 0.5_rkind*(uup*uup+vvp*vvp+wwp*wwp)
 !
            if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_cpu(0)
            else
             ttf = 0.5_rkind*(tt+ttp)
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-             cploc = cploc+cp_coeff_cpu(ll)*ttf**ll
+             cploc = cploc+cp_coeff_cpu(ll)*(ttf/t0)**ll
             enddo
            endif
 !
@@ -2754,11 +3827,11 @@ endsubroutine euler_y_hybrid_kernel
          enddo
     endsubroutine recyc_exchange_cpu_3
 
-    subroutine bcextr_sub_cpu(ilat, nx, ny, nz, ng, p0, w_cpu, indx_cp_l, indx_cp_r, cv_coeff_cpu, cv0, calorically_perfect)
+    subroutine bcextr_sub_cpu(ilat, nx, ny, nz, ng, p0, rgas0, w_cpu, indx_cp_l, indx_cp_r, cv_coeff_cpu, t0, calorically_perfect)
 
        integer, intent(in) :: ilat, nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-       real(rkind), intent(in) :: p0, cv0
-       real(rkind), dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+       real(rkind), intent(in) :: p0, t0, rgas0
+       real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout) :: w_cpu
 
        real(rkind) :: rho,rhou,rhov,rhow,tt,ee
@@ -2773,8 +3846,8 @@ endsubroutine euler_y_hybrid_kernel
            rhou = w_cpu(nx,j,k,2)
            rhov = w_cpu(nx,j,k,3)
            rhow = w_cpu(nx,j,k,4)
-           tt   = p0/rho
-           ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
+           tt   = p0/rho/rgas0
+           ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
            w_cpu(nx+l,j,k,1) = rho
            w_cpu(nx+l,j,k,2) = rhou
            w_cpu(nx+l,j,k,3) = rhov
@@ -2792,8 +3865,8 @@ endsubroutine euler_y_hybrid_kernel
            rhou = w_cpu(i,ny,k,2)
            rhov = w_cpu(i,ny,k,3)
            rhow = w_cpu(i,ny,k,4)
-           tt   = p0/rho
-           ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
+           tt   = p0/rho/rgas0
+           ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
            w_cpu(i,ny+l,k,1) = rho
            w_cpu(i,ny+l,k,2) = rhou
            w_cpu(i,ny+l,k,3) = rhov
@@ -2811,15 +3884,16 @@ endsubroutine euler_y_hybrid_kernel
 
      subroutine bc_nr_lat_x_kernel(start_or_end, nr_type, &
                                   nx, ny, nz, ng, nv, w_aux_cpu, w_cpu, fl_cpu, &
-                                  dcsidx_cpu, indx_cp_l, indx_cp_r, cp_coeff_cpu, winf_cpu, calorically_perfect)
+                                  dcsidx_cpu, indx_cp_l, indx_cp_r, cp_coeff_cpu, winf_cpu, calorically_perfect, rgas0,t0)
         integer, intent(in) :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
+        real(rkind), intent(in) :: rgas0,t0
         real(rkind), dimension(3) :: c_one
         real(rkind), dimension(5) :: dw_dn, dwc_dn, ev, dw_dn_outer, dwc_dn_outer
         real(rkind), dimension(5,5) :: el, er
         real(rkind) :: w_target
         integer :: i, j, k, l, m, mm, sgn_dw
         real(rkind) :: df, uu, vv, ww, h, qq, cc, c, ci, b2, b1
-        real(rkind), dimension(indx_cp_l:) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
         real(rkind), dimension(:,:,:,:) :: fl_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,:) :: w_aux_cpu, w_cpu
         real(rkind), dimension(:) :: dcsidx_cpu
@@ -2865,14 +3939,14 @@ do k=1,nz
         tt        = w_aux_cpu(i,j,k,6)
         qq        = 0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !
-        gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
-        cc        = gamloc * tt
+        gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+        cc        = gamloc * tt * rgas0
         c         =  sqrt(cc) 
         ci        =  1._rkind/c 
 !
-        p_rho     = tt
+        p_rho     = tt*rgas0
         p_e       = rho*(gamloc-1._rkind)   ! p_e   = rho * R_gas / Cv
-        etot      = h - tt
+        etot      = h - tt*rgas0
 !
         b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
         b2        = p_e/(rho*cc)
@@ -2948,14 +4022,15 @@ endsubroutine bc_nr_lat_x_kernel
 
      subroutine bc_nr_lat_y_kernel(start_or_end, nr_type, &
                                   nx, ny, nz, ng, nv, w_aux_cpu, w_cpu, fl_cpu, detady_cpu, &
-                                  indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect)
+                                  indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect,rgas0,t0)
         integer, intent(in) :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
+        real(rkind), intent(in) :: rgas0,t0
         real(rkind), dimension(3) :: c_one
         real(rkind), dimension(5) :: dw_dn, dwc_dn, ev
         real(rkind), dimension(5,5) :: el, er
         integer :: i, j, k, l, m, mm, sgn_dw
         real(rkind) :: df, uu, vv, ww, h, qq, cc, c, ci, b2, b1
-        real(rkind), dimension(indx_cp_l:) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
         real(rkind), dimension(:,:,:,:) :: fl_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:) :: w_aux_cpu, w_cpu
         real(rkind), dimension(:) :: detady_cpu
@@ -2994,14 +4069,14 @@ do k=1,nz
         tt        =  w_aux_cpu(i,j,k,6)
         qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !
-        gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
-        cc        = gamloc * tt
+        gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+        cc        = gamloc * tt * rgas0
         c         =  sqrt(cc) 
         ci        =  1._rkind/c 
 !
-        p_rho     = tt
+        p_rho     = tt*rgas0
         p_e       = rho*(gamloc-1._rkind)   ! p_e   = rho * R_gas / Cv
-        etot      = h - tt
+        etot      = h - tt*rgas0
 !
         b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
         b2        = p_e/(rho*cc)
@@ -3072,14 +4147,15 @@ endsubroutine bc_nr_lat_y_kernel
 
      subroutine bc_nr_lat_z_kernel(start_or_end, nr_type, &
                                   nx, ny, nz, ng, nv, w_aux_cpu, w_cpu, fl_cpu, dzitdz_cpu, &
-                                  indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect)
+                                  indx_cp_l, indx_cp_r, cp_coeff_cpu, calorically_perfect,rgas0,t0)
         integer, intent(in) :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
+        real(rkind), intent(in) :: rgas0,t0
         real(rkind), dimension(3) :: c_one
         real(rkind), dimension(5) :: dw_dn, dwc_dn, ev
         real(rkind), dimension(5,5) :: el, er
         integer :: i, j, k, l, m, mm, sgn_dw
         real(rkind) :: df, uu, vv, ww, h, qq, cc, c, ci, b2, b1
-        real(rkind), dimension(indx_cp_l:) :: cp_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
         real(rkind), dimension(:,:,:,:) :: fl_cpu
         real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:) :: w_aux_cpu, w_cpu
         real(rkind), dimension(:) :: dzitdz_cpu
@@ -3118,14 +4194,14 @@ do j=1,ny
         tt        =  w_aux_cpu(i,j,k,6)
         qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !
-        gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
-        cc        = gamloc * tt
+        gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+        cc        = gamloc * tt * rgas0
         c         =  sqrt(cc) 
         ci        =  1._rkind/c 
 !
-        p_rho     = tt
+        p_rho     = tt*rgas0
         p_e       = rho*(gamloc-1._rkind)   ! p_e   = rho * R_gas / Cv
-        etot      = h - tt
+        etot      = h - tt*rgas0
 !
         b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
         b2        = p_e/(rho*cc)
@@ -3235,13 +4311,13 @@ endsubroutine bc_nr_lat_z_kernel
 
  endsubroutine  bcrecyc_cpu_2
 
- subroutine bcrecyc_cpu_3(nx, ny, nz, ng, p0, w_cpu, wmean_cpu, wrecyc_cpu, &
+ subroutine bcrecyc_cpu_3(nx, ny, nz, ng, p0, rgas0, w_cpu, wmean_cpu, wrecyc_cpu, &
      weta_inflow_cpu, map_j_inn_cpu, map_j_out_cpu, &
      yplus_inflow_cpu, eta_inflow_cpu, yplus_recyc_cpu, eta_recyc_cpu, betarecyc, &
-     indx_cp_l, indx_cp_r, cv_coeff_cpu, cv0, calorically_perfect)
+     indx_cp_l, indx_cp_r, cv_coeff_cpu, t0, calorically_perfect)
      integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-     real(rkind) :: p0, betarecyc, cv0
-     real(rkind), dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+     real(rkind) :: p0, rgas0, betarecyc, t0
+     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
      real(rkind), dimension(1-ng:,:,:), intent(in) :: wmean_cpu
      real(rkind), dimension(:,:,:,:), intent(in) :: wrecyc_cpu
      real(rkind), dimension(1-ng:,1-ng:,1-ng:,:), intent(inout) :: w_cpu
@@ -3295,7 +4371,7 @@ endsubroutine bc_nr_lat_z_kernel
          uumean  = wmean_cpu(1-i,j,2)/rhomean
          vvmean  = wmean_cpu(1-i,j,3)/rhomean
          wwmean  = wmean_cpu(1-i,j,4)/rhomean
-         tmean   = p0/rhomean
+         tmean   = p0/rhomean/rgas0
          rho     = rhomean + rhofluc
          uu      = uumean  + ufluc
          vv      = vvmean  + vfluc
@@ -3308,21 +4384,20 @@ endsubroutine bc_nr_lat_z_kernel
          w_cpu(1-i,j,k,2) = rhou 
          w_cpu(1-i,j,k,3) = rhov 
          w_cpu(1-i,j,k,4) = rhow 
-         tt               = p0/rho
-         ee = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
+         tt               = p0/rho/rgas0
+         ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
          w_cpu(1-i,j,k,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
-         !w_cpu(1-i,j,k,5) = p0*gm + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
         enddo
        enddo
       enddo
     endsubroutine bcrecyc_cpu_3
 
-    subroutine bclam_cpu(ilat, nx, ny, nz, ng, nv, w_cpu, wmean_cpu, p0, &
-               indx_cp_l, indx_cp_r, cv_coeff_cpu, cv0, calorically_perfect)
+    subroutine bclam_cpu(ilat, nx, ny, nz, ng, nv, w_cpu, wmean_cpu, p0, rgas0, &
+               indx_cp_l, indx_cp_r, cv_coeff_cpu, t0, calorically_perfect)
 
        integer, intent(in) :: nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
-       real(rkind), intent(in) :: p0, cv0
-       real(rkind), dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+       real(rkind), intent(in) :: p0, rgas0, t0
+       real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout) :: w_cpu
        real(rkind), dimension(1-ng:,:,:), intent(in) :: wmean_cpu
 
@@ -3338,12 +4413,12 @@ endsubroutine bc_nr_lat_z_kernel
            rhou  = wmean_cpu(1-l,j,2)
            rhov  = wmean_cpu(1-l,j,3)
            rhow  = wmean_cpu(1-l,j,4)
-           tt    = p0/rho
+           tt    = p0/rho/rgas0
            w_cpu(1-l,j,k,1) = rho
            w_cpu(1-l,j,k,2) = rhou
            w_cpu(1-l,j,k,3) = rhov
            w_cpu(1-l,j,k,4) = rhow
-           ee = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
+           ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
            w_cpu(1-l,j,k,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
           enddo
          enddo
@@ -3356,22 +4431,19 @@ endsubroutine bc_nr_lat_z_kernel
        endif
     endsubroutine bclam_cpu
 
-    subroutine bcfree_cpu(ilat, nx, ny, nz, ng, nv, rho0, u0, e0, w_cpu)
-       integer :: nx,ny,nz,ng,nv
-       integer :: ilat
-       real(rkind) :: rho0,u0,e0
-       integer :: j,k,l
+    subroutine bcfree_cpu(ilat, nx, ny, nz, ng, nv, winf_cpu, w_cpu)
+       integer, intent(in) :: ilat,nx,ny,nz,ng,nv
+       real(rkind), dimension(1:), intent(in) :: winf_cpu
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout) :: w_cpu
+       integer :: j,k,l,m
 
        if (ilat==1) then     ! left side
         do k=1,nz
          do j=1,ny
           do l=1,ng
-           w_cpu(1-l,j,k,1) = rho0
-           w_cpu(1-l,j,k,2) = rho0*u0
-           w_cpu(1-l,j,k,3) = 0._rkind
-           w_cpu(1-l,j,k,4) = 0._rkind
-           w_cpu(1-l,j,k,5) = rho0*e0+0.5_rkind*rho0*u0**2
+           do m=1,nv
+            w_cpu(1-l,j,k,m) = winf_cpu(m)
+           enddo
           enddo
          enddo
         enddo
@@ -3541,7 +4613,7 @@ endsubroutine bc_nr_lat_z_kernel
        integer :: i,k,l
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout) :: w_cpu
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in) :: w_aux_cpu
-       real(rkind), dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+       real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
 
        if (ilat==1) then     ! left side
        elseif (ilat==2) then ! right side
@@ -3563,16 +4635,16 @@ endsubroutine bc_nr_lat_z_kernel
        endif
     endsubroutine bcsym_cpu
 
-    subroutine bcwall_cpu(ilat, nx, ny, nz, ng, twall, w_cpu, w_aux_cpu, indx_cp_l, indx_cp_r, cv_coeff_cpu, cv0, &
+    subroutine bcwall_cpu(ilat, nx, ny, nz, ng, twall, w_cpu, w_aux_cpu, indx_cp_l, indx_cp_r, cv_coeff_cpu, t0, rgas0, &
                           calorically_perfect, tol_iter_nr)
        integer :: nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect
        integer :: ilat
-       real(rkind) :: twall, cv0, tol_iter_nr
+       real(rkind) :: twall, t0, rgas0, tol_iter_nr
        integer :: i,k,l
        real(rkind) :: rho,uu,vv,ww,qq,pp,tt,rhoe,ee
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout) :: w_cpu
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in) :: w_aux_cpu
-       real(rkind), dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+       real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
 
        if (ilat==1) then     ! left side
        elseif (ilat==2) then ! right side
@@ -3583,7 +4655,7 @@ endsubroutine bc_nr_lat_z_kernel
           w_cpu(i,1,k,3) = 0._rkind
           w_cpu(i,1,k,4) = 0._rkind
           !w_cpu(i,1,k,5) = w_cpu(i,1,k,1)*gm*twall
-          ee = get_e_from_temperature_dev(twall, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
+          ee = get_e_from_temperature_dev(twall, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
           w_cpu(i,1,k,5) = w_cpu(i,1,k,1)*ee
           do l=1,ng
            rho  = w_cpu(i,1+l,k,1)
@@ -3593,12 +4665,12 @@ endsubroutine bc_nr_lat_z_kernel
            rhoe = w_cpu(i,1+l,k,5)
            qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
            ee   = rhoe/rho-qq
-           tt   = get_temperature_from_e_dev(ee,w_aux_cpu(i,1+l,k,6),cv0,cv_coeff_cpu,indx_cp_l,indx_cp_r,calorically_perfect,&
+           tt   = get_temperature_from_e_dev(ee,w_aux_cpu(i,1+l,k,6),t0,cv_coeff_cpu,indx_cp_l,indx_cp_r,calorically_perfect,&
                                              tol_iter_nr)
-           pp   = rho*tt
+           pp   = rho*tt*rgas0
            tt   = 2._rkind*twall-tt ! bc
-           ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu,calorically_perfect)
-           rho  = pp/tt
+           ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu,calorically_perfect)
+           rho  = pp/tt/rgas0
            w_cpu(i,1-l,k,1) =  rho
            w_cpu(i,1-l,k,2) = -rho*uu
            w_cpu(i,1-l,k,3) = -rho*vv
@@ -3613,16 +4685,16 @@ endsubroutine bc_nr_lat_z_kernel
        endif
     endsubroutine bcwall_cpu
 
-    subroutine bcwall_staggered_cpu(ilat, nx, ny, nz, ng, twall, w_cpu, w_aux_cpu, indx_cp_l, indx_cp_r, cv_coeff_cpu, cv0, &
+    subroutine bcwall_staggered_cpu(ilat, nx, ny, nz, ng, twall, w_cpu, w_aux_cpu, indx_cp_l, indx_cp_r, cv_coeff_cpu, t0, rgas0, &
                                     calorically_perfect, tol_iter_nr)
        integer :: nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect
        integer :: ilat
-       real(rkind) :: twall, cv0, tol_iter_nr
+       real(rkind) :: twall, t0, rgas0, tol_iter_nr
        integer :: i,k,l
        real(rkind) :: rho,uu,vv,ww,qq,pp,tt,rhoe,ee
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout) :: w_cpu
        real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in) :: w_aux_cpu
-       real(rkind), dimension(indx_cp_l:), intent(in) :: cv_coeff_cpu
+       real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
 
        if (ilat==1) then     ! left side
        elseif (ilat==2) then ! right side
@@ -3637,12 +4709,12 @@ endsubroutine bc_nr_lat_z_kernel
            rhoe = w_cpu(i,l,k,5)
            qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
            ee   = rhoe/rho-qq
-           tt   = get_temperature_from_e_dev(ee,w_aux_cpu(i,l,k,6),cv0,cv_coeff_cpu,indx_cp_l,indx_cp_r,calorically_perfect,&
+           tt   = get_temperature_from_e_dev(ee,w_aux_cpu(i,l,k,6),t0,cv_coeff_cpu,indx_cp_l,indx_cp_r,calorically_perfect,&
                                              tol_iter_nr)
-           pp   = rho*tt
+           pp   = rho*tt*rgas0
            tt   = 2._rkind*twall-tt ! bc
-           ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu,calorically_perfect)
-           rho  = pp/tt
+           ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu,calorically_perfect)
+           rho  = pp/tt/rgas0
            w_cpu(i,1-l,k,1) =  rho
            w_cpu(i,1-l,k,2) = -rho*uu
            w_cpu(i,1-l,k,3) = -rho*vv
@@ -3662,12 +4734,12 @@ endsubroutine bc_nr_lat_z_kernel
            rhoe = w_cpu(i,ny+1-l,k,5)
            qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
            ee   = rhoe/rho-qq
-           tt   = get_temperature_from_e_dev(ee,w_aux_cpu(i,ny+1-l,k,6),cv0,cv_coeff_cpu,indx_cp_l,indx_cp_r,calorically_perfect,&
+           tt   = get_temperature_from_e_dev(ee,w_aux_cpu(i,ny+1-l,k,6),t0,cv_coeff_cpu,indx_cp_l,indx_cp_r,calorically_perfect,&
                                              tol_iter_nr)
-           pp   = rho*tt
+           pp   = rho*tt*rgas0
            tt   = 2._rkind*twall-tt ! bc
-           ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu,calorically_perfect)
-           rho  = pp/tt
+           ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu,calorically_perfect)
+           rho  = pp/tt/rgas0
            w_cpu(i,ny+l,k,1) =  rho
            w_cpu(i,ny+l,k,2) = -rho*uu
            w_cpu(i,ny+l,k,3) = -rho*vv
@@ -3702,29 +4774,24 @@ endsubroutine bc_nr_lat_z_kernel
        enddo
     endsubroutine compute_residual_cpu
 
-    subroutine compute_dt_cpu(nx, ny, nz, ng, mu0, visc_model, &
-                              VISC_POWER, VISC_SUTHERLAND, powerlaw_vtexp, sutherland_S, T_ref_dim, &
-                              t0, cp0, Prandtl, &
+    subroutine compute_dt_cpu(nx, ny, nz, ng, rgas0, Prandtl, &
                               dcsidx_cpu, detady_cpu, dzitdz_cpu, dcsidxs_cpu, detadys_cpu, dzitdzs_cpu, w_cpu, w_aux_cpu, &
                               dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max,    &
-                              indx_cp_l, indx_cp_r, cp_coeff_cpu,fluid_mask_cpu,calorically_perfect)
+                              indx_cp_l, indx_cp_r, cp_coeff_cpu,fluid_mask_cpu,calorically_perfect,t0)
      integer :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-     real(rkind) :: mu0, cp0
-     integer  :: visc_model
-     real(rkind) :: powerlaw_vtexp, sutherland_S, T_ref_dim
-     integer :: VISC_POWER, VISC_SUTHERLAND
-     real(rkind) :: t0, Prandtl
+     real(rkind) :: rgas0, t0
+     real(rkind) :: Prandtl
      real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:) , intent(in) :: w_cpu 
      real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in) :: w_aux_cpu  
      integer, dimension(1-ng:,1-ng:,1-ng:), intent(in) :: fluid_mask_cpu
-     real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_cpu
+     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_cpu
      real(rkind), dimension(1:), intent(in) :: dcsidx_cpu, detady_cpu, dzitdz_cpu 
      real(rkind), dimension(1:), intent(in) :: dcsidxs_cpu, detadys_cpu, dzitdzs_cpu
      real(rkind) :: dtxi, dtyi, dtzi, dtxv, dtyv, dtzv, dtxk, dtyk, dtzk
      integer     :: i,j,k,ll
      real(rkind) :: rho, ri, uu, vv, ww, tt, mu, nu, k_over_rhocp, c
      real(rkind) :: dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max
-     real(rkind) :: gamloc, cploc
+     real(rkind) :: gamloc
 
      dtxi_max = 0._rkind
      dtyi_max = 0._rkind
@@ -3750,22 +4817,13 @@ endsubroutine bc_nr_lat_z_kernel
          tt   = w_aux_cpu(i,j,k,6)
          mu   = w_aux_cpu(i,j,k,7)
 !
-         !if (calorically_perfect==1) then
-         ! cploc = cp0
-         !else
-         ! cploc = 0._rkind
-         ! do ll=indx_cp_l,indx_cp_r
-         !  cploc = cploc+cp_coeff_cpu(ll)*tt**ll
-         ! enddo
-         !endif
-!
          nu  = ri*mu
          k_over_rhocp = nu/Prandtl
-         gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
-         c      = sqrt (gamloc*tt)
-         dtxi = (abs(uu)+c)*dcsidx_cpu(i) 
-         dtyi = (abs(vv)+c)*detady_cpu(j) 
-         dtzi = (abs(ww)+c)*dzitdz_cpu(k) 
+         gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
+         c      = sqrt (gamloc*rgas0*tt)
+         dtxi   = (abs(uu)+c)*dcsidx_cpu(i) 
+         dtyi   = (abs(vv)+c)*detady_cpu(j) 
+         dtzi   = (abs(ww)+c)*dzitdz_cpu(k) 
          dtxv  = nu*dcsidxs_cpu(i)
          dtyv  = nu*detadys_cpu(j)
          dtzv  = nu*dzitdzs_cpu(k)
@@ -3793,12 +4851,12 @@ endsubroutine bc_nr_lat_z_kernel
     subroutine eval_aux_cpu(nx, ny, nz, ng, istart, iend, jstart, jend, kstart, kend, w_cpu, w_aux_cpu, &
             visc_model, mu0, t0, sutherland_S, T_ref_dim, &
             powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, &
-            cv_coeff_cpu, indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr, stream_id)
+            cv_coeff_cpu, indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr, stream_id)
         integer(ikind), intent(in) :: nx, ny, nz, ng, visc_model
         integer(ikind), intent(in) :: istart, iend, jstart, jend, kstart, kend
         integer(ikind), intent(in) :: VISC_POWER, VISC_SUTHERLAND, VISC_NO, indx_cp_l, indx_cp_r, calorically_perfect
-        real(rkind),    intent(in) :: mu0, t0, sutherland_S, T_ref_dim, powerlaw_vtexp, cv0, tol_iter_nr
-        real(rkind),    dimension(indx_cp_l:), intent(in)   :: cv_coeff_cpu
+        real(rkind),    intent(in) :: mu0, t0, sutherland_S, T_ref_dim, powerlaw_vtexp, rgas0, tol_iter_nr
+        real(rkind),    dimension(indx_cp_l:indx_cp_r+1), intent(in)   :: cv_coeff_cpu
         real(rkind),    dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in)   :: w_cpu  
         real(rkind),    dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout) :: w_aux_cpu
         integer, intent(in) :: stream_id
@@ -3822,9 +4880,9 @@ endsubroutine bc_nr_lat_z_kernel
               ww   = rhow*ri
               qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
               ee = rhoe/rho-qq
-              tt = get_temperature_from_e_dev(ee, w_aux_cpu(i,j,k,6), cv0, cv_coeff_cpu, indx_cp_l, indx_cp_r, &
+              tt = get_temperature_from_e_dev(ee, w_aux_cpu(i,j,k,6), t0, cv_coeff_cpu, indx_cp_l, indx_cp_r, &
                                               calorically_perfect, tol_iter_nr)
-              pp = rho*tt
+              pp = rho*tt*rgas0
 
               w_aux_cpu(i,j,k,1) = rho
               w_aux_cpu(i,j,k,2) = uu
@@ -3834,9 +4892,9 @@ endsubroutine bc_nr_lat_z_kernel
               w_aux_cpu(i,j,k,6) = tt
 
               if (visc_model == VISC_POWER) then
-                  mu = mu0 * (tt / t0)**powerlaw_vtexp
+                  mu = mu0 * (tt/t0)**powerlaw_vtexp
               elseif (visc_model == VISC_SUTHERLAND) then
-                  mu = mu0 * (tt / t0)**1.5_rkind * &
+                  mu = mu0 * (tt/t0)**1.5_rkind * &
                       (1._rkind+sutherland_S/T_ref_dim)/(tt/t0 + sutherland_S/T_ref_dim)
               elseif (visc_model == VISC_NO) then
                   mu = 0._rkind
@@ -3848,11 +4906,11 @@ endsubroutine bc_nr_lat_z_kernel
         enddo
     endsubroutine eval_aux_cpu
 
-     function get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_cpu,calorically_perfect)
+     function get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_cpu,calorically_perfect,rgas0)
     real(rkind) :: get_gamloc_dev
     integer :: indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind) :: tt
-    real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff_cpu
+    real(rkind) :: tt, rgas0, t0
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_cpu
     real(rkind) :: cploc, gamloc
     integer :: l
     
@@ -3861,45 +4919,46 @@ endsubroutine bc_nr_lat_z_kernel
     else
      cploc = 0._rkind
      do l=indx_cp_l,indx_cp_r
-      cploc = cploc+cp_coeff_cpu(l)*tt**l
+      cploc = cploc+cp_coeff_cpu(l)*(tt/t0)**l
      enddo
     endif
-    gamloc = cploc/(cploc-1._rkind)
+    gamloc = cploc/(cploc-rgas0)
     get_gamloc_dev = gamloc
 
     endfunction get_gamloc_dev
 
-     function get_temperature_from_e_dev(ee, T_start, cv0, cv_coeff_cpu, indx_cp_l, indx_cp_r, &
+     function get_temperature_from_e_dev(ee, T_start, t0, cv_coeff_cpu, indx_cp_l, indx_cp_r, &
                                                            calorically_perfect,tol_iter_nr)
     real(rkind) :: get_temperature_from_e_dev
     integer :: indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind) :: ee, T_start, cv0, tol_iter_nr
-    real(rkind), dimension(indx_cp_l:indx_cp_r) :: cv_coeff_cpu
+    real(rkind) :: ee, T_start, t0, tol_iter_nr
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cv_coeff_cpu
     real(rkind) :: tt, T_old, ebar, den, num, T_pow, T_powp
     integer :: l,iter,max_iter
 
     max_iter = 50
 
     if (calorically_perfect==1) then
-        tt    = ee/cv0
+        tt  = t0+ee/cv_coeff_cpu(0)
     else
         T_old = T_start 
-        ebar  = ee - cv0
+        ebar  = ee - cv_coeff_cpu(indx_cp_r+1)*t0
         do iter=1,max_iter
             den = 0._rkind
             num = 0._rkind
             do l=indx_cp_l,indx_cp_r
              if (l==-1) then
-              T_pow  = T_old**l
+              T_pow  = (T_old/t0)**l
               den    = den+cv_coeff_cpu(l)*T_pow
-              num    = num+cv_coeff_cpu(l)*log(T_old)
+              num    = num+cv_coeff_cpu(l)*log(T_old/t0)
              else
-              T_pow  = T_old**l
-              T_powp = T_old*T_pow
+              T_pow  = (T_old/t0)**l
+              T_powp = (T_old/t0)*T_pow
               den    = den+cv_coeff_cpu(l)*T_pow
               num    = num+cv_coeff_cpu(l)*(T_powp-1._rkind)/(l+1._rkind)
              endif
             enddo
+            num = num*t0
             tt = T_old+(ebar-num)/den
             if (abs(tt-T_old) < tol_iter_nr) exit
             T_old = tt
@@ -3908,25 +4967,26 @@ endsubroutine bc_nr_lat_z_kernel
     get_temperature_from_e_dev = tt
     endfunction get_temperature_from_e_dev
 
-     function get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
+     function get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_cpu, calorically_perfect)
         real(rkind) :: get_e_from_temperature_dev
-        real(rkind) :: tt, cv0
+        real(rkind) :: tt, t0
         integer     :: indx_cp_l, indx_cp_r, calorically_perfect
-        real(rkind), dimension(indx_cp_l:indx_cp_r) :: cv_coeff_cpu
+        real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cv_coeff_cpu
         real(rkind) :: ee
         integer :: l
 
         if (calorically_perfect==1) then
-            ee = tt * cv0
+            ee = cv_coeff_cpu(0)*(tt-t0)
         else
-            ee = cv0
+            ee = cv_coeff_cpu(indx_cp_r+1)
             do l=indx_cp_l,indx_cp_r
              if (l==-1) then
-              ee = ee+cv_coeff_cpu(l)*log(tt)
+              ee = ee+cv_coeff_cpu(l)*log(tt/t0)
              else
-              ee = ee+cv_coeff_cpu(l)/(l+1._rkind)*(tt**(l+1)-1._rkind)
+              ee = ee+cv_coeff_cpu(l)/(l+1._rkind)*((tt/t0)**(l+1)-1._rkind)
              endif
             enddo
+            ee = ee*t0
         endif
         get_e_from_temperature_dev = ee
     endfunction get_e_from_temperature_dev

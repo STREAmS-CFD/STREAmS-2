@@ -59,7 +59,7 @@ module streams_equation_singleideal_gpu_object
 !
     integer :: icyc0, num_iter
     integer :: visc_model
-    real(rkind) :: mu0, t0 , sutherland_S , T_ref_dim, powerlaw_vtexp
+    real(rkind) :: mu0, sutherland_S , T_ref_dim, powerlaw_vtexp
     logical :: masterproc
     integer :: mpi_err
     real(rkind), allocatable, dimension(:), device :: winf_gpu, winf_past_shock_gpu
@@ -216,7 +216,7 @@ contains
       visc_order => self%equation_base%visc_order, Prandtl => self%equation_base%Prandtl, &
       visc_model => self%visc_model, mu0 => self%mu0, &
       u0 => self%equation_base%u0, l0 => self%equation_base%l0, &
-      t0 => self%t0, T_ref_dim => self%T_ref_dim, &
+      T_ref_dim => self%T_ref_dim, &
       sutherland_S => self%sutherland_S, &
       powerlaw_vtexp => self%powerlaw_vtexp, &
       coeff_deriv1_gpu => self%coeff_deriv1_gpu, coeff_deriv2_gpu => self%coeff_deriv2_gpu, &
@@ -242,12 +242,11 @@ contains
       indx_cp_l => self%equation_base%indx_cp_l, &
       indx_cp_r => self%equation_base%indx_cp_r, &
       calorically_perfect => self%equation_base%calorically_perfect, &
-      cv0 => self%equation_base%cv0, &
-      cp0 => self%equation_base%cp0, &
+      t0 => self%equation_base%t0, &
       channel_case => self%equation_base%channel_case)
       if (mode == 0) then ! laplacian
         call visflx_cuf(nx, ny, nz, ng, visc_order, &
-          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
           coeff_deriv1_gpu, coeff_deriv2_gpu, &
           dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
@@ -259,21 +258,21 @@ contains
           dcsidx_gpu, detady_gpu, dzitdz_gpu, stream1)
       elseif (mode == 2) then ! reduced
 !       call visflx_reduced_cuf(nx, ny, nz, ng, visc_order, &
-!         Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+!         Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
 !         u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
 !         coeff_deriv1_gpu, coeff_deriv2_gpu, &
 !         dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
 !         dcsidxs_gpu, detadys_gpu, dzitdzs_gpu,  &
 !         dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, self%wallprop_gpu, 1)
         call visflx_reduced_ord2_cuf(nx, ny, nz, ng, &
-          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
           x_gpu, y_gpu, z_gpu, self%wallprop_gpu, 1)
       elseif (mode == 3) then ! only sensor
         call sensor_cuf(nx, ny, nz, ng, u0, l0, self%w_aux_gpu)
       elseif (mode == 4) then ! laplacian
         call visflx_nosensor_cuf(nx, ny, nz, ng, visc_order, &
-          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
           coeff_deriv1_gpu, coeff_deriv2_gpu, &
           dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
@@ -281,24 +280,24 @@ contains
           dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, self%wallprop_gpu)
       elseif (mode == 5) then ! staggered
         call visflx_x_cuf(nx, ny, nz, nv, ng, &
-          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           self%base_gpu%x_gpu, w_aux_trans_gpu, fl_trans_gpu, self%fl_gpu)
         call visflx_y_cuf(nx, ny, nz, nv, ng, &
-          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           self%base_gpu%y_gpu, self%w_aux_gpu, self%fl_gpu)
         call visflx_z_cuf(nx, ny, nz, nv, ng, &
-          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           self%base_gpu%z_gpu, self%w_aux_gpu, self%fl_gpu)
       elseif (mode == 6) then ! reduce_nosensor
 !       call visflx_reduced_cuf(nx, ny, nz, ng, visc_order, &
-!         Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+!         Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
 !         u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
 !         coeff_deriv1_gpu, coeff_deriv2_gpu, &
 !         dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
 !         dcsidxs_gpu, detadys_gpu, dzitdzs_gpu,  &
 !         dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, self%wallprop_gpu, 0)
         call visflx_reduced_ord2_cuf(nx, ny, nz, ng, &
-          Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+          Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
           u0, l0, self%base_gpu%w_gpu, self%w_aux_gpu, self%fl_gpu, &
           x_gpu, y_gpu, z_gpu, self%wallprop_gpu, 0)
       elseif (mode == 7) then ! div_ord2
@@ -317,7 +316,7 @@ contains
     ghost_ = 1   ; if(present(ghost))   ghost_ = ghost
     associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
       visc_model => self%visc_model, mu0 => self%mu0, &
-      t0 => self%t0, T_ref_dim => self%T_ref_dim, &
+      t0 => self%equation_base%t0, T_ref_dim => self%T_ref_dim, &
       sutherland_S => self%sutherland_S, &
       powerlaw_vtexp => self%powerlaw_vtexp, &
       cv_coeff_gpu => self%cv_coeff_gpu, &
@@ -325,42 +324,42 @@ contains
       indx_cp_l => self%equation_base%indx_cp_l, &
       indx_cp_r => self%equation_base%indx_cp_r, &
       calorically_perfect => self%equation_base%calorically_perfect, &
-      cv0 => self%equation_base%cv0)
+      rgas0 => self%equation_base%rgas0)
       if(central_ == 1 .and. ghost_ == 1) then
         call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
       elseif(central_ == 1 .and. ghost_ == 0) then
         call eval_aux_cuf(nx, ny, nz, ng, 1, nx, 1, ny, 1, nz, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
       elseif(central_ == 0 .and. ghost_ == 1) then
         call eval_aux_cuf(nx, ny, nz, ng, 1-ng, 0, 1-ng, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
         call eval_aux_cuf(nx, ny, nz, ng, nx+1, nx+ng, 1-ng, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
         call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, 0, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
         call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, ny+1, ny+ng, 1-ng, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
         call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, 1-ng, 0, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
         call eval_aux_cuf(nx, ny, nz, ng, 1-ng, nx+ng, 1-ng, ny+ng, nz+1, nz+ng, self%base_gpu%w_gpu, self%w_aux_gpu, &
           visc_model, mu0, t0, sutherland_S, T_ref_dim, &
           powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, cv_coeff_gpu,  &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr,stream1)
+          indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr,stream1)
       endif
     endassociate
   endsubroutine compute_aux
@@ -382,7 +381,6 @@ contains
 !
 !     
 !     
-!
       if (channel_case) self%equation_base%dpdx = 0._rkind
 !
       do istep=1,self%equation_base%nrk
@@ -523,7 +521,8 @@ contains
       indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
       calorically_perfect => self%equation_base%calorically_perfect, &
       ep_ord_change_x_gpu => self%ep_ord_change_x_gpu, nkeep => self%equation_base%nkeep, &
-      cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
+      flux_splitting => self%equation_base%flux_splitting, &
+      rgas0 => self%equation_base%rgas0)
 !
       call euler_x_transp_cuf(nx, ny, nz, ng, istart_trans, iend_trans, nv_aux, w_aux_gpu, w_aux_trans_gpu, stream1)
 !
@@ -534,11 +533,21 @@ contains
       tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
       grid = dim3(ceiling(real(ny)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
 !
-      call euler_x_fluxes_hybrid_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
-        istart, iend, lmax, nkeep, cp0, cv0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
-        force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
-        sensor_threshold, weno_size, gplus_x_gpu, gminus_x_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-        ep_ord_change_x_gpu, calorically_perfect, tol_iter_nr)
+      if (flux_splitting==1) then
+        call euler_x_fluxes_hybrid_rusanov_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
+          istart, iend, lmax, nkeep, rgas0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
+          force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+          sensor_threshold, weno_size, gplus_x_gpu, gminus_x_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+          ep_ord_change_x_gpu, calorically_perfect, tol_iter_nr,self%equation_base%rho0,self%equation_base%u0, &
+          self%equation_base%t0)
+      else
+        call euler_x_fluxes_hybrid_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
+          istart, iend, lmax, nkeep, rgas0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
+          force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+          sensor_threshold, weno_size, gplus_x_gpu, gminus_x_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+          ep_ord_change_x_gpu, calorically_perfect, tol_iter_nr,self%equation_base%rho0,self%equation_base%u0, &
+          self%equation_base%t0)
+      endif
 !
       call euler_x_update_cuf(nx, ny, nz, ng, nv, istart, iend, fhat_trans_gpu, fl_trans_gpu, fl_gpu, dcsidx_gpu, stream1)
     endassociate
@@ -565,7 +574,8 @@ contains
       calorically_perfect => self%equation_base%calorically_perfect, &
       cp_coeff_gpu => self%cp_coeff_gpu, &
       ep_ord_change_gpu => self%ep_ord_change_gpu, nkeep => self%equation_base%nkeep, &
-      cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
+      flux_splitting => self%equation_base%flux_splitting, &
+      rgas0 => self%equation_base%rgas0)
       weno_size = 2*weno_scheme
       lmax  = ep_order/2 ! max stencil width
       force_zero_flux_min = force_zero_flux(3)
@@ -573,11 +583,21 @@ contains
 !
       tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
       grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
-      call euler_y_hybrid_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
-        eul_jmin, eul_jmax, lmax, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
-        force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
-        sensor_threshold, weno_size, w_gpu, gplus_y_gpu, gminus_y_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-        ep_ord_change_gpu, calorically_perfect, tol_iter_nr)
+      if (flux_splitting==1) then
+        call euler_y_hybrid_rusanov_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
+          eul_jmin, eul_jmax, lmax, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
+          force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+          sensor_threshold, weno_size, w_gpu, gplus_y_gpu, gminus_y_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+          ep_ord_change_gpu, calorically_perfect, tol_iter_nr,self%equation_base%rho0,self%equation_base%u0, &
+          self%equation_base%t0)
+      else
+        call euler_y_hybrid_kernel<<<grid, tBlock, 0, stream1>>>(nv, nv_aux, nx, ny, nz, ng, &
+          eul_jmin, eul_jmax, lmax, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
+          force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+          sensor_threshold, weno_size, w_gpu, gplus_y_gpu, gminus_y_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+          ep_ord_change_gpu, calorically_perfect, tol_iter_nr,self%equation_base%rho0,self%equation_base%u0, &
+          self%equation_base%t0)
+      endif
     endassociate
   endsubroutine euler_y
 !
@@ -602,18 +622,29 @@ contains
       indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
       calorically_perfect => self%equation_base%calorically_perfect, &
       ep_ord_change_gpu => self%ep_ord_change_gpu, nkeep => self%equation_base%nkeep, &
-      cp0 => self%equation_base%cp0, cv0 => self%equation_base%cv0)
+      flux_splitting => self%equation_base%flux_splitting, &
+      rgas0 => self%equation_base%rgas0)
       weno_size = 2*weno_scheme
       lmax = ep_order/2 ! max stencil width
       force_zero_flux_min = force_zero_flux(5)
       force_zero_flux_max = force_zero_flux(6)
       tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
       grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(ny)/tBlock%y),1)
-      call euler_z_hybrid_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
-        eul_kmin, eul_kmax, lmax, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
-        force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
-        sensor_threshold, weno_size, w_gpu, gplus_z_gpu, gminus_z_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-        ep_ord_change_gpu, calorically_perfect, tol_iter_nr)
+      if (flux_splitting==1) then
+        call euler_z_hybrid_rusanov_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
+          eul_kmin, eul_kmax, lmax, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
+          force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+          sensor_threshold, weno_size, w_gpu, gplus_z_gpu, gminus_z_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+          ep_ord_change_gpu, calorically_perfect, tol_iter_nr,self%equation_base%rho0,self%equation_base%u0, &
+          self%equation_base%t0)
+      else
+        call euler_z_hybrid_kernel<<<grid, tBlock, 0, 0>>>(nv, nv_aux, nx, ny, nz, ng, &
+          eul_kmin, eul_kmax, lmax, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
+          force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, &
+          sensor_threshold, weno_size, w_gpu, gplus_z_gpu, gminus_z_gpu, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
+          ep_ord_change_gpu, calorically_perfect, tol_iter_nr,self%equation_base%rho0,self%equation_base%u0, &
+          self%equation_base%t0)
+      endif
     endassociate
   endsubroutine euler_z
 !
@@ -652,14 +683,15 @@ contains
       yn => self%equation_base%field%yn, yn_gpu => self%base_gpu%yn_gpu, &
       w_gpu => self%base_gpu%w_gpu, w_aux_gpu => self%w_aux_gpu, fln_gpu => self%fln_gpu, &
       volchan => self%equation_base%volchan, fluid_mask_gpu => self%fluid_mask_gpu, &
-      cv_coeff_gpu => self%cv_coeff_gpu, cv0 => self%equation_base%cv0, &
+      cv_coeff_gpu => self%cv_coeff_gpu, &
+      t0 => self%equation_base%t0, &
       calorically_perfect => self%equation_base%calorically_perfect, &
       indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r)
 !
       if (self%equation_base%theta_wall>=-1._rkind) then
 !       
         call force_var_1_cuf(nx, ny, nz, ng, yn_gpu, fln_gpu, w_gpu, w_aux_gpu, bulkt, fluid_mask_gpu, cv_coeff_gpu, &
-          indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
+          indx_cp_l, indx_cp_r, t0, calorically_perfect, tol_iter_nr)
 !       
         call mpi_allreduce(bulkt,bulktg,1,mpi_prec,mpi_sum,self%equation_base%field%mp_cart,self%mpi_err)
 !
@@ -669,7 +701,7 @@ contains
         tbdiff   = tbtarget-bulktg
 !       
         call force_var_2_cuf(nx, ny, nz, ng, w_gpu, w_aux_gpu, tbdiff, fluid_mask_gpu, cv_coeff_gpu, indx_cp_l, indx_cp_r, &
-          cv0, calorically_perfect)
+          t0, calorically_perfect)
 !       
       endif
 !     
@@ -754,8 +786,8 @@ contains
       fl_gpu => self%fl_gpu, dcsidx_gpu => self%base_gpu%dcsidx_gpu,  detady_gpu => self%base_gpu%detady_gpu, &
       dzitdz_gpu => self%base_gpu%dzitdz_gpu, &
       indx_cp_l => self%equation_base%indx_cp_l, indx_cp_r => self%equation_base%indx_cp_r, &
-      calorically_perfect => self%equation_base%calorically_perfect, &
-      cp_coeff_gpu => self%cp_coeff_gpu, winf_gpu => self%winf_gpu)
+      calorically_perfect => self%equation_base%calorically_perfect, rgas0 => self%equation_base%rgas0, &
+      t0 => self%equation_base%t0, cp_coeff_gpu => self%cp_coeff_gpu, winf_gpu => self%winf_gpu)
 !
       do ilat=1,6! loop on all sides of the boundary (3D -> 6)
         if(bctags_nr(ilat) > 0) then
@@ -769,21 +801,21 @@ contains
             grid = dim3(ceiling(real(ny)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
             call bc_nr_lat_x_kernel<<<grid, tBlock, 0, 0>>>(start_or_end, bctags_nr(ilat), &
               nx, ny, nz, ng, nv, w_aux_gpu, w_gpu, fl_gpu, dcsidx_gpu, &
-              indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu, calorically_perfect)
+              indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu, calorically_perfect,rgas0,t0)
           endif
           if(dir == 2) then
             tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
             grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(nz)/tBlock%y),1)
             call bc_nr_lat_y_kernel<<<grid, tBlock, 0, 0>>>(start_or_end, bctags_nr(ilat), &
               nx, ny, nz, ng, nv, w_aux_gpu, w_gpu, fl_gpu, detady_gpu, &
-              indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect)
+              indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect,rgas0,t0)
           endif
           if(dir == 3) then
             tBlock = dim3(EULERWENO_THREADS_X,EULERWENO_THREADS_Y,1)
             grid = dim3(ceiling(real(nx)/tBlock%x),ceiling(real(ny)/tBlock%y),1)
             call bc_nr_lat_z_kernel<<<grid, tBlock, 0, 0>>>(start_or_end, bctags_nr(ilat), &
               nx, ny, nz, ng, nv, w_aux_gpu, w_gpu, fl_gpu, dzitdz_gpu, &
-              indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect)
+              indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect,rgas0,t0)
           endif
         endif
       enddo
@@ -805,14 +837,14 @@ contains
       select case(self%equation_base%bctags(ilat))
       case(0)
       case(1)
-        call bcfree_cuf(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, &
-          self%equation_base%rho0, self%equation_base%u0, self%equation_base%e0, self%base_gpu%w_gpu)
+        call bcfree_cuf(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%winf_gpu, self%base_gpu%w_gpu)
       case(2)
         call bcextr_cuf(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%base_gpu%w_gpu)
       case(4)
         call bcextr_sub_cuf(ilat, self%nx, self%ny, self%nz, self%ng, &
-          self%equation_base%p0, self%base_gpu%w_gpu, self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, &
-          self%cv_coeff_gpu, self%equation_base%cv0, self%equation_base%calorically_perfect)
+          self%equation_base%p0, self%equation_base%rgas0, self%base_gpu%w_gpu, self%equation_base%indx_cp_l, &
+          self%equation_base%indx_cp_r, self%cv_coeff_gpu, self%equation_base%t0, &
+          self%equation_base%calorically_perfect)
       case(5)
         call bcsym_cuf(ilat, self%nx, self%ny, self%nz, self%ng, &
           self%equation_base%T_wall, self%base_gpu%w_gpu, self%w_aux_gpu, &
@@ -822,13 +854,13 @@ contains
         if (self%equation_base%channel_case) then
           call bcwall_staggered_cuf(ilat, self%nx, self%ny, self%nz, self%ng, &
             self%equation_base%T_wall, self%base_gpu%w_gpu, self%w_aux_gpu, &
-            self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, self%cv_coeff_gpu, self%equation_base%cv0, &
-            self%equation_base%calorically_perfect,tol_iter_nr)
+            self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, self%cv_coeff_gpu, self%equation_base%t0, &
+            self%equation_base%rgas0, self%equation_base%calorically_perfect,tol_iter_nr)
         else
           call bcwall_cuf(ilat, self%nx, self%ny, self%nz, self%ng, &
             self%equation_base%T_wall, self%base_gpu%w_gpu, self%w_aux_gpu, &
-            self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, self%cv_coeff_gpu, self%equation_base%cv0, &
-            self%equation_base%calorically_perfect,tol_iter_nr)
+            self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, self%cv_coeff_gpu, self%equation_base%t0, &
+            self%equation_base%rgas0, self%equation_base%calorically_perfect,tol_iter_nr)
         endif
       case(7)
         call bcshock_cuf(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%base_gpu%w_gpu, &
@@ -839,8 +871,9 @@ contains
 !
       case(9)
         call bclam_cuf(ilat, self%nx, self%ny, self%nz, self%ng, self%nv, self%base_gpu%w_gpu, self%wmean_gpu, &
-          self%equation_base%p0, self%equation_base%indx_cp_l, self%equation_base%indx_cp_r, self%cv_coeff_gpu, &
-          self%equation_base%cv0, self%equation_base%calorically_perfect)
+          self%equation_base%p0, self%equation_base%rgas0, self%equation_base%indx_cp_l, &
+          self%equation_base%indx_cp_r, self%cv_coeff_gpu, self%equation_base%t0, &
+          self%equation_base%calorically_perfect)
       case(10)
         call self%bcrecyc(ilat)
       endselect
@@ -870,8 +903,9 @@ contains
         betarecyc => self%equation_base%betarecyc, i_recyc => self%equation_base%i_recyc, &
         indx_cp_l => self%equation_base%indx_cp_l, &
         indx_cp_r => self%equation_base%indx_cp_r, &
+        rgas0 => self%equation_base%rgas0, &
         calorically_perfect => self%equation_base%calorically_perfect, &
-        cv0 => self%equation_base%cv0, &
+        t0 => self%equation_base%t0, &
         cv_coeff_gpu => self%cv_coeff_gpu)
 !       Compute spanwise averages at the recycling station
         call bcrecyc_cuf_1(nx, ny, nz, ng, nv, wrecycav_gpu, wrecyc_gpu)
@@ -883,10 +917,10 @@ contains
         call bcrecyc_cuf_2(nx, ny, nz, nzmax, ng, wrecycav_gpu, wrecyc_gpu)
 !
 !       Apply bc recycling
-        call bcrecyc_cuf_3(nx, ny, nz, ng, p0, w_gpu, wmean_gpu, wrecyc_gpu, &
+        call bcrecyc_cuf_3(nx, ny, nz, ng, p0, rgas0, w_gpu, wmean_gpu, wrecyc_gpu, &
           weta_inflow_gpu, map_j_inn_gpu, map_j_out_gpu, &
           yplus_inflow_gpu, eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu, betarecyc, &
-          indx_cp_l, indx_cp_r, cv_coeff_gpu, cv0, calorically_perfect)
+          indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect)
       endassociate
     endif
 !
@@ -908,7 +942,6 @@ contains
 !
     self%visc_model       = self%equation_base%visc_model
     self%mu0              = self%equation_base%mu0
-    self%t0               = self%equation_base%t0
     self%T_ref_dim        = self%equation_base%T_ref_dim
     self%sutherland_S     = self%equation_base%sutherland_S
     self%powerlaw_vtexp   = self%equation_base%powerlaw_vtexp
@@ -1008,12 +1041,12 @@ contains
       allocate(self%w_aux_trans_gpu(1-ng:ny+ng, 1-ng:nx+ng, 1-ng:nz+ng, 8))
       allocate(self%fhat_trans_gpu(1-ng:ny+ng, 1-ng:nx+ng, 1-ng:nz+ng, nv))
       allocate(self%fl_trans_gpu(1:ny, 1:nx, 1:nz, nv))
-      allocate(self%gplus_x_gpu (nv,2*weno_scheme,ny,nz))
-      allocate(self%gminus_x_gpu(nv,2*weno_scheme,ny,nz))
-      allocate(self%gplus_y_gpu (nv,2*weno_scheme,nx,nz))
-      allocate(self%gminus_y_gpu(nv,2*weno_scheme,nx,nz))
-      allocate(self%gplus_z_gpu (nv,2*weno_scheme,nx,ny))
-      allocate(self%gminus_z_gpu(nv,2*weno_scheme,nx,ny))
+      allocate(self%gplus_x_gpu (ny,nz,nv,2*weno_scheme))
+      allocate(self%gminus_x_gpu(ny,nz,nv,2*weno_scheme))
+      allocate(self%gplus_y_gpu (nx,nz,nv,2*weno_scheme))
+      allocate(self%gminus_y_gpu(nx,nz,nv,2*weno_scheme))
+      allocate(self%gplus_z_gpu (nx,ny,nv,2*weno_scheme))
+      allocate(self%gminus_z_gpu(nx,ny,nv,2*weno_scheme))
       allocate(self%fluid_mask_gpu(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))
       allocate(self%ep_ord_change_gpu(0:nx, 0:ny, 0:nz, 2:3))
       allocate(self%ep_ord_change_x_gpu(0:ny, 0:nx, 0:nz))
@@ -1030,8 +1063,8 @@ contains
       allocate(self%map_j_out_gpu(1:ny))
       allocate(self%weta_inflow_gpu(1:ny))
 !
-      allocate(self%cv_coeff_gpu(indx_cp_l:indx_cp_r))
-      allocate(self%cp_coeff_gpu(indx_cp_l:indx_cp_r))
+      allocate(self%cv_coeff_gpu(indx_cp_l:indx_cp_r+1))
+      allocate(self%cp_coeff_gpu(indx_cp_l:indx_cp_r+1))
 !
       if (self%equation_base%num_probe>0) then
         allocate(self%w_aux_probe_gpu(6,self%equation_base%num_probe))
@@ -1062,9 +1095,8 @@ contains
     associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
       dt => self%equation_base%dt, CFL => self%equation_base%CFL, &
       Prandtl => self%equation_base%Prandtl, &
-      cp0 => self%equation_base%cp0, &
       visc_model => self%visc_model, mu0 => self%mu0, &
-      t0 => self%t0, T_ref_dim => self%T_ref_dim, powerlaw_vtexp => self%powerlaw_vtexp, &
+      T_ref_dim => self%T_ref_dim, powerlaw_vtexp => self%powerlaw_vtexp, &
       sutherland_S => self%sutherland_S, &
       w_gpu => self%base_gpu%w_gpu, &
       w_aux_gpu  => self%w_aux_gpu, &
@@ -1078,16 +1110,16 @@ contains
       indx_cp_l    => self%equation_base%indx_cp_l, &
       indx_cp_r    => self%equation_base%indx_cp_r, &
       cp_coeff_gpu => self%cp_coeff_gpu, &
-      fluid_mask_gpu => self%fluid_mask_gpu)
+      fluid_mask_gpu => self%fluid_mask_gpu, &
+      rgas0 => self%equation_base%rgas0, &
+      t0 => self%equation_base%t0)
       if (CFL < 0) then
         dt = -CFL
       else
-        call compute_dt_cuf(nx, ny, nz, ng, mu0, visc_model, &
-          VISC_POWER, VISC_SUTHERLAND, powerlaw_vtexp, sutherland_S, T_ref_dim, &
-          t0, cp0, Prandtl, &
+        call compute_dt_cuf(nx, ny, nz, ng, rgas0, Prandtl, &
           dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, w_gpu, w_aux_gpu, &
           dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max,    &
-          indx_cp_l, indx_cp_r, cp_coeff_gpu,fluid_mask_gpu,calorically_perfect)
+          indx_cp_l, indx_cp_r, cp_coeff_gpu,fluid_mask_gpu,calorically_perfect,t0)
 !       open(unit=116, file="dt_values.dat", position="append")
 !       write(116,'(100(f16.8,2x))') dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max
 !       close(116)
@@ -1115,14 +1147,13 @@ contains
       rhobulk => self%equation_base%rhobulk, ubulk => self%equation_base%ubulk, &
       tbulk => self%equation_base%tbulk, nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, &
       visc_model => self%visc_model, mu0 => self%mu0, &
-      t0 => self%t0, T_ref_dim => self%T_ref_dim, &
+      T_ref_dim => self%T_ref_dim, &
       sutherland_S => self%sutherland_S, &
       powerlaw_vtexp => self%powerlaw_vtexp, &
       cv_coeff_gpu => self%cv_coeff_gpu, &
       calorically_perfect => self%equation_base%calorically_perfect, &
       indx_cp_l    => self%equation_base%indx_cp_l, &
       indx_cp_r    => self%equation_base%indx_cp_r, &
-      cv0 => self%equation_base%cv0, &
       mode_async => self%equation_base%mode_async, &
       time_from_last_rst    => self%equation_base%time_from_last_rst,    &
       time_from_last_write  => self%equation_base%time_from_last_write,  &
@@ -1157,6 +1188,7 @@ contains
       endif
       call self%compute_dt()
       if (self%masterproc) write(*,*) 'dt =', self%equation_base%dt
+      if (self%masterproc) write(*,*) 'dt*u0/l0 =', self%equation_base%dt*self%equation_base%u0/self%equation_base%l0
 !
       call MPI_BARRIER(MPI_COMM_WORLD, self%error) ; timing(1) = MPI_Wtime()
 !     
@@ -1231,6 +1263,7 @@ contains
       tbulk => self%equation_base%tbulk)
 !     
       residual_rhou = residual_rhou/(self%equation_base%u0**2)/self%equation_base%rho0*self%equation_base%l0
+      dpdx          = dpdx         /(self%equation_base%u0**2)/self%equation_base%rho0*self%equation_base%l0
       pos_io = 'append'
       if (self%equation_base%icyc==1) pos_io = 'rewind'
       if (self%masterproc) then

@@ -62,23 +62,25 @@ contains
   endsubroutine euler_x_transp_cuf
 !
   attributes(global) launch_bounds(256) subroutine euler_x_fluxes_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-    eul_imin, eul_imax, lmax_base, nkeep, cp0, cv0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
+    eul_imin, eul_imax, lmax_base, nkeep, rgas0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
     force_zero_flux_min, force_zero_flux_max, &
     weno_scheme, weno_version, sensor_threshold, weno_size, gplus_x_gpu, gminus_x_gpu, cp_coeff_gpu, &
-    indx_cp_l, indx_cp_r, ep_ord_change_x_gpu, calorically_perfect, tol_iter_nr)
+    indx_cp_l, indx_cp_r, ep_ord_change_x_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
 !
     implicit none
 !   Passed arguments
     integer, value :: nv, nx, ny, nz, ng, nv_aux
     integer, value :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+    integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_gpu
     real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:8) :: w_aux_trans_gpu
     real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:nv) :: fhat_trans_gpu
-    integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_gpu
-    real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff_gpu
+    real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gplus_x_gpu
+    real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gminus_x_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
     real(rkind), dimension(4,4) :: coeff_deriv1_gpu
     real(rkind), dimension(nx) :: dcsidx_gpu
     integer, value :: force_zero_flux_min, force_zero_flux_max
-    real(rkind), value :: sensor_threshold, cp0, cv0, tol_iter_nr
+    real(rkind), value :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
     integer, value :: weno_scheme, weno_size, weno_version
 !   Local variables
     integer :: i, j, k, m, l
@@ -92,9 +94,7 @@ contains
     integer :: ishk
     real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
     real(rkind), dimension(5,5) :: el, er
-    real(rkind), dimension(5) :: ev, evmax, fi, ghat, gl, gr
-    real(rkind), dimension(nv,2*weno_scheme,ny,nz) :: gplus_x_gpu
-    real(rkind), dimension(nv,2*weno_scheme,ny,nz) :: gminus_x_gpu
+    real(rkind), dimension(5) :: evmax, fi
     integer :: ll, mm
     real(rkind) :: rho, pp, wc, gc, rhou
     real(rkind) :: tt, gamloc
@@ -142,8 +142,8 @@ contains
               wwi   = w_aux_trans_gpu(j,i-m,k,4)
               enti  = w_aux_trans_gpu(j,i-m,k,5)
               tti   = w_aux_trans_gpu(j,i-m,k,6)
-              ppi   = tti*rhoi
-              eei   = enti-tti-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+              ppi   = tti*rhoi*rgas0
+              eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
 !
               rhoip = w_aux_trans_gpu(j,i-m+l,k,1)
               uuip  = w_aux_trans_gpu(j,i-m+l,k,2)
@@ -151,8 +151,8 @@ contains
               wwip  = w_aux_trans_gpu(j,i-m+l,k,4)
               entip = w_aux_trans_gpu(j,i-m+l,k,5)
               ttip  = w_aux_trans_gpu(j,i-m+l,k,6)
-              ppip  = ttip*rhoip
-              eeip  = entip-ttip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+              ppip  = ttip*rhoip*rgas0
+              eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
 !
               rhom  = rhoi+rhoip
               eem   = eei + eeip
@@ -205,7 +205,7 @@ contains
               wwi   = w_aux_trans_gpu(j,i-m,k,4)
               enti  = w_aux_trans_gpu(j,i-m,k,5)
               tti   = w_aux_trans_gpu(j,i-m,k,6)
-              ppi   = tti*rhoi
+              ppi   = tti*rhoi*rgas0
 !
               rhoip = w_aux_trans_gpu(j,i-m+l,k,1)
               uuip  = w_aux_trans_gpu(j,i-m+l,k,2)
@@ -213,7 +213,7 @@ contains
               wwip  = w_aux_trans_gpu(j,i-m+l,k,4)
               entip = w_aux_trans_gpu(j,i-m+l,k,5)
               ttip  = w_aux_trans_gpu(j,i-m+l,k,6)
-              ppip  = ttip*rhoip
+              ppip  = ttip*rhoip*rgas0
 !
               rhom  = rhoi+rhoip
               uv_part = (uui+uuip) * rhom
@@ -254,9 +254,9 @@ contains
         fhat_trans_gpu(j,i,k,4) = fh4
         fhat_trans_gpu(j,i,k,5) = fh5
       else
-        call compute_roe_average(nx, ny, nz, ng, j, j, i, i+1, k, k, w_aux_trans_gpu, cp0, cv0, &
+        call compute_roe_average(nx, ny, nz, ng, j, j, i, i+1, k, k, w_aux_trans_gpu, rgas0, &
           b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-          calorically_perfect, tol_iter_nr)
+          calorically_perfect, tol_iter_nr,t0)
 !
         call eigenvectors_x(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
 !
@@ -267,16 +267,13 @@ contains
           ll   = i + l - weno_scheme
           uu   = w_aux_trans_gpu(j,ll,k,2)
           tt   = w_aux_trans_gpu(j,ll,k,6)
-          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
-          c    = sqrt (gamloc*tt)
-          ev(1) = abs(uu-c)
-          ev(2) = abs(uu)
-          ev(3) = abs(uu+c)
-          ev(4) = ev(2)
-          ev(5) = ev(2)
-          do m=1,5
-            evmax(m) = max(ev(m),evmax(m))
-          enddo
+          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+          c    = sqrt (gamloc*rgas0*tt)
+          evmax(1) = max(abs(uu-c),evmax(1))
+          evmax(2) = max(abs(uu  ),evmax(2))
+          evmax(3) = max(abs(uu+c),evmax(3))
+          evmax(4) = evmax(2)
+          evmax(5) = evmax(2)
         enddo
         do l=1,weno_size ! loop over the stencil centered at face i
           ll = i + l - weno_scheme
@@ -287,7 +284,7 @@ contains
           ww     = w_aux_trans_gpu(j,ll,k,4)
           h      = w_aux_trans_gpu(j,ll,k,5)
           rhou   = rho*uu
-          pp     = rho*w_aux_trans_gpu(j,ll,k,6)
+          pp     = rho*w_aux_trans_gpu(j,ll,k,6)*rgas0
           fi(1)  =      rhou
           fi(2)  = uu * rhou + pp
           fi(3)  = vv * rhou
@@ -308,25 +305,22 @@ contains
             wc = wc + el(5,m) * (rho*h-pp)
             gc = gc + el(5,m) * fi(5)
 !
-            gplus_x_gpu (m,l,j,k) = 0.5_rkind * (gc + evmax(m) * wc)
-            gminus_x_gpu(m,l,j,k) = gc - gplus_x_gpu(m,l,j,k)
+            c = 0.5_rkind * (gc + evmax(m) * wc)
+            gplus_x_gpu (j,k,m,l) = c
+            gminus_x_gpu(j,k,m,l) = gc - c
           enddo
         enddo
 !       
 !       Reconstruction of the '+' and '-' fluxes
 !       
         wenorec_ord = max(weno_scheme+ep_ord_change_x_gpu(j,i,k),1)
-        call wenorec(nv,gplus_x_gpu(:,:,j,k),gminus_x_gpu(:,:,j,k),gl,gr,weno_scheme,wenorec_ord,weno_version)
+        call wenorec(j,k,nv,ny,nz,gplus_x_gpu,gminus_x_gpu,fi,weno_scheme,wenorec_ord,weno_version,rho0,u0)
 !       
-        do m=1,5
-          ghat(m) = gl(m) + gr(m) ! char. flux
-        enddo
-!
 !       !Return to conservative fluxes
         do m=1,5
           fhat_trans_gpu(j,i,k,m) = 0._rkind
           do mm=1,5
-            fhat_trans_gpu(j,i,k,m) = fhat_trans_gpu(j,i,k,m) + er(mm,m) * ghat(mm)
+            fhat_trans_gpu(j,i,k,m) = fhat_trans_gpu(j,i,k,m) + er(mm,m) * fi(mm)
           enddo
         enddo
 !
@@ -334,6 +328,253 @@ contains
     enddo
 !
   endsubroutine euler_x_fluxes_hybrid_kernel
+!
+  attributes(global) launch_bounds(256) subroutine euler_x_fluxes_hybrid_rusanov_kernel(nv, nv_aux, nx, ny, nz, ng, &
+    eul_imin, eul_imax, lmax_base, nkeep, rgas0, coeff_deriv1_gpu, dcsidx_gpu, w_aux_trans_gpu, fhat_trans_gpu, &
+    force_zero_flux_min, force_zero_flux_max, &
+    weno_scheme, weno_version, sensor_threshold, weno_size, gplus_x_gpu, gminus_x_gpu, cp_coeff_gpu, &
+    indx_cp_l, indx_cp_r, ep_ord_change_x_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
+!
+    implicit none
+!   Passed arguments
+    integer, value :: nv, nx, ny, nz, ng, nv_aux
+    integer, value :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+    real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:8) :: w_aux_trans_gpu
+    real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:nv) :: fhat_trans_gpu
+    integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
+    real(rkind), dimension(4,4) :: coeff_deriv1_gpu
+    real(rkind), dimension(nx) :: dcsidx_gpu
+    integer, value :: force_zero_flux_min, force_zero_flux_max
+    real(rkind), value :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
+    integer, value :: weno_scheme, weno_size, weno_version
+!   Local variables
+    integer :: i, j, k, m, l
+    real(rkind) :: fh1, fh2, fh3, fh4, fh5
+    real(rkind) :: rhom, uui, vvi, wwi, ppi, enti, rhoi, tti
+    real(rkind) :: uuip, vvip, wwip, ppip, entip, rhoip, ttip
+    real(rkind) :: ft1, ft2, ft3, ft4, ft5, ft6
+    real(rkind) :: uvs1, uvs2, uvs3, uvs4, uvs6, uv_part
+    real(rkind) :: uvs5
+    integer :: ii, lmax, wenorec_ord
+    integer :: ishk
+    real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
+    real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gplus_x_gpu
+    real(rkind), dimension(ny,nz,nv,2*weno_scheme) :: gminus_x_gpu
+    integer :: ll, mm
+    real(rkind) :: evm,evmax,rhoevm
+    real(rkind) :: rho, pp, rhou
+    real(rkind) :: tt, gamloc
+    real(rkind) :: uvs5_i,uvs5_k,uvs5_p,eei,eeip
+    real(rkind) :: drho, dee, eem
+    real(rkind) :: drhof, deef
+    real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
+    integer :: n,n2
+!
+    j = blockDim%x * (blockIdx%x - 1) + threadIdx%x
+    k = blockDim%y * (blockIdx%y - 1) + threadIdx%y
+    if (j > ny .or. k > nz) return
+!
+    do i=eul_imin-1,eul_imax
+!
+      ishk = 0
+      do ii=i-weno_scheme+1,i+weno_scheme
+        if (w_aux_trans_gpu(j,ii,k,8) > sensor_threshold) ishk = 1
+      enddo
+!
+      if (ishk == 0) then
+!
+        ft1  = 0._rkind
+        ft2  = 0._rkind
+        ft3  = 0._rkind
+        ft4  = 0._rkind
+        ft5  = 0._rkind
+        ft6  = 0._rkind
+        lmax = max(lmax_base+ep_ord_change_x_gpu(j,i,k),1)
+        if (nkeep>=0) then
+          do l=1,lmax
+            uvs1 = 0._rkind
+            uvs2 = 0._rkind
+            uvs3 = 0._rkind
+            uvs4 = 0._rkind
+            uvs5_i = 0._rkind
+            uvs5_k = 0._rkind
+            uvs5_p = 0._rkind
+            uvs6 = 0._rkind
+            do m=0,l-1
+!
+              rhoi  = w_aux_trans_gpu(j,i-m,k,1)
+              uui   = w_aux_trans_gpu(j,i-m,k,2)
+              vvi   = w_aux_trans_gpu(j,i-m,k,3)
+              wwi   = w_aux_trans_gpu(j,i-m,k,4)
+              enti  = w_aux_trans_gpu(j,i-m,k,5)
+              tti   = w_aux_trans_gpu(j,i-m,k,6)
+              ppi   = tti*rhoi*rgas0
+              eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+!
+              rhoip = w_aux_trans_gpu(j,i-m+l,k,1)
+              uuip  = w_aux_trans_gpu(j,i-m+l,k,2)
+              vvip  = w_aux_trans_gpu(j,i-m+l,k,3)
+              wwip  = w_aux_trans_gpu(j,i-m+l,k,4)
+              entip = w_aux_trans_gpu(j,i-m+l,k,5)
+              ttip  = w_aux_trans_gpu(j,i-m+l,k,6)
+              ppip  = ttip*rhoip*rgas0
+              eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+!
+              rhom  = rhoi+rhoip
+              eem   = eei + eeip
+!
+              drho   = 2._rkind*(rhoip-rhoi)/rhom
+              dee    = 2._rkind*(eeip - eei)/eem
+              sumnumrho = 1._rkind
+              sumdenrho = 1._rkind
+              sumnumee  = 1._rkind
+              sumdenee  = 1._rkind
+              do n = 1, nkeep
+                n2 = 2*n
+                sumdenrho = sumdenrho + (0.5_rkind*drho)**n2 / (1._rkind+n2)
+                sumdenee  = sumdenee  + (0.5_rkind*dee )**n2
+                sumnumee  = sumnumee  + (0.5_rkind*dee )**n2 / (1._rkind+n2)
+              enddo
+              drhof = sumnumrho/sumdenrho
+              deef  = sumnumee /sumdenee
+!
+              uv_part = (uui+uuip) * rhom * drhof
+              uvs1 = uvs1 + uv_part * (2._rkind)
+              uvs2 = uvs2 + uv_part * (uui+uuip)
+              uvs3 = uvs3 + uv_part * (vvi+vvip)
+              uvs4 = uvs4 + uv_part * (wwi+wwip)
+              uvs5_i = uvs5_i + uv_part * eem * deef
+              uvs5_k = uvs5_k + uv_part * (uui*uuip+vvi*vvip+wwi*wwip)
+              uvs5_p = uvs5_p + 4._rkind*(uui*ppip+uuip*ppi)
+              uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+            enddo
+            ft1  = ft1  + coeff_deriv1_gpu(l,lmax)*uvs1
+            ft2  = ft2  + coeff_deriv1_gpu(l,lmax)*uvs2
+            ft3  = ft3  + coeff_deriv1_gpu(l,lmax)*uvs3
+            ft4  = ft4  + coeff_deriv1_gpu(l,lmax)*uvs4
+            ft5  = ft5  + coeff_deriv1_gpu(l,lmax)*(uvs5_i+uvs5_k+uvs5_p)
+            ft6  = ft6  + coeff_deriv1_gpu(l,lmax)*uvs6
+          enddo
+        else
+          do l=1,lmax
+            uvs1 = 0._rkind
+            uvs2 = 0._rkind
+            uvs3 = 0._rkind
+            uvs4 = 0._rkind
+            uvs5 = 0._rkind
+            uvs6 = 0._rkind
+            do m=0,l-1
+!
+              rhoi  = w_aux_trans_gpu(j,i-m,k,1)
+              uui   = w_aux_trans_gpu(j,i-m,k,2)
+              vvi   = w_aux_trans_gpu(j,i-m,k,3)
+              wwi   = w_aux_trans_gpu(j,i-m,k,4)
+              enti  = w_aux_trans_gpu(j,i-m,k,5)
+              tti   = w_aux_trans_gpu(j,i-m,k,6)
+              ppi   = tti*rhoi*rgas0
+!
+              rhoip = w_aux_trans_gpu(j,i-m+l,k,1)
+              uuip  = w_aux_trans_gpu(j,i-m+l,k,2)
+              vvip  = w_aux_trans_gpu(j,i-m+l,k,3)
+              wwip  = w_aux_trans_gpu(j,i-m+l,k,4)
+              entip = w_aux_trans_gpu(j,i-m+l,k,5)
+              ttip  = w_aux_trans_gpu(j,i-m+l,k,6)
+              ppip  = ttip*rhoip*rgas0
+!
+              rhom  = rhoi+rhoip
+              uv_part = (uui+uuip) * rhom
+              uvs1 = uvs1 + uv_part * (2._rkind)
+              uvs2 = uvs2 + uv_part * (uui+uuip)
+              uvs3 = uvs3 + uv_part * (vvi+vvip)
+              uvs4 = uvs4 + uv_part * (wwi+wwip)
+              uvs5 = uvs5 + uv_part * (enti+entip)
+              uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+            enddo
+            ft1 = ft1 + coeff_deriv1_gpu(l,lmax)*uvs1
+            ft2 = ft2 + coeff_deriv1_gpu(l,lmax)*uvs2
+            ft3 = ft3 + coeff_deriv1_gpu(l,lmax)*uvs3
+            ft4 = ft4 + coeff_deriv1_gpu(l,lmax)*uvs4
+            ft5 = ft5 + coeff_deriv1_gpu(l,lmax)*uvs5
+            ft6 = ft6 + coeff_deriv1_gpu(l,lmax)*uvs6
+          enddo
+        endif
+!
+        fh1 = 0.25_rkind*ft1
+        fh2 = 0.25_rkind*ft2
+        fh3 = 0.25_rkind*ft3
+        fh4 = 0.25_rkind*ft4
+        fh5 = 0.25_rkind*ft5
+!
+        if ((i==0 .and. force_zero_flux_min == 1).or.(i==nx .and. force_zero_flux_max == 1)) then
+          fh1 = 0._rkind
+          fh2 = 0._rkind
+          fh3 = 0._rkind
+          fh4 = 0._rkind
+          fh5 = 0._rkind
+        endif
+        fh2 = fh2 + 0.5_rkind*ft6
+!
+        fhat_trans_gpu(j,i,k,1) = fh1
+        fhat_trans_gpu(j,i,k,2) = fh2
+        fhat_trans_gpu(j,i,k,3) = fh3
+        fhat_trans_gpu(j,i,k,4) = fh4
+        fhat_trans_gpu(j,i,k,5) = fh5
+      else
+!
+        evmax = -1._rkind
+        do l=1,weno_size ! LLF
+          ll   = i + l - weno_scheme
+          uu   = w_aux_trans_gpu(j,ll,k,2)
+          tt   = w_aux_trans_gpu(j,ll,k,6)
+          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+          c      = sqrt (gamloc*rgas0*tt)
+          evm    = max(abs(uu-c),abs(uu+c))
+          evmax  = max(evm,evmax)
+        enddo
+        do l=1,weno_size ! loop over the stencil centered at face i
+          ll = i + l - weno_scheme
+          rho    = w_aux_trans_gpu(j,ll,k,1)
+          uu     = w_aux_trans_gpu(j,ll,k,2)
+          vv     = w_aux_trans_gpu(j,ll,k,3)
+          ww     = w_aux_trans_gpu(j,ll,k,4)
+          h      = w_aux_trans_gpu(j,ll,k,5)
+          rhou   = rho*uu
+          pp     = rho*w_aux_trans_gpu(j,ll,k,6)*rgas0
+          rhoevm = rho*evmax
+!
+          evm    = rhou
+          c = 0.5_rkind * (evm + rhoevm)
+          gplus_x_gpu (j,k,1,l) = c
+          gminus_x_gpu(j,k,1,l) = evm - c
+          evm    = uu * rhou + pp
+          c = 0.5_rkind * (evm + rhoevm * uu)
+          gplus_x_gpu (j,k,2,l) = c
+          gminus_x_gpu(j,k,2,l) = evm - c
+          evm    = vv * rhou
+          c = 0.5_rkind * (evm + rhoevm * vv)
+          gplus_x_gpu (j,k,3,l) = c
+          gminus_x_gpu(j,k,3,l) = evm - c
+          evm    = ww * rhou
+          c = 0.5_rkind * (evm + rhoevm * ww)
+          gplus_x_gpu (j,k,4,l) = c
+          gminus_x_gpu(j,k,4,l) = evm - c
+          evm    = h  * rhou
+          c = 0.5_rkind * (evm + evmax * (rho*h-pp))
+          gplus_x_gpu (j,k,5,l) = c
+          gminus_x_gpu(j,k,5,l) = evm - c
+        enddo
+!       
+!       Reconstruction of the '+' and '-' fluxes
+!       
+        wenorec_ord = max(weno_scheme+ep_ord_change_x_gpu(j,i,k),1)
+        call wenorec_rusanov(j,k,nv,ny,nz,gplus_x_gpu,gminus_x_gpu,fhat_trans_gpu,&
+          weno_scheme,wenorec_ord,weno_version,ng,ny,nx,nz,j,i,k)
+!       
+      endif
+    enddo
+!
+  endsubroutine euler_x_fluxes_hybrid_rusanov_kernel
 !
   subroutine euler_x_update_cuf(nx, ny, nz, ng, nv, eul_imin, eul_imax, &
     fhat_trans_gpu,fl_trans_gpu,fl_gpu,dcsidx_gpu,stream_id)
@@ -370,11 +611,11 @@ contains
   endsubroutine euler_x_update_cuf
 !
   attributes(global) launch_bounds(256) subroutine euler_z_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-    eul_kmin, eul_kmax, lmax_base, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
+    eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
     force_zero_flux_min, force_zero_flux_max, &
     weno_scheme, weno_version, sensor_threshold, weno_size, w_gpu, gplus_z_gpu, gminus_z_gpu, cp_coeff_gpu, indx_cp_l, indx_cp&
     &_r, &
-    ep_ord_change_gpu, calorically_perfect, tol_iter_nr)
+    ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
     implicit none
 !   Passed arguments
     integer, value :: nv, nx, ny, nz, ng, nv_aux
@@ -383,12 +624,12 @@ contains
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_gpu
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_gpu
     integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_gpu
-    real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
     real(rkind), dimension(nx,ny,nz,nv) :: fl_gpu
     real(rkind), dimension(4,4) :: coeff_deriv1_gpu
     real(rkind), dimension(nz) :: dzitdz_gpu
     integer, value :: force_zero_flux_min, force_zero_flux_max
-    real(rkind), value :: sensor_threshold, cp0, cv0, tol_iter_nr
+    real(rkind), value :: sensor_threshold, rgas0, tol_iter_nr, rho0, u0, t0
     integer, value :: weno_scheme, weno_size, weno_version
 !   Local variables
     integer :: i, j, k, m, l
@@ -402,9 +643,9 @@ contains
     integer :: ishk
     real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
     real(rkind), dimension(5,5) :: el, er
-    real(rkind), dimension(5) :: ev, evmax, fk, ghat, gl, gr
-    real(rkind), dimension(nv,2*weno_scheme,nx,ny) :: gplus_z_gpu
-    real(rkind), dimension(nv,2*weno_scheme,nx,ny) :: gminus_z_gpu
+    real(rkind), dimension(5) :: evmax, fk
+    real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gplus_z_gpu
+    real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gminus_z_gpu
     integer :: ll, mm
     real(rkind) :: rho, pp, wc, gc, rhow
     real(rkind) :: tt, gamloc
@@ -450,8 +691,8 @@ contains
               wwi   = w_aux_gpu(i,j,k-m,4)
               enti  = w_aux_gpu(i,j,k-m,5)
               tti   = w_aux_gpu(i,j,k-m,6)
-              ppi   = tti*rhoi
-              eei   = enti-tti-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+              ppi   = tti*rhoi*rgas0
+              eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
 !
               rhoip = w_aux_gpu(i,j,k-m+l,1)
               uuip  = w_aux_gpu(i,j,k-m+l,2)
@@ -459,8 +700,8 @@ contains
               wwip  = w_aux_gpu(i,j,k-m+l,4)
               entip = w_aux_gpu(i,j,k-m+l,5)
               ttip  = w_aux_gpu(i,j,k-m+l,6)
-              ppip  = ttip*rhoip
-              eeip  = entip-ttip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+              ppip  = ttip*rhoip*rgas0
+              eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
 !
               rhom  = rhoi + rhoip
               eem   = eei  + eeip
@@ -513,7 +754,7 @@ contains
               wwi   = w_aux_gpu(i,j,k-m,4)
               enti  = w_aux_gpu(i,j,k-m,5)
               tti   = w_aux_gpu(i,j,k-m,6)
-              ppi   = tti*rhoi
+              ppi   = tti*rhoi*rgas0
 !
               rhoip = w_aux_gpu(i,j,k-m+l,1)
               uuip  = w_aux_gpu(i,j,k-m+l,2)
@@ -521,7 +762,7 @@ contains
               wwip  = w_aux_gpu(i,j,k-m+l,4)
               entip = w_aux_gpu(i,j,k-m+l,5)
               ttip  = w_aux_gpu(i,j,k-m+l,6)
-              ppip  = ttip*rhoip
+              ppip  = ttip*rhoip*rgas0
 !
               rhom  = rhoi+rhoip
               uv_part = (wwi+wwip) * rhom
@@ -560,9 +801,9 @@ contains
         fhat_gpu(i,j,k,4) = fh4
         fhat_gpu(i,j,k,5) = fh5
       else
-        call compute_roe_average(nx, ny, nz, ng, i, i, j, j, k, k+1, w_aux_gpu, cp0, cv0, &
+        call compute_roe_average(nx, ny, nz, ng, i, i, j, j, k, k+1, w_aux_gpu, rgas0, &
           b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-          calorically_perfect, tol_iter_nr)
+          calorically_perfect, tol_iter_nr,t0)
 !
         call eigenvectors_z(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
 !
@@ -573,16 +814,13 @@ contains
           ll = k + l - weno_scheme
           ww   = w_aux_gpu(i,j,ll,4)
           tt   = w_aux_gpu(i,j,ll,6)
-          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
-          c    = sqrt (gamloc*tt)
-          ev(1) = abs(ww-c)
-          ev(2) = abs(ww)
-          ev(3) = abs(ww+c)
-          ev(4) = ev(2)
-          ev(5) = ev(2)
-          do m=1,5
-            evmax(m) = max(ev(m),evmax(m))
-          enddo
+          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+          c    = sqrt (gamloc*rgas0*tt)
+          evmax(1) = max(abs(ww-c),evmax(1))
+          evmax(2) = max(abs(ww  ),evmax(2))
+          evmax(3) = max(abs(ww+c),evmax(3))
+          evmax(4) = evmax(2)
+          evmax(5) = evmax(2)
         enddo
         do l=1,weno_size ! loop over the stencil centered at face i
           ll = k + l - weno_scheme
@@ -593,7 +831,7 @@ contains
           ww     = w_aux_gpu(i,j,ll,4)
           h      = w_aux_gpu(i,j,ll,5)
           rhow   = rho*ww
-          pp     = rho*w_aux_gpu(i,j,ll,6)
+          pp     = rho*w_aux_gpu(i,j,ll,6)*rgas0
           fk(1)  =      rhow
           fk(2)  = uu * rhow
           fk(3)  = vv * rhow
@@ -603,29 +841,37 @@ contains
             wc = 0._rkind
             gc = 0._rkind
 !
-            do mm=1,5
-              wc = wc + el(mm,m) * w_gpu(i,j,ll,mm)
-              gc = gc + el(mm,m) * fk(mm)
-            enddo
-            gplus_z_gpu (m,l,i,j) = 0.5_rkind * (gc + evmax(m) * wc)
-            gminus_z_gpu(m,l,i,j) = gc - gplus_z_gpu(m,l,i,j)
+            wc = wc + el(1,m) * rho
+            gc = gc + el(1,m) * fk(1)
+            wc = wc + el(2,m) * rho*uu
+            gc = gc + el(2,m) * fk(2)
+            wc = wc + el(3,m) * rho*vv
+            gc = gc + el(3,m) * fk(3)
+            wc = wc + el(4,m) * rho*ww
+            gc = gc + el(4,m) * fk(4)
+            wc = wc + el(5,m) * (rho*h-pp)
+            gc = gc + el(5,m) * fk(5)
+!           do mm=1,5
+!             wc = wc + el(mm,m) * w_gpu(i,j,ll,mm)
+!             gc = gc + el(mm,m) * fk(mm)
+!           enddo
+!
+            c = 0.5_rkind * (gc + evmax(m) * wc)
+            gplus_z_gpu (i,j,m,l) = c
+            gminus_z_gpu(i,j,m,l) = gc - c
           enddo
         enddo
 !       
 !       Reconstruction of the '+' and '-' fluxes
 !       
         wenorec_ord = max(weno_scheme+ep_ord_change_gpu(i,j,k,3),1)
-        call wenorec(nv,gplus_z_gpu(:,:,i,j),gminus_z_gpu(:,:,i,j),gl,gr,weno_scheme,wenorec_ord,weno_version)
+        call wenorec(i,j,nv,nx,ny,gplus_z_gpu,gminus_z_gpu,fk,weno_scheme,wenorec_ord,weno_version,rho0,u0)
 !       
-        do m=1,5
-          ghat(m) = gl(m) + gr(m) ! char. flux
-        enddo
-!
 !       !Return to conservative fluxes
         do m=1,5
           fhat_gpu(i,j,k,m) = 0._rkind
           do mm=1,5
-            fhat_gpu(i,j,k,m) = fhat_gpu(i,j,k,m) + er(mm,m) * ghat(mm)
+            fhat_gpu(i,j,k,m) = fhat_gpu(i,j,k,m) + er(mm,m) * fk(mm)
           enddo
         enddo
 !
@@ -641,12 +887,265 @@ contains
 !
   endsubroutine euler_z_hybrid_kernel
 !
+  attributes(global) launch_bounds(256) subroutine euler_z_hybrid_rusanov_kernel(nv, nv_aux, nx, ny, nz, ng, &
+    eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_gpu, &
+    force_zero_flux_min, force_zero_flux_max, &
+    weno_scheme, weno_version, sensor_threshold, weno_size, w_gpu, gplus_z_gpu, gminus_z_gpu, cp_coeff_gpu, indx_cp_l, indx_cp&
+    &_r, &
+    ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
+    implicit none
+!   Passed arguments
+    integer, value :: nv, nx, ny, nz, ng, nv_aux
+    integer, value :: eul_kmin, eul_kmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+    real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv_aux) :: w_aux_gpu
+    real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_gpu
+    real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_gpu
+    integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
+    real(rkind), dimension(nx,ny,nz,nv) :: fl_gpu
+    real(rkind), dimension(4,4) :: coeff_deriv1_gpu
+    real(rkind), dimension(nz) :: dzitdz_gpu
+    integer, value :: force_zero_flux_min, force_zero_flux_max
+    real(rkind), value :: sensor_threshold, rgas0, tol_iter_nr, rho0, u0, t0
+    integer, value :: weno_scheme, weno_size, weno_version
+!   Local variables
+    integer :: i, j, k, m, l
+    real(rkind) :: fh1, fh2, fh3, fh4, fh5
+    real(rkind) :: rhom, uui, vvi, wwi, ppi, enti, rhoi, tti
+    real(rkind) :: uuip, vvip, wwip, ppip, entip, rhoip, ttip
+    real(rkind) :: ft1, ft2, ft3, ft4, ft5, ft6
+    real(rkind) :: uvs1, uvs2, uvs3, uvs4, uvs6, uv_part
+    real(rkind) :: uvs5
+    integer :: kk, lmax, wenorec_ord
+    integer :: ishk
+    real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
+    real(rkind), dimension(5) :: fk
+    real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gplus_z_gpu
+    real(rkind), dimension(nx,ny,nv,2*weno_scheme) :: gminus_z_gpu
+    integer :: ll, mm
+    real(rkind) :: evm, evmax, rhoevm
+    real(rkind) :: rho, pp, rhow
+    real(rkind) :: tt, gamloc
+    real(rkind) :: uvs5_i,uvs5_k,uvs5_p,eei,eeip
+    real(rkind) :: drho, dee, eem
+    real(rkind) :: drhof, deef
+    real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
+    integer :: n,n2
+!
+    i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
+    j = blockDim%y * (blockIdx%y - 1) + threadIdx%y
+    if(i > nx .or. j > ny) return
+!
+    do k=eul_kmin-1,eul_kmax
+      ishk = 0
+      do kk=k-weno_scheme+1,k+weno_scheme
+        if (w_aux_gpu(i,j,kk,8) > sensor_threshold) ishk = 1
+      enddo
+!
+      if (ishk == 0) then
+        ft1  = 0._rkind
+        ft2  = 0._rkind
+        ft3  = 0._rkind
+        ft4  = 0._rkind
+        ft5  = 0._rkind
+        ft6  = 0._rkind
+        lmax = max(lmax_base+ep_ord_change_gpu(i,j,k,3),1)
+        if (nkeep>=0) then
+          do l=1,lmax
+            uvs1 = 0._rkind
+            uvs2 = 0._rkind
+            uvs3 = 0._rkind
+            uvs4 = 0._rkind
+            uvs5_i = 0._rkind
+            uvs5_k = 0._rkind
+            uvs5_p = 0._rkind
+            uvs6 = 0._rkind
+            do m=0,l-1
+!
+              rhoi  = w_aux_gpu(i,j,k-m,1)
+              uui   = w_aux_gpu(i,j,k-m,2)
+              vvi   = w_aux_gpu(i,j,k-m,3)
+              wwi   = w_aux_gpu(i,j,k-m,4)
+              enti  = w_aux_gpu(i,j,k-m,5)
+              tti   = w_aux_gpu(i,j,k-m,6)
+              ppi   = tti*rhoi*rgas0
+              eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+!
+              rhoip = w_aux_gpu(i,j,k-m+l,1)
+              uuip  = w_aux_gpu(i,j,k-m+l,2)
+              vvip  = w_aux_gpu(i,j,k-m+l,3)
+              wwip  = w_aux_gpu(i,j,k-m+l,4)
+              entip = w_aux_gpu(i,j,k-m+l,5)
+              ttip  = w_aux_gpu(i,j,k-m+l,6)
+              ppip  = ttip*rhoip*rgas0
+              eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+!
+              rhom  = rhoi + rhoip
+              eem   = eei  + eeip
+!
+              drho   = 2._rkind*(rhoip-rhoi)/rhom
+              dee    = 2._rkind*(eeip - eei)/eem
+              sumnumrho = 1._rkind
+              sumdenrho = 1._rkind
+              sumnumee  = 1._rkind
+              sumdenee  = 1._rkind
+              do n = 1, nkeep
+                n2 = 2*n
+                sumdenrho = sumdenrho + (0.5_rkind*drho)**n2 / (1._rkind+n2)
+                sumdenee  = sumdenee  + (0.5_rkind*dee )**n2
+                sumnumee  = sumnumee  + (0.5_rkind*dee )**n2 / (1._rkind+n2)
+              enddo
+              drhof = sumnumrho/sumdenrho
+              deef  = sumnumee /sumdenee
+!
+              uv_part = (wwi+wwip) * rhom * drhof
+              uvs1 = uvs1 + uv_part * (2._rkind)
+              uvs2 = uvs2 + uv_part * (uui+uuip)
+              uvs3 = uvs3 + uv_part * (vvi+vvip)
+              uvs4 = uvs4 + uv_part * (wwi+wwip)
+              uvs5_i = uvs5_i + uv_part * eem * deef
+              uvs5_k = uvs5_k + uv_part * (uui*uuip+vvi*vvip+wwi*wwip)
+              uvs5_p = uvs5_p + 4._rkind*(wwi*ppip+wwip*ppi)
+              uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+            enddo
+            ft1  = ft1  + coeff_deriv1_gpu(l,lmax)*uvs1
+            ft2  = ft2  + coeff_deriv1_gpu(l,lmax)*uvs2
+            ft3  = ft3  + coeff_deriv1_gpu(l,lmax)*uvs3
+            ft4  = ft4  + coeff_deriv1_gpu(l,lmax)*uvs4
+            ft5  = ft5  + coeff_deriv1_gpu(l,lmax)*(uvs5_i+uvs5_k+uvs5_p)
+            ft6  = ft6  + coeff_deriv1_gpu(l,lmax)*uvs6
+          enddo
+        else
+          do l=1,lmax
+            uvs1 = 0._rkind
+            uvs2 = 0._rkind
+            uvs3 = 0._rkind
+            uvs4 = 0._rkind
+            uvs5 = 0._rkind
+            uvs6 = 0._rkind
+            do m=0,l-1
+!
+              rhoi  = w_aux_gpu(i,j,k-m,1)
+              uui   = w_aux_gpu(i,j,k-m,2)
+              vvi   = w_aux_gpu(i,j,k-m,3)
+              wwi   = w_aux_gpu(i,j,k-m,4)
+              enti  = w_aux_gpu(i,j,k-m,5)
+              tti   = w_aux_gpu(i,j,k-m,6)
+              ppi   = tti*rhoi*rgas0
+!
+              rhoip = w_aux_gpu(i,j,k-m+l,1)
+              uuip  = w_aux_gpu(i,j,k-m+l,2)
+              vvip  = w_aux_gpu(i,j,k-m+l,3)
+              wwip  = w_aux_gpu(i,j,k-m+l,4)
+              entip = w_aux_gpu(i,j,k-m+l,5)
+              ttip  = w_aux_gpu(i,j,k-m+l,6)
+              ppip  = ttip*rhoip*rgas0
+!
+              rhom  = rhoi+rhoip
+              uv_part = (wwi+wwip) * rhom
+              uvs1 = uvs1 + uv_part * (2._rkind)
+              uvs2 = uvs2 + uv_part * (uui+uuip)
+              uvs3 = uvs3 + uv_part * (vvi+vvip)
+              uvs4 = uvs4 + uv_part * (wwi+wwip)
+              uvs5 = uvs5 + uv_part * (enti+entip)
+              uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+            enddo
+            ft1 = ft1 + coeff_deriv1_gpu(l,lmax)*uvs1
+            ft2 = ft2 + coeff_deriv1_gpu(l,lmax)*uvs2
+            ft3 = ft3 + coeff_deriv1_gpu(l,lmax)*uvs3
+            ft4 = ft4 + coeff_deriv1_gpu(l,lmax)*uvs4
+            ft5 = ft5 + coeff_deriv1_gpu(l,lmax)*uvs5
+            ft6 = ft6 + coeff_deriv1_gpu(l,lmax)*uvs6
+          enddo
+        endif
+        fh1 = 0.25_rkind*ft1
+        fh2 = 0.25_rkind*ft2
+        fh3 = 0.25_rkind*ft3
+        fh4 = 0.25_rkind*ft4
+        fh5 = 0.25_rkind*ft5
+        if ((k==0 .and. force_zero_flux_min == 1).or.(k==nz .and. force_zero_flux_max == 1)) then
+          fh1 = 0._rkind
+          fh2 = 0._rkind
+          fh3 = 0._rkind
+          fh4 = 0._rkind
+          fh5 = 0._rkind
+        endif
+        fh4 = fh4 + 0.5_rkind*ft6
+!
+        fhat_gpu(i,j,k,1) = fh1
+        fhat_gpu(i,j,k,2) = fh2
+        fhat_gpu(i,j,k,3) = fh3
+        fhat_gpu(i,j,k,4) = fh4
+        fhat_gpu(i,j,k,5) = fh5
+      else
+        evmax = -1._rkind
+        do l=1,weno_size ! LLF
+          ll = k + l - weno_scheme
+          ww   = w_aux_gpu(i,j,ll,4)
+          tt   = w_aux_gpu(i,j,ll,6)
+          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+          c     = sqrt (gamloc*rgas0*tt)
+          evm   = max(abs(ww-c),abs(ww+c))
+          evmax = max(evm,evmax)
+        enddo
+        do l=1,weno_size ! loop over the stencil centered at face i
+          ll = k + l - weno_scheme
+!
+          rho    = w_aux_gpu(i,j,ll,1)
+          uu     = w_aux_gpu(i,j,ll,2)
+          vv     = w_aux_gpu(i,j,ll,3)
+          ww     = w_aux_gpu(i,j,ll,4)
+          h      = w_aux_gpu(i,j,ll,5)
+          rhow   = rho*ww
+          pp     = rho*w_aux_gpu(i,j,ll,6)*rgas0
+          rhoevm = rho*evmax
+!
+          evm = rhow
+          c = 0.5_rkind * (evm + rhoevm)
+          gplus_z_gpu (i,j,1,l) = c
+          gminus_z_gpu(i,j,1,l) = evm-c
+          evm  = uu * rhow
+          c = 0.5_rkind * (evm + rhoevm * uu)
+          gplus_z_gpu (i,j,2,l) = c
+          gminus_z_gpu(i,j,2,l) = evm-c
+          evm = vv * rhow
+          c = 0.5_rkind * (evm + rhoevm * vv)
+          gplus_z_gpu (i,j,3,l) = c
+          gminus_z_gpu(i,j,3,l) = evm-c
+          evm = ww * rhow + pp
+          c = 0.5_rkind * (evm + rhoevm * ww)
+          gplus_z_gpu (i,j,4,l) = c
+          gminus_z_gpu(i,j,4,l) = evm-c
+          evm = h  * rhow
+          c = 0.5_rkind * (evm + evmax * (rho*h-pp))
+          gplus_z_gpu (i,j,5,l) = c
+          gminus_z_gpu(i,j,5,l) = evm-c
+        enddo
+!       
+!       Reconstruction of the '+' and '-' fluxes
+!       
+        wenorec_ord = max(weno_scheme+ep_ord_change_gpu(i,j,k,3),1)
+        call wenorec_rusanov(i,j,nv,nx,ny,gplus_z_gpu,gminus_z_gpu,fhat_gpu,&
+          weno_scheme,wenorec_ord,weno_version,ng,nx,ny,nz,i,j,k)
+!
+      endif
+    enddo
+!
+!   Update net flux
+    do k=eul_kmin,eul_kmax ! loop on the inner nodes
+      do m=1,5
+        fl_gpu(i,j,k,m) = fl_gpu(i,j,k,m) + (fhat_gpu(i,j,k,m)-fhat_gpu(i,j,k-1,m))*dzitdz_gpu(k)
+      enddo
+    enddo
+!
+  endsubroutine euler_z_hybrid_rusanov_kernel
+!
   attributes(global) launch_bounds(256) subroutine euler_y_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng, &
-    eul_jmin, eul_jmax, lmax_base, nkeep, cp0, cv0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
+    eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
     force_zero_flux_min, force_zero_flux_max, &
     weno_scheme, weno_version, sensor_threshold, weno_size, w_gpu, gplus_y_gpu, gminus_y_gpu, cp_coeff_gpu, indx_cp_l, indx_cp&
     &_r, &
-    ep_ord_change_gpu, calorically_perfect, tol_iter_nr)
+    ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
     implicit none
 !   Passed arguments
     integer, value :: nv, nx, ny, nz, ng, nv_aux
@@ -655,12 +1154,12 @@ contains
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_gpu
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_gpu
     integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_gpu
-    real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
     real(rkind), dimension(nx,ny,nz,nv) :: fl_gpu
     real(rkind), dimension(4,4) :: coeff_deriv1_gpu
     real(rkind), dimension(ny) :: detady_gpu
     integer, value :: force_zero_flux_min, force_zero_flux_max
-    real(rkind), value :: sensor_threshold, cp0, cv0, tol_iter_nr
+    real(rkind), value :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
     integer, value :: weno_scheme, weno_size, weno_version
 !   Local variables
     integer :: i, j, k, m, l
@@ -674,9 +1173,9 @@ contains
     integer :: ishk
     real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
     real(rkind), dimension(5,5) :: el, er
-    real(rkind), dimension(5) :: ev, evmax, fj, ghat, gl, gr
-    real(rkind), dimension(nv,2*weno_scheme,nx,nz) :: gplus_y_gpu
-    real(rkind), dimension(nv,2*weno_scheme,nx,nz) :: gminus_y_gpu
+    real(rkind), dimension(5) :: evmax, fj
+    real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gplus_y_gpu
+    real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gminus_y_gpu
     integer :: ll, mm, lmax, wenorec_ord
     real(rkind) :: rho, pp, wc, gc, rhov
     real(rkind) :: tt, gamloc
@@ -723,8 +1222,8 @@ contains
               wwi   = w_aux_gpu(i,j-m,k,4)
               enti  = w_aux_gpu(i,j-m,k,5)
               tti   = w_aux_gpu(i,j-m,k,6)
-              ppi   = tti*rhoi
-              eei   = enti-tti-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+              ppi   = tti*rhoi*rgas0
+              eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
 !
               rhoip = w_aux_gpu(i,j-m+l,k,1)
               uuip  = w_aux_gpu(i,j-m+l,k,2)
@@ -732,8 +1231,8 @@ contains
               wwip  = w_aux_gpu(i,j-m+l,k,4)
               entip = w_aux_gpu(i,j-m+l,k,5)
               ttip  = w_aux_gpu(i,j-m+l,k,6)
-              ppip  = ttip*rhoip
-              eeip  = entip-ttip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+              ppip  = ttip*rhoip*rgas0
+              eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
 !
               rhom  = rhoi + rhoip
               eem   = eei  + eeip
@@ -786,7 +1285,7 @@ contains
               wwi   = w_aux_gpu(i,j-m,k,4)
               enti  = w_aux_gpu(i,j-m,k,5)
               tti   = w_aux_gpu(i,j-m,k,6)
-              ppi   = tti*rhoi
+              ppi   = tti*rhoi*rgas0
 !
               rhoip = w_aux_gpu(i,j-m+l,k,1)
               uuip  = w_aux_gpu(i,j-m+l,k,2)
@@ -794,7 +1293,7 @@ contains
               wwip  = w_aux_gpu(i,j-m+l,k,4)
               entip = w_aux_gpu(i,j-m+l,k,5)
               ttip  = w_aux_gpu(i,j-m+l,k,6)
-              ppip  = ttip*rhoip
+              ppip  = ttip*rhoip*rgas0
 !
               rhom  = rhoi + rhoip
               uv_part = (vvi+vvip) * rhom
@@ -834,9 +1333,9 @@ contains
         fhat_gpu(i,j,k,4) = fh4
         fhat_gpu(i,j,k,5) = fh5
       else
-        call compute_roe_average(nx, ny, nz, ng, i, i, j, j+1, k, k, w_aux_gpu, cp0, cv0, &
+        call compute_roe_average(nx, ny, nz, ng, i, i, j, j+1, k, k, w_aux_gpu, rgas0, &
           b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, &
-          calorically_perfect, tol_iter_nr)
+          calorically_perfect, tol_iter_nr,t0)
 !
         call eigenvectors_y(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
 !
@@ -847,16 +1346,13 @@ contains
           ll = j + l - weno_scheme
           vv   = w_aux_gpu(i,ll,k,3)
           tt   = w_aux_gpu(i,ll,k,6)
-          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
-          c    = sqrt (gamloc*tt)
-          ev(1) = abs(vv-c)
-          ev(2) = abs(vv)
-          ev(3) = abs(vv+c)
-          ev(4) = ev(2)
-          ev(5) = ev(2)
-          do m=1,5
-            evmax(m) = max(ev(m),evmax(m))
-          enddo
+          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+          c    = sqrt (gamloc*rgas0*tt)
+          evmax(1) = max(abs(vv-c),evmax(1))
+          evmax(2) = max(abs(vv  ),evmax(2))
+          evmax(3) = max(abs(vv+c),evmax(3))
+          evmax(4) = evmax(2)
+          evmax(5) = evmax(2)
         enddo
         do l=1,weno_size ! loop over the stencil centered at face i
           ll = j + l - weno_scheme
@@ -867,7 +1363,7 @@ contains
           ww     = w_aux_gpu(i,ll,k,4)
           h      = w_aux_gpu(i,ll,k,5)
           rhov   = rho*vv
-          pp     = rho*w_aux_gpu(i,ll,k,6)
+          pp     = rho*w_aux_gpu(i,ll,k,6)*rgas0
           fj(1)  =      rhov
           fj(2)  = uu * rhov
           fj(3)  = vv * rhov + pp
@@ -877,29 +1373,33 @@ contains
             wc = 0._rkind
             gc = 0._rkind
 !
-            do mm=1,5
-              wc = wc + el(mm,m) * w_gpu(i,ll,k,mm)
-              gc = gc + el(mm,m) * fj(mm)
-            enddo
-            gplus_y_gpu (m,l,i,k) = 0.5_rkind * (gc + evmax(m) * wc)
-            gminus_y_gpu(m,l,i,k) = gc - gplus_y_gpu(m,l,i,k)
+            wc = wc + el(1,m) * rho
+            gc = gc + el(1,m) * fj(1)
+            wc = wc + el(2,m) * rho*uu
+            gc = gc + el(2,m) * fj(2)
+            wc = wc + el(3,m) * rho*vv
+            gc = gc + el(3,m) * fj(3)
+            wc = wc + el(4,m) * rho*ww
+            gc = gc + el(4,m) * fj(4)
+            wc = wc + el(5,m) * (rho*h-pp)
+            gc = gc + el(5,m) * fj(5)
+!
+            c = 0.5_rkind * (gc + evmax(m) * wc)
+            gplus_y_gpu (i,k,m,l) = c
+            gminus_y_gpu(i,k,m,l) = gc - c
           enddo
         enddo
 !       
 !       Reconstruction of the '+' and '-' fluxes
 !       
         wenorec_ord = max(weno_scheme+ep_ord_change_gpu(i,j,k,2),1)
-        call wenorec(nv,gplus_y_gpu(:,:,i,k),gminus_y_gpu(:,:,i,k),gl,gr,weno_scheme,wenorec_ord,weno_version)
+        call wenorec(i,k,nv,nx,nz,gplus_y_gpu,gminus_y_gpu,fj,weno_scheme,wenorec_ord,weno_version,rho0,u0)
 !       
-        do m=1,5
-          ghat(m) = gl(m) + gr(m) ! char. flux
-        enddo
-!
 !       !Return to conservative fluxes
         do m=1,5
           fhat_gpu(i,j,k,m) = 0._rkind
           do mm=1,5
-            fhat_gpu(i,j,k,m) = fhat_gpu(i,j,k,m) + er(mm,m) * ghat(mm)
+            fhat_gpu(i,j,k,m) = fhat_gpu(i,j,k,m) + er(mm,m) * fj(mm)
           enddo
         enddo
 !
@@ -915,31 +1415,287 @@ contains
 !
   endsubroutine euler_y_hybrid_kernel
 !
-  attributes(device) subroutine wenorec(nvar,vp,vm,vminus,vplus,iweno,wenorec_ord,weno_version)
+  attributes(global) launch_bounds(256) subroutine euler_y_hybrid_rusanov_kernel(nv, nv_aux, nx, ny, nz, ng, &
+    eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_gpu, &
+    force_zero_flux_min, force_zero_flux_max, &
+    weno_scheme, weno_version, sensor_threshold, weno_size, w_gpu, gplus_y_gpu, gminus_y_gpu, cp_coeff_gpu, indx_cp_l, indx_cp&
+    &_r, &
+    ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t0)
+    implicit none
+!   Passed arguments
+    integer, value :: nv, nx, ny, nz, ng, nv_aux
+    integer, value :: eul_jmin, eul_jmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+    real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv_aux) :: w_aux_gpu
+    real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: w_gpu
+    real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv) :: fhat_gpu
+    integer, dimension(0:nx,0:ny,0:nz,2:3) :: ep_ord_change_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
+    real(rkind), dimension(nx,ny,nz,nv) :: fl_gpu
+    real(rkind), dimension(4,4) :: coeff_deriv1_gpu
+    real(rkind), dimension(ny) :: detady_gpu
+    integer, value :: force_zero_flux_min, force_zero_flux_max
+    real(rkind), value :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
+    integer, value :: weno_scheme, weno_size, weno_version
+!   Local variables
+    integer :: i, j, k, m, l
+    real(rkind) :: fh1, fh2, fh3, fh4, fh5
+    real(rkind) :: rhom, uui, vvi, wwi, ppi, enti, rhoi, tti
+    real(rkind) :: uuip, vvip, wwip, ppip, entip, rhoip, ttip
+    real(rkind) :: ft1, ft2, ft3, ft4, ft5, ft6
+    real(rkind) :: uvs1, uvs2, uvs3, uvs4, uvs6, uv_part
+    real(rkind) :: uvs5
+    integer :: jj
+    integer :: ishk
+    real(rkind) :: b1, b2, b3, c, ci, h, uu, vv, ww
+    real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gplus_y_gpu
+    real(rkind), dimension(nx,nz,nv,2*weno_scheme) :: gminus_y_gpu
+    integer :: ll, mm, lmax, wenorec_ord
+    real(rkind) :: evm, evmax, rhoevm
+    real(rkind) :: rho, pp, rhov
+    real(rkind) :: tt, gamloc
+    real(rkind) :: uvs5_i,uvs5_k,uvs5_p,eei,eeip
+    real(rkind) :: drho, dee, eem
+    real(rkind) :: drhof, deef
+    real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
+    integer :: n,n2
+!
+    i = blockDim%x * (blockIdx%x - 1) + threadIdx%x
+    k = blockDim%y * (blockIdx%y - 1) + threadIdx%y
+    if (i > nx .or. k > nz) return
+!
+    do j=eul_jmin-1,eul_jmax
+!
+      ishk = 0
+      do jj=j-weno_scheme+1,j+weno_scheme
+        if (w_aux_gpu(i,jj,k,8) > sensor_threshold) ishk = 1
+      enddo
+!
+      if (ishk == 0) then
+        ft1  = 0._rkind
+        ft2  = 0._rkind
+        ft3  = 0._rkind
+        ft4  = 0._rkind
+        ft5  = 0._rkind
+        ft6  = 0._rkind
+        lmax = max(lmax_base+ep_ord_change_gpu(i,j,k,2),1)
+        if (nkeep>=0) then
+          do l=1,lmax
+            uvs1 = 0._rkind
+            uvs2 = 0._rkind
+            uvs3 = 0._rkind
+            uvs4 = 0._rkind
+            uvs5_i = 0._rkind
+            uvs5_k = 0._rkind
+            uvs5_p = 0._rkind
+            uvs6 = 0._rkind
+            do m=0,l-1
+!
+              rhoi  = w_aux_gpu(i,j-m,k,1)
+              uui   = w_aux_gpu(i,j-m,k,2)
+              vvi   = w_aux_gpu(i,j-m,k,3)
+              wwi   = w_aux_gpu(i,j-m,k,4)
+              enti  = w_aux_gpu(i,j-m,k,5)
+              tti   = w_aux_gpu(i,j-m,k,6)
+              ppi   = tti*rhoi*rgas0
+              eei   = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
+!
+              rhoip = w_aux_gpu(i,j-m+l,k,1)
+              uuip  = w_aux_gpu(i,j-m+l,k,2)
+              vvip  = w_aux_gpu(i,j-m+l,k,3)
+              wwip  = w_aux_gpu(i,j-m+l,k,4)
+              entip = w_aux_gpu(i,j-m+l,k,5)
+              ttip  = w_aux_gpu(i,j-m+l,k,6)
+              ppip  = ttip*rhoip*rgas0
+              eeip  = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
+!
+              rhom  = rhoi + rhoip
+              eem   = eei  + eeip
+!
+              drho   = 2._rkind*(rhoip-rhoi)/rhom
+              dee    = 2._rkind*(eeip - eei)/eem
+              sumnumrho = 1._rkind
+              sumdenrho = 1._rkind
+              sumnumee  = 1._rkind
+              sumdenee  = 1._rkind
+              do n = 1, nkeep
+                n2 = 2*n
+                sumdenrho = sumdenrho + (0.5_rkind*drho)**n2 / (1._rkind+n2)
+                sumdenee  = sumdenee  + (0.5_rkind*dee )**n2
+                sumnumee  = sumnumee  + (0.5_rkind*dee )**n2 / (1._rkind+n2)
+              enddo
+              drhof = sumnumrho/sumdenrho
+              deef  = sumnumee /sumdenee
+!
+              uv_part = (vvi+vvip) * rhom * drhof
+              uvs1 = uvs1 + uv_part * (2._rkind)
+              uvs2 = uvs2 + uv_part * (uui+uuip)
+              uvs3 = uvs3 + uv_part * (vvi+vvip)
+              uvs4 = uvs4 + uv_part * (wwi+wwip)
+              uvs5_i = uvs5_i + uv_part * eem * deef
+              uvs5_k = uvs5_k + uv_part * (uui*uuip+vvi*vvip+wwi*wwip)
+              uvs5_p = uvs5_p + 4._rkind*(vvi*ppip+vvip*ppi)
+              uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+            enddo
+            ft1  = ft1  + coeff_deriv1_gpu(l,lmax)*uvs1
+            ft2  = ft2  + coeff_deriv1_gpu(l,lmax)*uvs2
+            ft3  = ft3  + coeff_deriv1_gpu(l,lmax)*uvs3
+            ft4  = ft4  + coeff_deriv1_gpu(l,lmax)*uvs4
+            ft5  = ft5  + coeff_deriv1_gpu(l,lmax)*(uvs5_i+uvs5_k+uvs5_p)
+            ft6  = ft6  + coeff_deriv1_gpu(l,lmax)*uvs6
+          enddo
+        else
+          do l=1,lmax
+            uvs1 = 0._rkind
+            uvs2 = 0._rkind
+            uvs3 = 0._rkind
+            uvs4 = 0._rkind
+            uvs5 = 0._rkind
+            uvs6 = 0._rkind
+            do m=0,l-1
+!
+              rhoi  = w_aux_gpu(i,j-m,k,1)
+              uui   = w_aux_gpu(i,j-m,k,2)
+              vvi   = w_aux_gpu(i,j-m,k,3)
+              wwi   = w_aux_gpu(i,j-m,k,4)
+              enti  = w_aux_gpu(i,j-m,k,5)
+              tti   = w_aux_gpu(i,j-m,k,6)
+              ppi   = tti*rhoi*rgas0
+!
+              rhoip = w_aux_gpu(i,j-m+l,k,1)
+              uuip  = w_aux_gpu(i,j-m+l,k,2)
+              vvip  = w_aux_gpu(i,j-m+l,k,3)
+              wwip  = w_aux_gpu(i,j-m+l,k,4)
+              entip = w_aux_gpu(i,j-m+l,k,5)
+              ttip  = w_aux_gpu(i,j-m+l,k,6)
+              ppip  = ttip*rhoip*rgas0
+!
+              rhom  = rhoi + rhoip
+              uv_part = (vvi+vvip) * rhom
+              uvs1 = uvs1 + uv_part * (2._rkind)
+              uvs2 = uvs2 + uv_part * (uui+uuip)
+              uvs3 = uvs3 + uv_part * (vvi+vvip)
+              uvs4 = uvs4 + uv_part * (wwi+wwip)
+              uvs5 = uvs5 + uv_part * (enti+entip)
+              uvs6 = uvs6 + (2._rkind)*(ppi+ppip)
+            enddo
+            ft1 = ft1 + coeff_deriv1_gpu(l,lmax)*uvs1
+            ft2 = ft2 + coeff_deriv1_gpu(l,lmax)*uvs2
+            ft3 = ft3 + coeff_deriv1_gpu(l,lmax)*uvs3
+            ft4 = ft4 + coeff_deriv1_gpu(l,lmax)*uvs4
+            ft5 = ft5 + coeff_deriv1_gpu(l,lmax)*uvs5
+            ft6 = ft6 + coeff_deriv1_gpu(l,lmax)*uvs6
+          enddo
+        endif
+        fh1 = 0.25_rkind*ft1
+        fh2 = 0.25_rkind*ft2
+        fh3 = 0.25_rkind*ft3
+        fh4 = 0.25_rkind*ft4
+        fh5 = 0.25_rkind*ft5
+        if ((j==0 .and. force_zero_flux_min == 1).or.(j==ny .and. force_zero_flux_max == 1)) then
+          fh1 = 0._rkind
+          fh2 = 0._rkind
+          fh3 = 0._rkind
+          fh4 = 0._rkind
+          fh5 = 0._rkind
+        endif
+!
+        fh3 = fh3 + 0.5_rkind*ft6
+!
+        fhat_gpu(i,j,k,1) = fh1
+        fhat_gpu(i,j,k,2) = fh2
+        fhat_gpu(i,j,k,3) = fh3
+        fhat_gpu(i,j,k,4) = fh4
+        fhat_gpu(i,j,k,5) = fh5
+      else
+        evmax = -1._rkind
+        do l=1,weno_size ! LLF
+          ll = j + l - weno_scheme
+          vv   = w_aux_gpu(i,ll,k,3)
+          tt   = w_aux_gpu(i,ll,k,6)
+          gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+          c     = sqrt (gamloc*rgas0*tt)
+          evm   = max(abs(vv-c),abs(vv+c))
+          evmax = max(evm,evmax)
+        enddo
+        do l=1,weno_size ! loop over the stencil centered at face i
+          ll = j + l - weno_scheme
+!
+          rho    = w_aux_gpu(i,ll,k,1)
+          uu     = w_aux_gpu(i,ll,k,2)
+          vv     = w_aux_gpu(i,ll,k,3)
+          ww     = w_aux_gpu(i,ll,k,4)
+          h      = w_aux_gpu(i,ll,k,5)
+          rhov   = rho*vv
+          pp     = rho*w_aux_gpu(i,ll,k,6)*rgas0
+!
+          rhoevm = rho*evmax
+          evm = rhov
+          c = 0.5_rkind * (evm + rhoevm)
+          gplus_y_gpu (i,k,1,l) = c
+          gminus_y_gpu(i,k,1,l) = evm-c
+          evm = uu * rhov
+          c = 0.5_rkind * (evm + rhoevm * uu)
+          gplus_y_gpu (i,k,2,l) = c
+          gminus_y_gpu(i,k,2,l) = evm-c
+          evm = vv * rhov + pp
+          c = 0.5_rkind * (evm + rhoevm * vv)
+          gplus_y_gpu (i,k,3,l) = c
+          gminus_y_gpu(i,k,3,l) = evm-c
+          evm = ww * rhov
+          c = 0.5_rkind * (evm + rhoevm * ww)
+          gplus_y_gpu (i,k,4,l) = c
+          gminus_y_gpu(i,k,4,l) = evm-c
+          evm =  h  * rhov
+          c = 0.5_rkind * (evm + evmax * (rho*h-pp))
+          gplus_y_gpu (i,k,5,l) = c
+          gminus_y_gpu(i,k,5,l) = evm-c
+        enddo
+!       
+!       Reconstruction of the '+' and '-' fluxes
+!       
+        wenorec_ord = max(weno_scheme+ep_ord_change_gpu(i,j,k,2),1)
+        call wenorec_rusanov(i,k,nv,nx,nz,gplus_y_gpu,gminus_y_gpu,fhat_gpu,&
+          weno_scheme,wenorec_ord,weno_version,ng,nx,ny,nz,i,j,k)
+!       
+      endif
+    enddo
+!
+!   Update net flux
+    do j=eul_jmin,eul_jmax ! loop on the inner nodes
+      do m=1,5
+        fl_gpu(i,j,k,m) = fl_gpu(i,j,k,m) + (fhat_gpu(i,j,k,m)-fhat_gpu(i,j-1,k,m))*detady_gpu(j)
+      enddo
+    enddo
+!
+  endsubroutine euler_y_hybrid_rusanov_kernel
+!
+  attributes(device) subroutine wenorec_rusanov(ii,jj,nvar,n1,n2,vp,vm,vhat,&
+    iweno,wenorec_ord,weno_version,ng,mx,my,mz,iii,jjj,kkk)
 !
 !   Passed arguments
-    integer :: nvar, iweno, wenorec_ord, weno_version
-    real(rkind), dimension(nvar,2*iweno) :: vm,vp
-    real(rkind), dimension(nvar) :: vminus,vplus
+    integer :: nvar, iweno, wenorec_ord, weno_version, ii, jj, n1, n2
+    integer :: ng,mx,my,mz,iii,jjj,kkk
+    real(rkind), dimension(n1,n2,nvar,2*iweno) :: vm,vp
+    real(rkind), dimension(1-ng:mx+ng,1-ng:my+ng,1-ng:mz+ng,nvar) :: vhat
 !
 !   Local variables
     real(rkind), dimension(-1:4) :: dwe           ! linear weights
-    real(rkind), dimension(-1:4) :: alfp,alfm     ! alpha_l
-!   real(rkind), dimension(-1:4) :: alfp_map,alfm_map ! alpha_l
     real(rkind), dimension(-1:4) :: betap,betam   ! beta_l
-    real(rkind), dimension(-1:4) :: betazp,betazm ! betaz_l
-    real(rkind), dimension(-1:4) :: omp,omm       ! WENO weights
+    real(rkind) :: vminus, vplus
 !   
     integer :: i,l,m
     real(rkind) :: c0,c1,c2,c3,c4,d0,d1,d2,d3,summ,sump
-    real(rkind) :: eps40,tau5p,tau5m
+    real(rkind) :: tau5p,tau5m,eps40
 !   
     if (wenorec_ord==1) then ! Godunov
 !     
       i = iweno ! index of intermediate node to perform reconstruction
 !     
-      vminus(1:nvar) = vp(1:nvar,i)
-      vplus (1:nvar) = vm(1:nvar,i+1)
+      do m=1,nvar
+        vminus  = vp(ii,jj,m,i)
+        vplus   = vm(ii,jj,m,i+1)
+        vhat(iii,jjj,kkk,m) = vminus+vplus
+      enddo
 !     
     elseif (wenorec_ord==2) then ! WENO-3
 !     
@@ -950,33 +1706,30 @@ contains
 !     
       do m=1,nvar
 !       
-        betap(0)  = (vp(m,i  )-vp(m,i-1))**2
-        betap(1)  = (vp(m,i+1)-vp(m,i  ))**2
-        betam(0)  = (vm(m,i+2)-vm(m,i+1))**2
-        betam(1)  = (vm(m,i+1)-vm(m,i  ))**2
+        betap(0)  = (vp(ii,jj,m,i  )-vp(ii,jj,m,i-1))**2
+        betap(1)  = (vp(ii,jj,m,i+1)-vp(ii,jj,m,i  ))**2
+!
+        betam(0)  = (vm(ii,jj,m,i+2)-vm(ii,jj,m,i+1))**2
+        betam(1)  = (vm(ii,jj,m,i+1)-vm(ii,jj,m,i  ))**2
 !       
         sump = 0._rkind
         summ = 0._rkind
         do l=0,1
-          alfp(l) = dwe(l)/(0.000001_rkind+betap(l))**2
-          alfm(l) = dwe(l)/(0.000001_rkind+betam(l))**2
-          sump = sump + alfp(l)
-          summ = summ + alfm(l)
+          betap(l) = dwe(l)/(0.000001_rkind+betap(l))**2
+          betam(l) = dwe(l)/(0.000001_rkind+betam(l))**2
+          sump = sump + betap(l)
+          summ = summ + betam(l)
         enddo
         do l=0,1
-          omp(l) = alfp(l)/sump
-          omm(l) = alfm(l)/summ
+          betap(l) = betap(l)/sump
+          betam(l) = betam(l)/summ
         enddo
 !       
-        vminus(m) = omp(0) *(-vp(m,i-1)+3*vp(m,i  )) + omp(1) *( vp(m,i  )+ vp(m,i+1))
-        vplus(m)  = omm(0) *(-vm(m,i+2)+3*vm(m,i+1)) + omm(1) *( vm(m,i  )+ vm(m,i+1))
+        vminus = betap(0) *(-vp(ii,jj,m,i-1)+3*vp(ii,jj,m,i  )) + betap(1) *( vp(ii,jj,m,i  )+ vp(ii,jj,m,i+1))
+        vplus  = betam(0) *(-vm(ii,jj,m,i+2)+3*vm(ii,jj,m,i+1)) + betam(1) *( vm(ii,jj,m,i  )+ vm(ii,jj,m,i+1))
+        vhat(iii,jjj,kkk,m) = 0.5_rkind*(vminus+vplus)
 !       
       enddo ! end of m-loop
-!     
-      do m=1,nvar
-        vminus(m) = 0.5_rkind*vminus(m)
-        vplus(m)  = 0.5_rkind*vplus(m)
-      enddo
 !     
     elseif (wenorec_ord==3) then ! WENO-5
 !     
@@ -1000,31 +1753,41 @@ contains
 !       
         do m=1,nvar
 !         
-          betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
-          betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*(     vp(m,i-1)-vp(m,i+1) )**2
-          betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
+          betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+          betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+          d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+          betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
 !         
-          betam(2) = d0*(vm(m,i+1)-2._rkind*vm(m,i)+vm(m,i-1))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i)+vm(m,i-1))**2
-          betam(1) = d0*(vm(m,i+2)-2._rkind*vm(m,i+1)+vm(m,i))**2+d1*(     vm(m,i+2)-vm(m,i) )**2
-          betam(0) = d0*(vm(m,i+1)-2._rkind*vm(m,i+2)+vm(m,i+3))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i+2)+vm(m,i+3))**2
+          betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+          betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+          d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+          betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
 !         
           sump = 0._rkind
           summ = 0._rkind
           do l=0,2
-            alfp(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
-            alfm(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
-            sump = sump + alfp(l)
-            summ = summ + alfm(l)
+            betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+            betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+            sump = sump + betap(l)
+            summ = summ + betam(l)
           enddo
           do l=0,2
-            omp(l) = alfp(l)/sump
-            omm(l) = alfm(l)/summ
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
           enddo
 !         
-          vminus(m)   = omp(2)*(c0*vp(m,i  )+c1*vp(m,i+1)+c2*vp(m,i+2)) + &
-          & omp(1)*(c2*vp(m,i-1)+c1*vp(m,i  )+c0*vp(m,i+1)) + omp(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i  ))
-          vplus(m)   = omm(2)*(c0*vm(m,i+1)+c1*vm(m,i  )+c2*vm(m,i-1)) +  &
-          & omm(1)*(c2*vm(m,i+2)+c1*vm(m,i+1)+c0*vm(m,i  )) + omm(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
+          vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+          betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+          betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+          vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+          betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+          betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
+!         
+          vhat(iii,jjj,kkk,m) = vminus+vplus
 !         
         enddo ! end of m-loop
 !       
@@ -1032,40 +1795,50 @@ contains
 !       
         do m=1,nvar
 !         
-          betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
-          betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*(     vp(m,i-1)-vp(m,i+1) )**2
-          betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
+          betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+          betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+          d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+          betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
 !         
-          betam(2) = d0*(vm(m,i+1)-2._rkind*vm(m,i)+vm(m,i-1))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i)+vm(m,i-1))**2
-          betam(1) = d0*(vm(m,i+2)-2._rkind*vm(m,i+1)+vm(m,i))**2+d1*(     vm(m,i+2)-vm(m,i) )**2
-          betam(0) = d0*(vm(m,i+1)-2._rkind*vm(m,i+2)+vm(m,i+3))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i+2)+vm(m,i+3))**2
+          betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+          betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+          d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+          betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
 !         
-          tau5p = abs(betap(0)-betap(2))
-          tau5m = abs(betam(0)-betam(2))
           eps40 = 1.D-40
+          tau5p = abs(betap(0)-betap(2))+eps40
+          tau5m = abs(betam(0)-betam(2))+eps40
 !         
           do l=0,2
-            betazp(l) = (betap(l)+eps40)/(betap(l)+eps40+tau5p)
-            betazm(l) = (betam(l)+eps40)/(betam(l)+eps40+tau5m)
+            betap(l) = (betap(l)+eps40)/(betap(l)+tau5p)
+            betam(l) = (betam(l)+eps40)/(betam(l)+tau5m)
           enddo
 !         
           sump = 0._rkind
           summ = 0._rkind
           do l=0,2
-            alfp(l) = dwe(l)/betazp(l)
-            alfm(l) = dwe(l)/betazm(l)
-            sump = sump + alfp(l)
-            summ = summ + alfm(l)
+            betap(l) = dwe(l)/betap(l)
+            betam(l) = dwe(l)/betam(l)
+            sump = sump + betap(l)
+            summ = summ + betam(l)
           enddo
           do l=0,2
-            omp(l) = alfp(l)/sump
-            omm(l) = alfm(l)/summ
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
           enddo
 !         
-          vminus(m)   = omp(2)*(c0*vp(m,i  )+c1*vp(m,i+1)+c2*vp(m,i+2)) + &
-          & omp(1)*(c2*vp(m,i-1)+c1*vp(m,i  )+c0*vp(m,i+1)) + omp(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i  ))
-          vplus(m)   = omm(2)*(c0*vm(m,i+1)+c1*vm(m,i  )+c2*vm(m,i-1)) +  &
-          & omm(1)*(c2*vm(m,i+2)+c1*vm(m,i+1)+c0*vm(m,i  )) + omm(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
+          vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+          betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+          betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+          vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+          betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+          betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
+!         
+          vhat(iii,jjj,kkk,m) = vminus+vplus
 !         
         enddo ! end of m-loop
 !
@@ -1087,58 +1860,341 @@ contains
 !     
       do m=1,nvar
 !       
-        betap(3)= d1*(-11*vp(m,  i)+18*vp(m,i+1)- 9*vp(m,i+2)+ 2*vp(m,i+3))**2+&
-        &  d2*(  2*vp(m,  i)- 5*vp(m,i+1)+ 4*vp(m,i+2)-   vp(m,i+3))**2+ &
-        & d3*(   -vp(m,  i)+ 3*vp(m,i+1)- 3*vp(m,i+2)+   vp(m,i+3))**2
-        betap(2)= d1*(- 2*vp(m,i-1)- 3*vp(m,i  )+ 6*vp(m,i+1)-   vp(m,i+2))**2+&
-        &  d2*(    vp(m,i-1)- 2*vp(m,i  )+   vp(m,i+1)             )**2+&
-        &  d3*(   -vp(m,i-1)+ 3*vp(m,i  )- 3*vp(m,i+1)+   vp(m,i+2))**2
-        betap(1)= d1*(    vp(m,i-2)- 6*vp(m,i-1)+ 3*vp(m,i  )+ 2*vp(m,i+1))**2+&
-        &  d2*( vp(m,i-1)- 2*vp(m,i  )+   vp(m,i+1))**2+ &
-        &  d3*(   -vp(m,i-2)+ 3*vp(m,i-1)- 3*vp(m,i  )+   vp(m,i+1))**2
-        betap(0)= d1*(- 2*vp(m,i-3)+ 9*vp(m,i-2)-18*vp(m,i-1)+11*vp(m,i  ))**2+&
-        &  d2*(-   vp(m,i-3)+ 4*vp(m,i-2)- 5*vp(m,i-1)+ 2*vp(m,i  ))**2+&
-        &  d3*(   -vp(m,i-3)+ 3*vp(m,i-2)- 3*vp(m,i-1)+   vp(m,i  ))**2
+        betap(3)= d1*(-11*vp(ii,jj,m,  i)+18*vp(ii,jj,m,i+1)- 9*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))**2+&
+        d2*(  2*vp(ii,jj,m,  i)- 5*vp(ii,jj,m,i+1)+ 4*vp(ii,jj,m,i+2)-   vp(ii,jj,m,i+3))**2+ &
+        d3*(   -vp(ii,jj,m,  i)+ 3*vp(ii,jj,m,i+1)- 3*vp(ii,jj,m,i+2)+   vp(ii,jj,m,i+3))**2
+        betap(2)= d1*(- 2*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1)-   vp(ii,jj,m,i+2))**2+&
+        d2*(    vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1)             )**2+&
+        d3*(   -vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )- 3*vp(ii,jj,m,i+1)+   vp(ii,jj,m,i+2))**2
+        betap(1)= d1*(    vp(ii,jj,m,i-2)- 6*vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )+ 2*vp(ii,jj,m,i+1))**2+&
+        d2*( vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2+ &
+        d3*(   -vp(ii,jj,m,i-2)+ 3*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2
+        betap(0)= d1*(- 2*vp(ii,jj,m,i-3)+ 9*vp(ii,jj,m,i-2)-18*vp(ii,jj,m,i-1)+11*vp(ii,jj,m,i  ))**2+&
+        d2*(-   vp(ii,jj,m,i-3)+ 4*vp(ii,jj,m,i-2)- 5*vp(ii,jj,m,i-1)+ 2*vp(ii,jj,m,i  ))**2+&
+        d3*(   -vp(ii,jj,m,i-3)+ 3*vp(ii,jj,m,i-2)- 3*vp(ii,jj,m,i-1)+   vp(ii,jj,m,i  ))**2
 !       
-        betam(3)= d1*(-11*vm(m,i+1)+18*vm(m,i  )- 9*vm(m,i-1)+ 2*vm(m,i-2))**2+&
-        &  d2*(  2*vm(m,i+1)- 5*vm(m,i  )+ 4*vm(m,i-1)-   vm(m,i-2))**2+&
-        &  d3*(   -vm(m,i+1)+ 3*vm(m,i  )- 3*vm(m,i-1)+   vm(m,i-2))**2
-        betam(2)= d1*(- 2*vm(m,i+2)- 3*vm(m,i+1)+ 6*vm(m,i  )-   vm(m,i-1))**2+&
-        &  d2*(    vm(m,i+2)- 2*vm(m,i+1)+   vm(m,i  )             )**2+&
-        &  d3*(   -vm(m,i+2)+ 3*vm(m,i+1)- 3*vm(m,i  )+   vm(m,i-1))**2
-        betam(1)= d1*(    vm(m,i+3)- 6*vm(m,i+2)+ 3*vm(m,i+1)+ 2*vm(m,i  ))**2+&
-        &  d2*(                 vm(m,i+2)- 2*vm(m,i+1)+   vm(m,i  ))**2+&
-        &  d3*(   -vm(m,i+3)+ 3*vm(m,i+2)- 3*vm(m,i+1)+   vm(m,i  ))**2
-        betam(0)= d1*(- 2*vm(m,i+4)+ 9*vm(m,i+3)-18*vm(m,i+2)+11*vm(m,i+1))**2+&
-        &  d2*(-   vm(m,i+4)+ 4*vm(m,i+3)- 5*vm(m,i+2)+ 2*vm(m,i+1))**2+&
-        &  d3*(   -vm(m,i+4)+ 3*vm(m,i+3)- 3*vm(m,i+2)+   vm(m,i+1))**2
+        betam(3)= d1*(-11*vm(ii,jj,m,i+1)+18*vm(ii,jj,m,i  )- 9*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))**2+&
+        d2*(  2*vm(ii,jj,m,i+1)- 5*vm(ii,jj,m,i  )+ 4*vm(ii,jj,m,i-1)-   vm(ii,jj,m,i-2))**2+&
+        d3*(   -vm(ii,jj,m,i+1)+ 3*vm(ii,jj,m,i  )- 3*vm(ii,jj,m,i-1)+   vm(ii,jj,m,i-2))**2
+        betam(2)= d1*(- 2*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  )-   vm(ii,jj,m,i-1))**2+&
+        d2*(    vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  )             )**2+&
+        d3*(   -vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)- 3*vm(ii,jj,m,i  )+   vm(ii,jj,m,i-1))**2
+        betam(1)= d1*(    vm(ii,jj,m,i+3)- 6*vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)+ 2*vm(ii,jj,m,i  ))**2+&
+        d2*(                 vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2+&
+        d3*(   -vm(ii,jj,m,i+3)+ 3*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2
+        betam(0)= d1*(- 2*vm(ii,jj,m,i+4)+ 9*vm(ii,jj,m,i+3)-18*vm(ii,jj,m,i+2)+11*vm(ii,jj,m,i+1))**2+&
+        d2*(-   vm(ii,jj,m,i+4)+ 4*vm(ii,jj,m,i+3)- 5*vm(ii,jj,m,i+2)+ 2*vm(ii,jj,m,i+1))**2+&
+        d3*(   -vm(ii,jj,m,i+4)+ 3*vm(ii,jj,m,i+3)- 3*vm(ii,jj,m,i+2)+   vm(ii,jj,m,i+1))**2
 !       
         sump = 0._rkind
         summ = 0._rkind
         do l=0,3
-          alfp(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
-          alfm(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
-          sump = sump + alfp(l)
-          summ = summ + alfm(l)
+          betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+          betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+          sump = sump + betap(l)
+          summ = summ + betam(l)
         enddo
         do l=0,3
-          omp(l) = alfp(l)/sump
-          omm(l) = alfm(l)/summ
+          betap(l) = betap(l)/sump
+          betam(l) = betam(l)/summ
         enddo
 !       
-        vminus(m)   = omp(3)*( 6*vp(m,i  )+26*vp(m,i+1)-10*vp(m,i+2)+ 2*vp(m,i+3))+&
-        omp(2)*(-2*vp(m,i-1)+14*vp(m,i  )+14*vp(m,i+1)- 2*vp(m,i+2))+&
-        omp(1)*( 2*vp(m,i-2)-10*vp(m,i-1)+26*vp(m,i  )+ 6*vp(m,i+1))+&
-        omp(0)*(-6*vp(m,i-3)+26*vp(m,i-2)-46*vp(m,i-1)+50*vp(m,i  ))
-        vplus(m)   =  omm(3)*( 6*vm(m,i+1)+26*vm(m,i  )-10*vm(m,i-1)+ 2*vm(m,i-2))+&
-        omm(2)*(-2*vm(m,i+2)+14*vm(m,i+1)+14*vm(m,i  )- 2*vm(m,i-1))+&
-        omm(1)*( 2*vm(m,i+3)-10*vm(m,i+2)+26*vm(m,i+1)+ 6*vm(m,i  ))+&
-        omm(0)*(-6*vm(m,i+4)+26*vm(m,i+3)-46*vm(m,i+2)+50*vm(m,i+1))
+        vminus = betap(3)*( 6*vp(ii,jj,m,i  )+26*vp(ii,jj,m,i+1)-10*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))+&
+        betap(2)*(-2*vp(ii,jj,m,i-1)+14*vp(ii,jj,m,i  )+14*vp(ii,jj,m,i+1)- 2*vp(ii,jj,m,i+2))+&
+        betap(1)*( 2*vp(ii,jj,m,i-2)-10*vp(ii,jj,m,i-1)+26*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1))+&
+        betap(0)*(-6*vp(ii,jj,m,i-3)+26*vp(ii,jj,m,i-2)-46*vp(ii,jj,m,i-1)+50*vp(ii,jj,m,i  ))
+        vplus  =  betam(3)*( 6*vm(ii,jj,m,i+1)+26*vm(ii,jj,m,i  )-10*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))+&
+        betam(2)*(-2*vm(ii,jj,m,i+2)+14*vm(ii,jj,m,i+1)+14*vm(ii,jj,m,i  )- 2*vm(ii,jj,m,i-1))+&
+        betam(1)*( 2*vm(ii,jj,m,i+3)-10*vm(ii,jj,m,i+2)+26*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  ))+&
+        betam(0)*(-6*vm(ii,jj,m,i+4)+26*vm(ii,jj,m,i+3)-46*vm(ii,jj,m,i+2)+50*vm(ii,jj,m,i+1))
+!       
+        vhat(iii,jjj,kkk,m) = (vminus+vplus)/24._rkind
 !       
       enddo ! end of m-loop
 !     
-      vminus = vminus/24._rkind
-      vplus  = vplus /24._rkind
+    else
+      write(*,*) 'Error! WENO scheme not implemented'
+      stop
+    endif
+!
+  endsubroutine wenorec_rusanov
+!
+  attributes(device) subroutine wenorec(ii,jj,nvar,n1,n2,vp,vm,vhat,iweno,wenorec_ord,weno_version,rho0,u0)
+!
+!   Passed arguments
+    integer :: nvar, iweno, wenorec_ord, weno_version, ii, jj, n1, n2
+    real(rkind), dimension(n1,n2,nvar,2*iweno) :: vm,vp
+    real(rkind), dimension(nvar) :: vhat
+    real(rkind) :: rho0, u0
+!
+!   Local variables
+    real(rkind), dimension(-1:4) :: dwe           ! linear weights
+    real(rkind), dimension(-1:4) :: betap,betam   ! beta_l
+    real(rkind), dimension(   5) :: betascale
+    real(rkind) :: vminus, vplus
+!   
+    integer :: i,l,m
+    real(rkind) :: c0,c1,c2,c3,c4,d0,d1,d2,d3,summ,sump
+    real(rkind) :: tau5p,tau5m,eps40
+    real(rkind) :: u0_2, rho0_2u0_2, rho0_2u0_4
+!   
+    u0_2       = u0*u0
+    rho0_2u0_2 = rho0*rho0*u0_2
+    rho0_2u0_4 = rho0_2u0_2*u0_2
+    betascale(1) = 1._rkind/rho0_2u0_2
+    betascale(2) = betascale(1)
+    betascale(3) = betascale(1)
+    betascale(4) = 1._rkind/rho0_2u0_4
+    betascale(5) = betascale(4)
+!   
+    if (wenorec_ord==1) then ! Godunov
+!     
+      i = iweno ! index of intermediate node to perform reconstruction
+!     
+      do m=1,nvar
+        vminus  = vp(ii,jj,m,i)
+        vplus   = vm(ii,jj,m,i+1)
+        vhat(m) = vminus+vplus
+      enddo
+!     
+    elseif (wenorec_ord==2) then ! WENO-3
+!     
+      i = iweno ! index of intermediate node to perform reconstruction
+!     
+      dwe(1)   = 2._rkind/3._rkind
+      dwe(0)   = 1._rkind/3._rkind
+!     
+      do m=1,nvar
+!       
+        betap(0)  = (vp(ii,jj,m,i  )-vp(ii,jj,m,i-1))**2
+        betap(1)  = (vp(ii,jj,m,i+1)-vp(ii,jj,m,i  ))**2
+        betap(1) = betascale(m)*betap(1)
+        betap(0) = betascale(m)*betap(0)
+!
+        betam(0)  = (vm(ii,jj,m,i+2)-vm(ii,jj,m,i+1))**2
+        betam(1)  = (vm(ii,jj,m,i+1)-vm(ii,jj,m,i  ))**2
+        betam(1) = betascale(m)*betam(1)
+        betam(0) = betascale(m)*betam(0)
+!       
+        sump = 0._rkind
+        summ = 0._rkind
+        do l=0,1
+          betap(l) = dwe(l)/(0.000001_rkind+betap(l))**2
+          betam(l) = dwe(l)/(0.000001_rkind+betam(l))**2
+          sump = sump + betap(l)
+          summ = summ + betam(l)
+        enddo
+        do l=0,1
+          betap(l) = betap(l)/sump
+          betam(l) = betam(l)/summ
+        enddo
+!       
+        vminus = betap(0) *(-vp(ii,jj,m,i-1)+3*vp(ii,jj,m,i  )) + betap(1) *( vp(ii,jj,m,i  )+ vp(ii,jj,m,i+1))
+        vplus  = betam(0) *(-vm(ii,jj,m,i+2)+3*vm(ii,jj,m,i+1)) + betam(1) *( vm(ii,jj,m,i  )+ vm(ii,jj,m,i+1))
+        vhat(m) = 0.5_rkind*(vminus+vplus)
+!       
+      enddo ! end of m-loop
+!     
+    elseif (wenorec_ord==3) then ! WENO-5
+!     
+      i = iweno ! index of intermediate node to perform reconstruction
+!     
+      dwe( 0) = 1._rkind/10._rkind
+      dwe( 1) = 6._rkind/10._rkind
+      dwe( 2) = 3._rkind/10._rkind
+!     
+!     JS
+      d0 = 13._rkind/12._rkind
+      d1 = 1._rkind/4._rkind
+!     Weights for polynomial reconstructions
+      c0 = 1._rkind/3._rkind
+      c1 = 5._rkind/6._rkind
+      c2 =-1._rkind/6._rkind
+      c3 =-7._rkind/6._rkind
+      c4 =11._rkind/6._rkind
+!     
+      if (weno_version==0) then ! Standard JS WENO 5
+!       
+        do m=1,nvar
+!         
+          betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+          betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+          d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+          betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
+          betap(2) = betascale(m)*betap(2)
+          betap(1) = betascale(m)*betap(1)
+          betap(0) = betascale(m)*betap(0)
+!         
+          betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+          betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+          d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+          betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
+          betam(2) = betascale(m)*betam(2)
+          betam(1) = betascale(m)*betam(1)
+          betam(0) = betascale(m)*betam(0)
+!         
+          sump = 0._rkind
+          summ = 0._rkind
+          do l=0,2
+            betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+            betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+            sump = sump + betap(l)
+            summ = summ + betam(l)
+          enddo
+          do l=0,2
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
+          enddo
+!         
+          vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+          betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+          betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+          vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+          betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+          betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
+!         
+          vhat(m) = vminus+vplus
+!         
+        enddo ! end of m-loop
+!       
+        else ! WENO 5Z
+!       
+        do m=1,nvar
+!         
+          betap(2) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i+1)+vp(ii,jj,m,i+2))**2
+          betap(1) = d0*(vp(ii,jj,m,i-1)-2._rkind*vp(ii,jj,m,i)+vp(ii,jj,m,i+1))**2+&
+          d1*(     vp(ii,jj,m,i-1)-vp(ii,jj,m,i+1) )**2
+          betap(0) = d0*(vp(ii,jj,m,i)-2._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2+&
+          d1*(3._rkind*vp(ii,jj,m,i)-4._rkind*vp(ii,jj,m,i-1)+vp(ii,jj,m,i-2))**2
+          betap(2) = betascale(m)*betap(2)
+          betap(1) = betascale(m)*betap(1)
+          betap(0) = betascale(m)*betap(0)
+!         
+          betam(2) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i)+vm(ii,jj,m,i-1))**2
+          betam(1) = d0*(vm(ii,jj,m,i+2)-2._rkind*vm(ii,jj,m,i+1)+vm(ii,jj,m,i))**2+&
+          d1*(     vm(ii,jj,m,i+2)-vm(ii,jj,m,i) )**2
+          betam(0) = d0*(vm(ii,jj,m,i+1)-2._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2+&
+          d1*(3._rkind*vm(ii,jj,m,i+1)-4._rkind*vm(ii,jj,m,i+2)+vm(ii,jj,m,i+3))**2
+          betam(2) = betascale(m)*betam(2)
+          betam(1) = betascale(m)*betam(1)
+          betam(0) = betascale(m)*betam(0)
+!         
+          eps40 = 1.D-40
+          tau5p = abs(betap(0)-betap(2))+eps40
+          tau5m = abs(betam(0)-betam(2))+eps40
+!         
+          do l=0,2
+            betap(l) = (betap(l)+eps40)/(betap(l)+tau5p)
+            betam(l) = (betam(l)+eps40)/(betam(l)+tau5m)
+          enddo
+!         
+          sump = 0._rkind
+          summ = 0._rkind
+          do l=0,2
+            betap(l) = dwe(l)/betap(l)
+            betam(l) = dwe(l)/betam(l)
+            sump = sump + betap(l)
+            summ = summ + betam(l)
+          enddo
+          do l=0,2
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
+          enddo
+!         
+          vminus = betap(2)*(c0*vp(ii,jj,m,i  )+c1*vp(ii,jj,m,i+1)+c2*vp(ii,jj,m,i+2)) + &
+          betap(1)*(c2*vp(ii,jj,m,i-1)+c1*vp(ii,jj,m,i  )+c0*vp(ii,jj,m,i+1)) + &
+          betap(0)*(c0*vp(ii,jj,m,i-2)+c3*vp(ii,jj,m,i-1)+c4*vp(ii,jj,m,i  ))
+          vplus  = betam(2)*(c0*vm(ii,jj,m,i+1)+c1*vm(ii,jj,m,i  )+c2*vm(ii,jj,m,i-1)) + &
+          betam(1)*(c2*vm(ii,jj,m,i+2)+c1*vm(ii,jj,m,i+1)+c0*vm(ii,jj,m,i  )) + &
+          betam(0)*(c0*vm(ii,jj,m,i+3)+c3*vm(ii,jj,m,i+2)+c4*vm(ii,jj,m,i+1))
+!         
+          vhat(m) = vminus+vplus
+!         
+        enddo ! end of m-loop
+!
+      endif
+!     
+    elseif (wenorec_ord==4) then ! WENO-7
+!     
+      i = iweno ! index of intermediate node to perform reconstruction
+!     
+      dwe( 0) = 1._rkind/35._rkind
+      dwe( 1) = 12._rkind/35._rkind
+      dwe( 2) = 18._rkind/35._rkind
+      dwe( 3) = 4._rkind/35._rkind
+!     
+!     JS weights
+      d1 = 1._rkind/36._rkind
+      d2 = 13._rkind/12._rkind
+      d3 = 781._rkind/720._rkind
+!     
+      do m=1,nvar
+!       
+        betap(3)= d1*(-11*vp(ii,jj,m,  i)+18*vp(ii,jj,m,i+1)- 9*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))**2+&
+        d2*(  2*vp(ii,jj,m,  i)- 5*vp(ii,jj,m,i+1)+ 4*vp(ii,jj,m,i+2)-   vp(ii,jj,m,i+3))**2+ &
+        d3*(   -vp(ii,jj,m,  i)+ 3*vp(ii,jj,m,i+1)- 3*vp(ii,jj,m,i+2)+   vp(ii,jj,m,i+3))**2
+        betap(2)= d1*(- 2*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1)-   vp(ii,jj,m,i+2))**2+&
+        d2*(    vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1)             )**2+&
+        d3*(   -vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )- 3*vp(ii,jj,m,i+1)+   vp(ii,jj,m,i+2))**2
+        betap(1)= d1*(    vp(ii,jj,m,i-2)- 6*vp(ii,jj,m,i-1)+ 3*vp(ii,jj,m,i  )+ 2*vp(ii,jj,m,i+1))**2+&
+        d2*( vp(ii,jj,m,i-1)- 2*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2+ &
+        d3*(   -vp(ii,jj,m,i-2)+ 3*vp(ii,jj,m,i-1)- 3*vp(ii,jj,m,i  )+   vp(ii,jj,m,i+1))**2
+        betap(0)= d1*(- 2*vp(ii,jj,m,i-3)+ 9*vp(ii,jj,m,i-2)-18*vp(ii,jj,m,i-1)+11*vp(ii,jj,m,i  ))**2+&
+        d2*(-   vp(ii,jj,m,i-3)+ 4*vp(ii,jj,m,i-2)- 5*vp(ii,jj,m,i-1)+ 2*vp(ii,jj,m,i  ))**2+&
+        d3*(   -vp(ii,jj,m,i-3)+ 3*vp(ii,jj,m,i-2)- 3*vp(ii,jj,m,i-1)+   vp(ii,jj,m,i  ))**2
+        betap(3) = betascale(m)*betap(3)
+        betap(2) = betascale(m)*betap(2)
+        betap(1) = betascale(m)*betap(1)
+        betap(0) = betascale(m)*betap(0)
+!       
+        betam(3)= d1*(-11*vm(ii,jj,m,i+1)+18*vm(ii,jj,m,i  )- 9*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))**2+&
+        d2*(  2*vm(ii,jj,m,i+1)- 5*vm(ii,jj,m,i  )+ 4*vm(ii,jj,m,i-1)-   vm(ii,jj,m,i-2))**2+&
+        d3*(   -vm(ii,jj,m,i+1)+ 3*vm(ii,jj,m,i  )- 3*vm(ii,jj,m,i-1)+   vm(ii,jj,m,i-2))**2
+        betam(2)= d1*(- 2*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  )-   vm(ii,jj,m,i-1))**2+&
+        d2*(    vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  )             )**2+&
+        d3*(   -vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)- 3*vm(ii,jj,m,i  )+   vm(ii,jj,m,i-1))**2
+        betam(1)= d1*(    vm(ii,jj,m,i+3)- 6*vm(ii,jj,m,i+2)+ 3*vm(ii,jj,m,i+1)+ 2*vm(ii,jj,m,i  ))**2+&
+        d2*(                 vm(ii,jj,m,i+2)- 2*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2+&
+        d3*(   -vm(ii,jj,m,i+3)+ 3*vm(ii,jj,m,i+2)- 3*vm(ii,jj,m,i+1)+   vm(ii,jj,m,i  ))**2
+        betam(0)= d1*(- 2*vm(ii,jj,m,i+4)+ 9*vm(ii,jj,m,i+3)-18*vm(ii,jj,m,i+2)+11*vm(ii,jj,m,i+1))**2+&
+        d2*(-   vm(ii,jj,m,i+4)+ 4*vm(ii,jj,m,i+3)- 5*vm(ii,jj,m,i+2)+ 2*vm(ii,jj,m,i+1))**2+&
+        d3*(   -vm(ii,jj,m,i+4)+ 3*vm(ii,jj,m,i+3)- 3*vm(ii,jj,m,i+2)+   vm(ii,jj,m,i+1))**2
+        betam(3) = betascale(m)*betam(3)
+        betam(2) = betascale(m)*betam(2)
+        betam(1) = betascale(m)*betam(1)
+        betam(0) = betascale(m)*betam(0)
+!       
+        sump = 0._rkind
+        summ = 0._rkind
+        do l=0,3
+          betap(l) = dwe(  l)/(0.000001_rkind+betap(l))**2
+          betam(l) = dwe(  l)/(0.000001_rkind+betam(l))**2
+          sump = sump + betap(l)
+          summ = summ + betam(l)
+        enddo
+        do l=0,3
+          betap(l) = betap(l)/sump
+          betam(l) = betam(l)/summ
+        enddo
+!       
+        vminus = betap(3)*( 6*vp(ii,jj,m,i  )+26*vp(ii,jj,m,i+1)-10*vp(ii,jj,m,i+2)+ 2*vp(ii,jj,m,i+3))+&
+        betap(2)*(-2*vp(ii,jj,m,i-1)+14*vp(ii,jj,m,i  )+14*vp(ii,jj,m,i+1)- 2*vp(ii,jj,m,i+2))+&
+        betap(1)*( 2*vp(ii,jj,m,i-2)-10*vp(ii,jj,m,i-1)+26*vp(ii,jj,m,i  )+ 6*vp(ii,jj,m,i+1))+&
+        betap(0)*(-6*vp(ii,jj,m,i-3)+26*vp(ii,jj,m,i-2)-46*vp(ii,jj,m,i-1)+50*vp(ii,jj,m,i  ))
+        vplus  =  betam(3)*( 6*vm(ii,jj,m,i+1)+26*vm(ii,jj,m,i  )-10*vm(ii,jj,m,i-1)+ 2*vm(ii,jj,m,i-2))+&
+        betam(2)*(-2*vm(ii,jj,m,i+2)+14*vm(ii,jj,m,i+1)+14*vm(ii,jj,m,i  )- 2*vm(ii,jj,m,i-1))+&
+        betam(1)*( 2*vm(ii,jj,m,i+3)-10*vm(ii,jj,m,i+2)+26*vm(ii,jj,m,i+1)+ 6*vm(ii,jj,m,i  ))+&
+        betam(0)*(-6*vm(ii,jj,m,i+4)+26*vm(ii,jj,m,i+3)-46*vm(ii,jj,m,i+2)+50*vm(ii,jj,m,i+1))
+!       
+        vhat(m) = (vminus+vplus)/24._rkind
+!       
+      enddo ! end of m-loop
 !     
     else
       write(*,*) 'Error! WENO scheme not implemented'
@@ -1330,24 +2386,25 @@ contains
     er(4,5)   =  uu ! -uu
     er(5,5)   =  vv
 !
-!
   endsubroutine eigenvectors_z
 !
-  attributes(device) subroutine compute_roe_average(nx, ny, nz, ng, i, ip, j, jp, k, kp, w_aux_gpu, cp0, cv0, &
+  attributes(device) subroutine compute_roe_average(nx, ny, nz, ng, i, ip, j, jp, k, kp, w_aux_gpu, rgas0, &
     b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r,&
-    calorically_perfect,tol_iter_nr)
+    calorically_perfect,tol_iter_nr,t0)
     integer :: ng,i,ip,j,jp,k,kp,indx_cp_l,indx_cp_r,calorically_perfect
     integer :: nx,ny,nz
-    real(rkind), intent(in) :: cp0, cv0, tol_iter_nr
+    real(rkind), intent(in) :: rgas0, tol_iter_nr,t0
     real(rkind), intent(out) :: b1, b2, b3, uu, vv, ww, ci, h, c
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in) :: w_aux_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in) :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_gpu
     real(rkind) :: up, vp, wp, qqp, hp, r, rp1, cc, qq, gam, gm1
     integer :: ll,iter,max_iter
-    real(rkind) :: tt,gm1loc,hbar,ttp,told,num,den,gamloc,cploc,tpow,tpowp,p_rho,p_e,etot,rho
+    real(rkind) :: tt,gm1loc,hbar,ttp,told,num,den,gamloc,cploc,tpow,tpowp,p_rho,p_e,etot,rho,cp0,cv0
 !   
     max_iter = 50
 !   
+    cp0 = cp_coeff_gpu(0)
+    cv0 = cp_coeff_gpu(0)-rgas0
     gam = cp0/cv0
     gm1 = gam-1._rkind
 !   Compute Roe average
@@ -1381,49 +2438,50 @@ contains
     qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !   
     if (calorically_perfect==1) then
-      cc       = gm1 * (h - qq)
-      tt       = cc/gam
+      cc       = gm1 * (h-qq+cv0*t0) ! cv0*t0 needed because e = cv*(tt-t0)
+      tt       = cc/gam/rgas0
       gm1loc   = gm1
     else
-      hbar      =  (h - qq) - cp0
-      tt        =  w_aux_gpu(i ,j ,k ,6)
-      ttp       =  w_aux_gpu(ip,jp,kp,6)
-      tt        =  (r*ttp +tt)*rp1
+      hbar      = h - qq - cp_coeff_gpu(indx_cp_r+1)*t0
+      tt        = w_aux_gpu(i ,j ,k ,6)
+      ttp       = w_aux_gpu(ip,jp,kp,6)
+      tt        = (r*ttp +tt)*rp1
       told      = tt ! First attempt computed as Roe average of temperature
       do iter=1,max_iter
         num = 0._rkind
         den = 0._rkind
         do ll=indx_cp_l,indx_cp_r
           if (ll==-1) then
-            tpow  = told**ll
+            tpow  = (told/t0)**ll
             den = den+cp_coeff_gpu(ll)*tpow
-            num = num+cp_coeff_gpu(ll)*log(told)
+            num = num+cp_coeff_gpu(ll)*log(told/t0)
           else
-            tpow  = told**ll
-            tpowp = told*tpow
+            tpow  = (told/t0)**ll
+            tpowp = (told/t0)*tpow
             den = den+cp_coeff_gpu(ll)*tpow
             num = num+cp_coeff_gpu(ll)*(tpowp-1._rkind)/(ll+1._rkind)
           endif
         enddo
+        num = num*t0
         tt = told+(hbar-num)/den
-        if (abs(tt-told)<tol_iter_nr) exit
+        if (abs(tt-told) < tol_iter_nr) exit
         told = tt
       enddo
       cploc = 0._rkind
       do ll=indx_cp_l,indx_cp_r
-        cploc = cploc+cp_coeff_gpu(ll)*tt**ll
+        cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
       enddo
-      gamloc = cploc/(cploc-1._rkind)
+      gamloc = cploc/(cploc-rgas0)
       gm1loc = gamloc-1._rkind
-      cc     =  gamloc*tt
+      cc     = gamloc*tt*rgas0
     endif
 !   
     c         =  sqrt(cc)
     ci        =  1._rkind/c
 !   
-    p_rho     = tt
+    p_rho     = tt*rgas0
     p_e       = rho*gm1loc   ! p_e   = rho * R_gas / Cv
-    etot      = h - tt
+    etot      = h - tt*rgas0
 !   
     b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
     b2        = p_e/(rho*cc)
@@ -1505,15 +2563,15 @@ contains
   endsubroutine force_rhs_1_cuf
 !
   subroutine force_var_1_cuf(nx, ny, nz, ng, yn_gpu, fln_gpu, w_gpu, w_aux_gpu, bulkt, fluid_mask_gpu, cv_coeff_gpu, &
-    indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr)
+    indx_cp_l, indx_cp_r, t0, calorically_perfect, tol_iter_nr)
     integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind), intent(in) :: cv0, tol_iter_nr
+    real(rkind), intent(in) :: t0, tol_iter_nr
     real(rkind), dimension(1:), intent(in), device :: yn_gpu
     real(rkind), dimension(1:,1:,1:,1:), intent(in), device :: fln_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in), device :: w_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(inout), device :: w_aux_gpu
     integer, dimension(1-ng:,1-ng:,1-ng:), intent(in), device :: fluid_mask_gpu
-    real(rkind),    dimension(indx_cp_l:), intent(in),  device :: cv_coeff_gpu
+    real(rkind),    dimension(indx_cp_l:indx_cp_r+1), intent(in),  device :: cv_coeff_gpu
     real(rkind), intent(out) :: bulkt
     real(rkind) :: bulk_5,rho,rhou,rhov,rhow,rhoe,ri,uu,vv,ww,qq,ee,tt
     real(rkind) :: dy
@@ -1538,7 +2596,7 @@ contains
             ww   = rhow*ri
             qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee = rhoe/rho-qq
-            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,j,k,6),cv0,cv_coeff_gpu,indx_cp_l,indx_cp_r, &
+            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,j,k,6),t0,cv_coeff_gpu,indx_cp_l,indx_cp_r, &
             calorically_perfect,tol_iter_nr)
             w_aux_gpu(i,j,k,6) = tt
             bulk_5 = bulk_5 + rhou*tt*dy
@@ -1553,13 +2611,13 @@ contains
   endsubroutine force_var_1_cuf
 ! 
   subroutine force_var_2_cuf(nx, ny, nz, ng, w_gpu, w_aux_gpu, tbdiff, fluid_mask_gpu, cv_coeff_gpu, indx_cp_l, indx_cp_r, &
-    cv0, calorically_perfect)
+    t0, calorically_perfect)
     integer :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind), intent(in) :: tbdiff, cv0
+    real(rkind), intent(in) :: tbdiff, t0
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in), device :: w_aux_gpu
     integer, dimension(1-ng:,1-ng:,1-ng:), intent(in), device :: fluid_mask_gpu
-    real(rkind),    dimension(indx_cp_l:), intent(in),  device :: cv_coeff_gpu
+    real(rkind),    dimension(indx_cp_l:indx_cp_r+1), intent(in),  device :: cv_coeff_gpu
     real(rkind) :: rho,rhou,rhov,rhow,tt,ttnew,ee
     integer :: i,j,k,iercuda
 !   
@@ -1574,7 +2632,7 @@ contains
             rhow = w_gpu(i,j,k,4)
             tt   = w_aux_gpu(i,j,k,6)
             ttnew = tt+tbdiff
-            ee = get_e_from_temperature_dev(ttnew, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+            ee = get_e_from_temperature_dev(ttnew, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
             w_gpu(i,j,k,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
           endif
         enddo
@@ -1729,7 +2787,7 @@ contains
   endsubroutine visflx_div_cuf
 !
   subroutine visflx_cuf(nx, ny, nz, ng, visc_order, &
-    Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+    Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
     u0, l0, w_gpu, w_aux_gpu, fl_gpu, &
     coeff_deriv1_gpu, coeff_deriv2_gpu, &
     dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
@@ -1738,7 +2796,7 @@ contains
 !
     integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: Prandtl, u0, l0, cp0
+    real(rkind), intent(in) :: Prandtl, u0, l0, t0
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
     real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout), device :: wallprop_gpu
@@ -1748,7 +2806,7 @@ contains
     real(rkind), dimension(1:), intent(in), device :: dcsidx_gpu, detady_gpu, dzitdz_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidx2_gpu, detady2_gpu, dzitdz2_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     integer     :: i,j,k,l,ll,iercuda
     real(rkind) :: ccl,clapl
     real(rkind) :: sig11,sig12,sig13
@@ -1783,11 +2841,11 @@ contains
           mu = w_aux_gpu(i,j,k,7)
 !
           if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_gpu(0)
           else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*tt**ll
+              cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
             enddo
           endif
 !
@@ -1943,7 +3001,7 @@ contains
   endsubroutine visflx_cuf
 !
   subroutine visflx_nosensor_cuf(nx, ny, nz, ng, visc_order, &
-    Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+    Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
     u0, l0, w_gpu, w_aux_gpu, fl_gpu, &
     coeff_deriv1_gpu, coeff_deriv2_gpu, &
     dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
@@ -1952,7 +3010,7 @@ contains
 !
     integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: Prandtl, u0, l0, cp0
+    real(rkind), intent(in) :: Prandtl, u0, l0, t0
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
     real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout), device :: wallprop_gpu
@@ -1962,7 +3020,7 @@ contains
     real(rkind), dimension(1:), intent(in), device :: dcsidx_gpu, detady_gpu, dzitdz_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidx2_gpu, detady2_gpu, dzitdz2_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     integer     :: i,j,k,l,ll,iercuda
     real(rkind) :: ccl,clapl
     real(rkind) :: sig11,sig12,sig13
@@ -1997,11 +3055,11 @@ contains
           mu = w_aux_gpu(i,j,k,7)
 !
           if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_gpu(0)
           else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*tt**ll
+              cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
             enddo
           endif
 !
@@ -2145,20 +3203,20 @@ contains
   endsubroutine visflx_nosensor_cuf
 !
   subroutine visflx_reduced_ord2_cuf(nx, ny, nz, ng, &
-    Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+    Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
     u0, l0, w_gpu, w_aux_gpu, fl_gpu, &
     x_gpu, y_gpu, z_gpu, wallprop_gpu, update_sensor)
 !
     integer, intent(in) :: nx, ny, nz, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: Prandtl, u0, l0, cp0
+    real(rkind), intent(in) :: Prandtl, u0, l0, t0
     integer, intent(in) :: update_sensor
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
     real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout), device :: wallprop_gpu
     real(rkind), dimension(1:,1:,1:, 1:), intent(inout), device :: fl_gpu
     real(rkind), dimension(1-ng:), intent(in), device :: x_gpu, y_gpu, z_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     integer     :: i,j,k,l,ll,iercuda
     real(rkind) :: dxl,dyl,dzl
     real(rkind) :: sig11,sig12,sig13
@@ -2186,11 +3244,11 @@ contains
           mu = w_aux_gpu(i,j,k,7)
 !
           if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_gpu(0)
           else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*tt**ll
+              cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
             enddo
           endif
 !
@@ -2272,7 +3330,7 @@ contains
   endsubroutine visflx_reduced_ord2_cuf
 !
   subroutine visflx_reduced_cuf(nx, ny, nz, ng, visc_order, &
-    Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+    Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
     u0, l0, w_gpu, w_aux_gpu, fl_gpu, &
     coeff_deriv1_gpu, coeff_deriv2_gpu, &
     dcsidx_gpu, detady_gpu, dzitdz_gpu,  &
@@ -2281,7 +3339,7 @@ contains
 !
     integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: Prandtl, u0, l0, cp0
+    real(rkind), intent(in) :: Prandtl, u0, l0, t0
     integer, intent(in) :: update_sensor
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
@@ -2292,7 +3350,7 @@ contains
     real(rkind), dimension(1:), intent(in), device :: dcsidx_gpu, detady_gpu, dzitdz_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidx2_gpu, detady2_gpu, dzitdz2_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     integer     :: i,j,k,l,ll,iercuda
     real(rkind) :: ccl,clapl
     real(rkind) :: sig11,sig12,sig13
@@ -2327,11 +3385,11 @@ contains
           mu = w_aux_gpu(i,j,k,7)
 !
           if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_gpu(0)
           else
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*tt**ll
+              cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
             enddo
           endif
 !
@@ -2478,17 +3536,17 @@ contains
   endsubroutine sensor_cuf
 !
   subroutine visflx_x_cuf(nx, ny, nz, nv, ng, &
-    Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+    Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
     x_gpu, w_aux_trans_gpu, fl_trans_gpu, fl_gpu)
 !
     integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: Prandtl, cp0
+    real(rkind), intent(in) :: Prandtl, t0
     real(rkind), dimension(1:ny,1:nx,1:nz,1:nv), intent(inout), device :: fl_trans_gpu
     real(rkind), dimension(1:nx,1:ny,1:nz,1:nv), intent(inout), device :: fl_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in), device :: w_aux_trans_gpu
     real(rkind), dimension(1-ng:), intent(in), device :: x_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     integer     :: i,j,k,iv,ll,iercuda
     real(rkind) :: uu,vv,ww,tt,mu,qq
     real(rkind) :: uup,vvp,wwp,ttp,mup,qqp
@@ -2516,12 +3574,12 @@ contains
           qqp = 0.5_rkind*(uup*uup+vvp*vvp+wwp*wwp)
 !         
           if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_gpu(0)
           else
             ttf = 0.5_rkind*(tt+ttp)
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*ttf**ll
+              cploc = cploc+cp_coeff_gpu(ll)*(ttf/t0)**ll
             enddo
           endif
 !         
@@ -2572,16 +3630,16 @@ contains
   endsubroutine visflx_x_cuf
 !
   subroutine visflx_y_cuf(nx, ny, nz, nv, ng, &
-    Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+    Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
     y_gpu, w_aux_gpu, fl_gpu)
 !
     integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: Prandtl, cp0
+    real(rkind), intent(in) :: Prandtl, t0
     real(rkind), dimension(1:nx,1:ny,1:nz,1:nv), intent(inout), device :: fl_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in), device :: w_aux_gpu
     real(rkind), dimension(1-ng:), intent(in), device :: y_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     integer     :: i,j,k,iv,ll,iercuda
     real(rkind) :: uu,vv,ww,tt,mu,qq
     real(rkind) :: uup,vvp,wwp,ttp,mup,qqp
@@ -2609,12 +3667,12 @@ contains
           qqp = 0.5_rkind*(uup*uup+vvp*vvp+wwp*wwp)
 !         
           if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_gpu(0)
           else
             ttf = 0.5_rkind*(tt+ttp)
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*ttf**ll
+              cploc = cploc+cp_coeff_gpu(ll)*(ttf/t0)**ll
             enddo
           endif
 !         
@@ -2653,16 +3711,16 @@ contains
   endsubroutine visflx_y_cuf
 ! 
   subroutine visflx_z_cuf(nx, ny, nz, nv, ng, &
-    Prandtl, cp0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
+    Prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect, &
     z_gpu, w_aux_gpu, fl_gpu)
 !
     integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: Prandtl, cp0
+    real(rkind), intent(in) :: Prandtl, t0
     real(rkind), dimension(1:nx,1:ny,1:nz,1:nv), intent(inout), device :: fl_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in), device :: w_aux_gpu
     real(rkind), dimension(1-ng:), intent(in), device :: z_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     integer     :: i,j,k,iv,ll,iercuda
     real(rkind) :: uu,vv,ww,tt,mu,qq
     real(rkind) :: uup,vvp,wwp,ttp,mup,qqp
@@ -2690,12 +3748,12 @@ contains
           qqp = 0.5_rkind*(uup*uup+vvp*vvp+wwp*wwp)
 !         
           if (calorically_perfect==1) then
-            cploc = cp0
+            cploc = cp_coeff_gpu(0)
           else
             ttf = 0.5_rkind*(tt+ttp)
             cploc = 0._rkind
             do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*ttf**ll
+              cploc = cploc+cp_coeff_gpu(ll)*(ttf/t0)**ll
             enddo
           endif
 !         
@@ -2785,11 +3843,11 @@ contains
     !@cuf iercuda=cudaDeviceSynchronize()
   endsubroutine recyc_exchange_cuf_3
 !
-  subroutine bcextr_sub_cuf(ilat, nx, ny, nz, ng, p0, w_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, cv0, calorically_perfect)
+  subroutine bcextr_sub_cuf(ilat, nx, ny, nz, ng, p0, rgas0, w_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect)
 !
     integer, intent(in) :: ilat, nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind), intent(in) :: p0, cv0
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cv_coeff_gpu
+    real(rkind), intent(in) :: p0, t0, rgas0
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
 !
     real(rkind) :: rho,rhou,rhov,rhow,tt,ee
@@ -2805,8 +3863,8 @@ contains
             rhou = w_gpu(nx,j,k,2)
             rhov = w_gpu(nx,j,k,3)
             rhow = w_gpu(nx,j,k,4)
-            tt   = p0/rho
-            ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+            tt   = p0/rho/rgas0
+            ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
             w_gpu(nx+l,j,k,1) = rho
             w_gpu(nx+l,j,k,2) = rhou
             w_gpu(nx+l,j,k,3) = rhov
@@ -2826,8 +3884,8 @@ contains
             rhou = w_gpu(i,ny,k,2)
             rhov = w_gpu(i,ny,k,3)
             rhow = w_gpu(i,ny,k,4)
-            tt   = p0/rho
-            ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+            tt   = p0/rho/rgas0
+            ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
             w_gpu(i,ny+l,k,1) = rho
             w_gpu(i,ny+l,k,2) = rhou
             w_gpu(i,ny+l,k,3) = rhov
@@ -2846,15 +3904,16 @@ contains
 !
   attributes(global) subroutine bc_nr_lat_x_kernel(start_or_end, nr_type, &
     nx, ny, nz, ng, nv, w_aux_gpu, w_gpu, fl_gpu, &
-    dcsidx_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu, calorically_perfect)
+    dcsidx_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu, calorically_perfect, rgas0,t0)
     integer, intent(in), value :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
+    real(rkind), intent(in), value :: rgas0,t0
     real(rkind), dimension(3) :: c_one
     real(rkind), dimension(5) :: dw_dn, dwc_dn, ev, dw_dn_outer, dwc_dn_outer
     real(rkind), dimension(5,5) :: el, er
     real(rkind) :: w_target
     integer :: i, j, k, l, m, mm, sgn_dw
     real(rkind) :: df, uu, vv, ww, h, qq, cc, c, ci, b2, b1
-    real(rkind), dimension(indx_cp_l:) :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
     real(rkind), dimension(:,:,:,:) :: fl_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,:) :: w_aux_gpu, w_gpu
     real(rkind), dimension(:) :: dcsidx_gpu
@@ -2898,14 +3957,14 @@ contains
     tt        = w_aux_gpu(i,j,k,6)
     qq        = 0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !   
-    gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
-    cc        = gamloc * tt
+    gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+    cc        = gamloc * tt * rgas0
     c         =  sqrt(cc)
     ci        =  1._rkind/c
 !   
-    p_rho     = tt
+    p_rho     = tt*rgas0
     p_e       = rho*(gamloc-1._rkind)   ! p_e   = rho * R_gas / Cv
-    etot      = h - tt
+    etot      = h - tt*rgas0
 !   
     b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
     b2        = p_e/(rho*cc)
@@ -2978,14 +4037,15 @@ contains
 !
   attributes(global) subroutine bc_nr_lat_y_kernel(start_or_end, nr_type, &
     nx, ny, nz, ng, nv, w_aux_gpu, w_gpu, fl_gpu, detady_gpu, &
-    indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect)
+    indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect,rgas0,t0)
     integer, intent(in), value :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
+    real(rkind), intent(in), value :: rgas0,t0
     real(rkind), dimension(3) :: c_one
     real(rkind), dimension(5) :: dw_dn, dwc_dn, ev
     real(rkind), dimension(5,5) :: el, er
     integer :: i, j, k, l, m, mm, sgn_dw
     real(rkind) :: df, uu, vv, ww, h, qq, cc, c, ci, b2, b1
-    real(rkind), dimension(indx_cp_l:) :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
     real(rkind), dimension(:,:,:,:) :: fl_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:) :: w_aux_gpu, w_gpu
     real(rkind), dimension(:) :: detady_gpu
@@ -3022,14 +4082,14 @@ contains
     tt        =  w_aux_gpu(i,j,k,6)
     qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !   
-    gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
-    cc        = gamloc * tt
+    gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+    cc        = gamloc * tt * rgas0
     c         =  sqrt(cc)
     ci        =  1._rkind/c
 !   
-    p_rho     = tt
+    p_rho     = tt*rgas0
     p_e       = rho*(gamloc-1._rkind)   ! p_e   = rho * R_gas / Cv
-    etot      = h - tt
+    etot      = h - tt*rgas0
 !   
     b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
     b2        = p_e/(rho*cc)
@@ -3097,14 +4157,15 @@ contains
 !
   attributes(global) subroutine bc_nr_lat_z_kernel(start_or_end, nr_type, &
     nx, ny, nz, ng, nv, w_aux_gpu, w_gpu, fl_gpu, dzitdz_gpu, &
-    indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect)
+    indx_cp_l, indx_cp_r, cp_coeff_gpu, calorically_perfect,rgas0,t0)
     integer, intent(in), value :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
+    real(rkind), intent(in), value :: rgas0,t0
     real(rkind), dimension(3) :: c_one
     real(rkind), dimension(5) :: dw_dn, dwc_dn, ev
     real(rkind), dimension(5,5) :: el, er
     integer :: i, j, k, l, m, mm, sgn_dw
     real(rkind) :: df, uu, vv, ww, h, qq, cc, c, ci, b2, b1
-    real(rkind), dimension(indx_cp_l:) :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
     real(rkind), dimension(:,:,:,:) :: fl_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:) :: w_aux_gpu, w_gpu
     real(rkind), dimension(:) :: dzitdz_gpu
@@ -3141,14 +4202,14 @@ contains
     tt        =  w_aux_gpu(i,j,k,6)
     qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !   
-    gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
-    cc        = gamloc * tt
+    gamloc    = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+    cc        = gamloc * tt * rgas0
     c         =  sqrt(cc)
     ci        =  1._rkind/c
 !   
-    p_rho     = tt
+    p_rho     = tt*rgas0
     p_e       = rho*(gamloc-1._rkind)   ! p_e   = rho * R_gas / Cv
-    etot      = h - tt
+    etot      = h - tt*rgas0
 !   
     b3        = etot - rho * p_rho/p_e ! qq in the case of calorically perfect
     b2        = p_e/(rho*cc)
@@ -3259,13 +4320,13 @@ contains
 !
   endsubroutine  bcrecyc_cuf_2
 !
-  subroutine bcrecyc_cuf_3(nx, ny, nz, ng, p0, w_gpu, wmean_gpu, wrecyc_gpu, &
+  subroutine bcrecyc_cuf_3(nx, ny, nz, ng, p0, rgas0, w_gpu, wmean_gpu, wrecyc_gpu, &
     weta_inflow_gpu, map_j_inn_gpu, map_j_out_gpu, &
     yplus_inflow_gpu, eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu, betarecyc, &
-    indx_cp_l, indx_cp_r, cv_coeff_gpu, cv0, calorically_perfect)
+    indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect)
     integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind) :: p0, betarecyc, cv0
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cv_coeff_gpu
+    real(rkind) :: p0, rgas0, betarecyc, t0
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
     real(rkind), dimension(1-ng:,:,:), intent(in), device :: wmean_gpu
     real(rkind), dimension(:,:,:,:), intent(in), device :: wrecyc_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,:), intent(inout), device :: w_gpu
@@ -3320,7 +4381,7 @@ contains
           uumean  = wmean_gpu(1-i,j,2)/rhomean
           vvmean  = wmean_gpu(1-i,j,3)/rhomean
           wwmean  = wmean_gpu(1-i,j,4)/rhomean
-          tmean   = p0/rhomean
+          tmean   = p0/rhomean/rgas0
           rho     = rhomean + rhofluc
           uu      = uumean  + ufluc
           vv      = vvmean  + vfluc
@@ -3333,22 +4394,21 @@ contains
           w_gpu(1-i,j,k,2) = rhou
           w_gpu(1-i,j,k,3) = rhov
           w_gpu(1-i,j,k,4) = rhow
-          tt               = p0/rho
-          ee = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+          tt               = p0/rho/rgas0
+          ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
           w_gpu(1-i,j,k,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
-!         w_gpu(1-i,j,k,5) = p0*gm + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
         enddo
       enddo
     enddo
     !@cuf iercuda=cudaDeviceSynchronize()
   endsubroutine bcrecyc_cuf_3
 !
-  subroutine bclam_cuf(ilat, nx, ny, nz, ng, nv, w_gpu, wmean_gpu, p0, &
-    indx_cp_l, indx_cp_r, cv_coeff_gpu, cv0, calorically_perfect)
+  subroutine bclam_cuf(ilat, nx, ny, nz, ng, nv, w_gpu, wmean_gpu, p0, rgas0, &
+    indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect)
 !
     integer, intent(in) :: nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind), intent(in) :: p0, cv0
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cv_coeff_gpu
+    real(rkind), intent(in) :: p0, rgas0, t0
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:,:,:), intent(in), device :: wmean_gpu
 !
@@ -3365,12 +4425,12 @@ contains
             rhou  = wmean_gpu(1-l,j,2)
             rhov  = wmean_gpu(1-l,j,3)
             rhow  = wmean_gpu(1-l,j,4)
-            tt    = p0/rho
+            tt    = p0/rho/rgas0
             w_gpu(1-l,j,k,1) = rho
             w_gpu(1-l,j,k,2) = rhou
             w_gpu(1-l,j,k,3) = rhov
             w_gpu(1-l,j,k,4) = rhow
-            ee = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+            ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
             w_gpu(1-l,j,k,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
           enddo
         enddo
@@ -3384,23 +4444,20 @@ contains
     endif
   endsubroutine bclam_cuf
 !
-  subroutine bcfree_cuf(ilat, nx, ny, nz, ng, nv, rho0, u0, e0, w_gpu)
-    integer :: nx,ny,nz,ng,nv
-    integer :: ilat
-    real(rkind) :: rho0,u0,e0
-    integer :: j,k,l,iercuda
+  subroutine bcfree_cuf(ilat, nx, ny, nz, ng, nv, winf_gpu, w_gpu)
+    integer, intent(in) :: ilat,nx,ny,nz,ng,nv
+    real(rkind), dimension(1:), intent(in), device :: winf_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
+    integer :: j,k,l,m,iercuda
 !
     if (ilat==1) then     ! left side
       !$cuf kernel do(2) <<<*,*>>>
       do k=1,nz
         do j=1,ny
           do l=1,ng
-            w_gpu(1-l,j,k,1) = rho0
-            w_gpu(1-l,j,k,2) = rho0*u0
-            w_gpu(1-l,j,k,3) = 0._rkind
-            w_gpu(1-l,j,k,4) = 0._rkind
-            w_gpu(1-l,j,k,5) = rho0*e0+0.5_rkind*rho0*u0**2
+            do m=1,nv
+              w_gpu(1-l,j,k,m) = winf_gpu(m)
+            enddo
           enddo
         enddo
       enddo
@@ -3595,7 +4652,7 @@ contains
     integer :: i,k,l, iercuda
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in), device :: w_aux_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cv_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
 !
     if (ilat==1) then     ! left side
     elseif (ilat==2) then ! right side
@@ -3619,16 +4676,16 @@ contains
     endif
   endsubroutine bcsym_cuf
 !
-  subroutine bcwall_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, cv0, &
+  subroutine bcwall_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, rgas0, &
     calorically_perfect, tol_iter_nr)
     integer :: nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect
     integer :: ilat
-    real(rkind) :: twall, cv0, tol_iter_nr
+    real(rkind) :: twall, t0, rgas0, tol_iter_nr
     integer :: i,k,l, iercuda
     real(rkind) :: rho,uu,vv,ww,qq,pp,tt,rhoe,ee
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in), device :: w_aux_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cv_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
 !
     if (ilat==1) then     ! left side
     elseif (ilat==2) then ! right side
@@ -3640,7 +4697,7 @@ contains
           w_gpu(i,1,k,3) = 0._rkind
           w_gpu(i,1,k,4) = 0._rkind
 !         w_gpu(i,1,k,5) = w_gpu(i,1,k,1)*gm*twall
-          ee = get_e_from_temperature_dev(twall, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+          ee = get_e_from_temperature_dev(twall, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
           w_gpu(i,1,k,5) = w_gpu(i,1,k,1)*ee
           do l=1,ng
             rho  = w_gpu(i,1+l,k,1)
@@ -3650,12 +4707,12 @@ contains
             rhoe = w_gpu(i,1+l,k,5)
             qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee   = rhoe/rho-qq
-            tt   = get_temperature_from_e_dev(ee,w_aux_gpu(i,1+l,k,6),cv0,cv_coeff_gpu,indx_cp_l,indx_cp_r,calorically_perfect,&
+            tt   = get_temperature_from_e_dev(ee,w_aux_gpu(i,1+l,k,6),t0,cv_coeff_gpu,indx_cp_l,indx_cp_r,calorically_perfect,&
             tol_iter_nr)
-            pp   = rho*tt
+            pp   = rho*tt*rgas0
             tt   = 2._rkind*twall-tt ! bc
-            ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
-            rho  = pp/tt
+            ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
+            rho  = pp/tt/rgas0
             w_gpu(i,1-l,k,1) =  rho
             w_gpu(i,1-l,k,2) = -rho*uu
             w_gpu(i,1-l,k,3) = -rho*vv
@@ -3671,16 +4728,16 @@ contains
     endif
   endsubroutine bcwall_cuf
 !
-  subroutine bcwall_staggered_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, cv0, &
+  subroutine bcwall_staggered_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, rgas0, &
     calorically_perfect, tol_iter_nr)
     integer :: nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect
     integer :: ilat
-    real(rkind) :: twall, cv0, tol_iter_nr
+    real(rkind) :: twall, t0, rgas0, tol_iter_nr
     integer :: i,k,l, iercuda
     real(rkind) :: rho,uu,vv,ww,qq,pp,tt,rhoe,ee
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in), device :: w_aux_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cv_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
 !
     if (ilat==1) then     ! left side
     elseif (ilat==2) then ! right side
@@ -3696,12 +4753,12 @@ contains
             rhoe = w_gpu(i,l,k,5)
             qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee   = rhoe/rho-qq
-            tt   = get_temperature_from_e_dev(ee,w_aux_gpu(i,l,k,6),cv0,cv_coeff_gpu,indx_cp_l,indx_cp_r,calorically_perfect,&
+            tt   = get_temperature_from_e_dev(ee,w_aux_gpu(i,l,k,6),t0,cv_coeff_gpu,indx_cp_l,indx_cp_r,calorically_perfect,&
             tol_iter_nr)
-            pp   = rho*tt
+            pp   = rho*tt*rgas0
             tt   = 2._rkind*twall-tt ! bc
-            ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
-            rho  = pp/tt
+            ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
+            rho  = pp/tt/rgas0
             w_gpu(i,1-l,k,1) =  rho
             w_gpu(i,1-l,k,2) = -rho*uu
             w_gpu(i,1-l,k,3) = -rho*vv
@@ -3723,12 +4780,12 @@ contains
             rhoe = w_gpu(i,ny+1-l,k,5)
             qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee   = rhoe/rho-qq
-            tt   = get_temperature_from_e_dev(ee,w_aux_gpu(i,ny+1-l,k,6),cv0,cv_coeff_gpu,indx_cp_l,indx_cp_r,calorically_perfect,&
+            tt   = get_temperature_from_e_dev(ee,w_aux_gpu(i,ny+1-l,k,6),t0,cv_coeff_gpu,indx_cp_l,indx_cp_r,calorically_perfect,&
             tol_iter_nr)
-            pp   = rho*tt
+            pp   = rho*tt*rgas0
             tt   = 2._rkind*twall-tt ! bc
-            ee   = get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
-            rho  = pp/tt
+            ee   = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
+            rho  = pp/tt/rgas0
             w_gpu(i,ny+l,k,1) =  rho
             w_gpu(i,ny+l,k,2) = -rho*uu
             w_gpu(i,ny+l,k,3) = -rho*vv
@@ -3766,29 +4823,24 @@ contains
     !@cuf iercuda=cudaDeviceSynchronize()
   endsubroutine compute_residual_cuf
 !
-  subroutine compute_dt_cuf(nx, ny, nz, ng, mu0, visc_model, &
-    VISC_POWER, VISC_SUTHERLAND, powerlaw_vtexp, sutherland_S, T_ref_dim, &
-    t0, cp0, Prandtl, &
+  subroutine compute_dt_cuf(nx, ny, nz, ng, rgas0, Prandtl, &
     dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, w_gpu, w_aux_gpu, &
     dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max,    &
-    indx_cp_l, indx_cp_r, cp_coeff_gpu,fluid_mask_gpu,calorically_perfect)
+    indx_cp_l, indx_cp_r, cp_coeff_gpu,fluid_mask_gpu,calorically_perfect,t0)
     integer :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind) :: mu0, cp0
-    integer  :: visc_model
-    real(rkind) :: powerlaw_vtexp, sutherland_S, T_ref_dim
-    integer :: VISC_POWER, VISC_SUTHERLAND
-    real(rkind) :: t0, Prandtl
+    real(rkind) :: rgas0, t0
+    real(rkind) :: Prandtl
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:) , intent(in), device :: w_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_aux_gpu
     integer, dimension(1-ng:,1-ng:,1-ng:), intent(in), device :: fluid_mask_gpu
-    real(rkind), dimension(indx_cp_l:), intent(in), device :: cp_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidx_gpu, detady_gpu, dzitdz_gpu
     real(rkind), dimension(1:), intent(in), device :: dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
     real(rkind) :: dtxi, dtyi, dtzi, dtxv, dtyv, dtzv, dtxk, dtyk, dtzk
     integer     :: i,j,k,ll,iercuda
     real(rkind) :: rho, ri, uu, vv, ww, tt, mu, nu, k_over_rhocp, c
     real(rkind) :: dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max
-    real(rkind) :: gamloc, cploc
+    real(rkind) :: gamloc
 !
     dtxi_max = 0._rkind
     dtyi_max = 0._rkind
@@ -3815,22 +4867,13 @@ contains
             tt   = w_aux_gpu(i,j,k,6)
             mu   = w_aux_gpu(i,j,k,7)
 !           
-!           if (calorically_perfect==1) then
-!             cploc = cp0
-!           else
-!             cploc = 0._rkind
-!             do ll=indx_cp_l,indx_cp_r
-!               cploc = cploc+cp_coeff_gpu(ll)*tt**ll
-!             enddo
-!           endif
-!           
             nu  = ri*mu
             k_over_rhocp = nu/Prandtl
-            gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
-            c      = sqrt (gamloc*tt)
-            dtxi = (abs(uu)+c)*dcsidx_gpu(i)
-            dtyi = (abs(vv)+c)*detady_gpu(j)
-            dtzi = (abs(ww)+c)*dzitdz_gpu(k)
+            gamloc = get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
+            c      = sqrt (gamloc*rgas0*tt)
+            dtxi   = (abs(uu)+c)*dcsidx_gpu(i)
+            dtyi   = (abs(vv)+c)*detady_gpu(j)
+            dtzi   = (abs(ww)+c)*dzitdz_gpu(k)
             dtxv  = nu*dcsidxs_gpu(i)
             dtyv  = nu*detadys_gpu(j)
             dtzv  = nu*dzitdzs_gpu(k)
@@ -3859,12 +4902,12 @@ contains
   subroutine eval_aux_cuf(nx, ny, nz, ng, istart, iend, jstart, jend, kstart, kend, w_gpu, w_aux_gpu, &
     visc_model, mu0, t0, sutherland_S, T_ref_dim, &
     powerlaw_vtexp, VISC_POWER, VISC_SUTHERLAND, VISC_NO, &
-    cv_coeff_gpu, indx_cp_l, indx_cp_r, cv0, calorically_perfect, tol_iter_nr, stream_id)
+    cv_coeff_gpu, indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr, stream_id)
     integer(ikind), intent(in) :: nx, ny, nz, ng, visc_model
     integer(ikind), intent(in) :: istart, iend, jstart, jend, kstart, kend
     integer(ikind), intent(in) :: VISC_POWER, VISC_SUTHERLAND, VISC_NO, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind),    intent(in) :: mu0, t0, sutherland_S, T_ref_dim, powerlaw_vtexp, cv0, tol_iter_nr
-    real(rkind),    dimension(indx_cp_l:), intent(in),  device   :: cv_coeff_gpu
+    real(rkind),    intent(in) :: mu0, t0, sutherland_S, T_ref_dim, powerlaw_vtexp, rgas0, tol_iter_nr
+    real(rkind),    dimension(indx_cp_l:indx_cp_r+1), intent(in),  device   :: cv_coeff_gpu
     real(rkind),    dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in),  device   :: w_gpu
     real(rkind),    dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
     integer(kind=cuda_stream_kind), intent(in) :: stream_id
@@ -3891,9 +4934,9 @@ contains
           ww   = rhow*ri
           qq   = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
           ee = rhoe/rho-qq
-          tt = get_temperature_from_e_dev(ee, w_aux_gpu(i,j,k,6), cv0, cv_coeff_gpu, indx_cp_l, indx_cp_r, &
+          tt = get_temperature_from_e_dev(ee, w_aux_gpu(i,j,k,6), t0, cv_coeff_gpu, indx_cp_l, indx_cp_r, &
           calorically_perfect, tol_iter_nr)
-          pp = rho*tt
+          pp = rho*tt*rgas0
 !
           w_aux_gpu(i,j,k,1) = rho
           w_aux_gpu(i,j,k,2) = uu
@@ -3903,9 +4946,9 @@ contains
           w_aux_gpu(i,j,k,6) = tt
 !
           if (visc_model == VISC_POWER) then
-            mu = mu0 * (tt / t0)**powerlaw_vtexp
+            mu = mu0 * (tt/t0)**powerlaw_vtexp
           elseif (visc_model == VISC_SUTHERLAND) then
-            mu = mu0 * (tt / t0)**1.5_rkind * &
+            mu = mu0 * (tt/t0)**1.5_rkind * &
             (1._rkind+sutherland_S/T_ref_dim)/(tt/t0 + sutherland_S/T_ref_dim)
           elseif (visc_model == VISC_NO) then
             mu = 0._rkind
@@ -3917,11 +4960,11 @@ contains
     enddo
   endsubroutine eval_aux_cuf
 !
-  attributes(device) function get_gamloc_dev(indx_cp_l,indx_cp_r,tt,cp_coeff_gpu,calorically_perfect)
+  attributes(device) function get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
     real(rkind) :: get_gamloc_dev
     integer, value :: indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind), value :: tt
-    real(rkind), dimension(indx_cp_l:indx_cp_r), device :: cp_coeff_gpu
+    real(rkind), value :: tt, rgas0, t0
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), device :: cp_coeff_gpu
     real(rkind) :: cploc, gamloc
     integer :: l
 !
@@ -3930,45 +4973,46 @@ contains
     else
       cploc = 0._rkind
       do l=indx_cp_l,indx_cp_r
-        cploc = cploc+cp_coeff_gpu(l)*tt**l
+        cploc = cploc+cp_coeff_gpu(l)*(tt/t0)**l
       enddo
     endif
-    gamloc = cploc/(cploc-1._rkind)
+    gamloc = cploc/(cploc-rgas0)
     get_gamloc_dev = gamloc
 !
   endfunction get_gamloc_dev
 !
-  attributes(device) function get_temperature_from_e_dev(ee, T_start, cv0, cv_coeff_gpu, indx_cp_l, indx_cp_r, &
+  attributes(device) function get_temperature_from_e_dev(ee, T_start, t0, cv_coeff_gpu, indx_cp_l, indx_cp_r, &
     calorically_perfect,tol_iter_nr)
     real(rkind) :: get_temperature_from_e_dev
     integer, value :: indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind), value :: ee, T_start, cv0, tol_iter_nr
-    real(rkind), dimension(indx_cp_l:indx_cp_r), device :: cv_coeff_gpu
+    real(rkind), value :: ee, T_start, t0, tol_iter_nr
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), device :: cv_coeff_gpu
     real(rkind) :: tt, T_old, ebar, den, num, T_pow, T_powp
     integer :: l,iter,max_iter
 !
     max_iter = 50
 !
     if (calorically_perfect==1) then
-      tt    = ee/cv0
+      tt  = t0+ee/cv_coeff_gpu(0)
     else
       T_old = T_start
-      ebar  = ee - cv0
+      ebar  = ee - cv_coeff_gpu(indx_cp_r+1)*t0
       do iter=1,max_iter
         den = 0._rkind
         num = 0._rkind
         do l=indx_cp_l,indx_cp_r
           if (l==-1) then
-            T_pow  = T_old**l
+            T_pow  = (T_old/t0)**l
             den    = den+cv_coeff_gpu(l)*T_pow
-            num    = num+cv_coeff_gpu(l)*log(T_old)
+            num    = num+cv_coeff_gpu(l)*log(T_old/t0)
           else
-            T_pow  = T_old**l
-            T_powp = T_old*T_pow
+            T_pow  = (T_old/t0)**l
+            T_powp = (T_old/t0)*T_pow
             den    = den+cv_coeff_gpu(l)*T_pow
             num    = num+cv_coeff_gpu(l)*(T_powp-1._rkind)/(l+1._rkind)
           endif
         enddo
+        num = num*t0
         tt = T_old+(ebar-num)/den
         if (abs(tt-T_old) < tol_iter_nr) exit
         T_old = tt
@@ -3977,25 +5021,26 @@ contains
     get_temperature_from_e_dev = tt
   endfunction get_temperature_from_e_dev
 !
-  attributes(device) function get_e_from_temperature_dev(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+  attributes(device) function get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
     real(rkind) :: get_e_from_temperature_dev
-    real(rkind),value :: tt, cv0
+    real(rkind),value :: tt, t0
     integer,value     :: indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind), dimension(indx_cp_l:indx_cp_r) :: cv_coeff_gpu
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cv_coeff_gpu
     real(rkind) :: ee
     integer :: l
 !
     if (calorically_perfect==1) then
-      ee = tt * cv0
+      ee = cv_coeff_gpu(0)*(tt-t0)
     else
-      ee = cv0
+      ee = cv_coeff_gpu(indx_cp_r+1)
       do l=indx_cp_l,indx_cp_r
         if (l==-1) then
-          ee = ee+cv_coeff_gpu(l)*log(tt)
+          ee = ee+cv_coeff_gpu(l)*log(tt/t0)
         else
-          ee = ee+cv_coeff_gpu(l)/(l+1._rkind)*(tt**(l+1)-1._rkind)
+          ee = ee+cv_coeff_gpu(l)/(l+1._rkind)*((tt/t0)**(l+1)-1._rkind)
         endif
       enddo
+      ee = ee*t0
     endif
     get_e_from_temperature_dev = ee
   endfunction get_e_from_temperature_dev

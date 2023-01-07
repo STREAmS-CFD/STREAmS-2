@@ -18,6 +18,7 @@ module streams_equation_singleideal_object
   public :: VISC_POWER, VISC_SUTHERLAND, VISC_NO
   public :: RK_WRAY, RK_JAMESON, RK_SHU
   public :: slicexy_aux, slicexz_aux, sliceyz_aux
+  public :: ibm_MAX_PARBC
 !
 ! public constants
   integer(ikind), parameter :: VISC_NO            = 0_ikind
@@ -27,6 +28,8 @@ module streams_equation_singleideal_object
   integer(ikind), parameter :: RK_WRAY            = 1_ikind
   integer(ikind), parameter :: RK_JAMESON         = 2_ikind
   integer(ikind), parameter :: RK_SHU             = 3_ikind
+!
+  integer(ikind), parameter :: ibm_MAX_PARBC      = 3_ikind
 !
   real(rkind), dimension(:,:,:,:), allocatable :: slicexy_aux, slicexz_aux, sliceyz_aux
 !
@@ -58,7 +61,7 @@ module streams_equation_singleideal_object
 !
     integer(ikind)            :: visc_order, conservative_viscous
     integer(ikind)            :: ep_order, nkeep
-    integer(ikind)            :: weno_scheme, weno_version
+    integer(ikind)            :: weno_scheme, weno_version, flux_splitting
     real(rkind)               :: sensor_threshold
     real(rkind)               :: xshock_imp, shock_angle, tanhfacs
     integer                   :: rand_type
@@ -86,11 +89,15 @@ module streams_equation_singleideal_object
     real(rkind)               :: entropy
 !
     integer                   :: flow_init
-    real(rkind)               :: Mach, Reynolds, Prandtl
+    real(rkind)               :: Mach, Reynolds, Prandtl, theta_wall
     real(rkind)               :: Reynolds_friction
-    real(rkind)               :: u0, p0, rho0, t0, c0, l0, cp0, cv0, mu0, k0, gam, e0, etot0
-    real(rkind)               :: gm, gm1
-    real(rkind)               :: T_wall, theta_wall, rfac, T_bulk_target, T_recovery
+    real(rkind)               :: rgas0
+    real(rkind)               :: rho0
+    real(rkind)               :: t0
+    real(rkind)               :: l0
+    real(rkind)               :: u0, p0, mu0
+    real(rkind)               :: gam, gm, gm1, rfac
+    real(rkind)               :: T_wall, T_bulk_target, T_recovery
     real(rkind)               :: powerlaw_vtexp, T_ref_dim, sutherland_S
     integer                   :: visc_model
     real(rkind)               :: dpdx,rhobulk,ubulk,tbulk,volchan   ! for channel flow
@@ -98,7 +105,7 @@ module streams_equation_singleideal_object
     real(rkind)               :: x_recyc
     logical                   :: recyc
     integer                   :: i_recyc, ib_recyc
-    real(rkind), dimension(:), allocatable :: winf,winf_past_shock
+    real(rkind), dimension(:), allocatable :: winf, winf_past_shock
 !
     real(rkind), dimension(:,:,:,:), allocatable :: w_aux
     real(rkind), dimension(:,:,:), allocatable   :: wmean
@@ -150,7 +157,11 @@ module streams_equation_singleideal_object
     procedure, pass(self) :: initial_conditions
     procedure, pass(self) :: read_field_info
     procedure, pass(self) :: write_field_info
+    procedure, pass(self) :: set_oblique_shock
+    procedure, pass(self) :: set_fluid_prop
     procedure, pass(self) :: set_flow_params
+    procedure, pass(self) :: set_bl_prop
+    procedure, pass(self) :: set_chan_prop
     procedure, pass(self) :: init_channel
     procedure, pass(self) :: init_wind_tunnel
     procedure, pass(self) :: init_bl
@@ -213,6 +224,16 @@ contains
       call init_crandom_f(self%myrank,reproducible=.true.)
       if (self%masterproc) write(*,*) 'Random numbers reproducible'
     endif
+!
+!   Normalization
+    self%l0    = 1._rkind
+    self%t0    = 1._rkind
+    self%rho0  = 1._rkind
+    self%rgas0 = 1._rkind
+    if (self%cfg%has_key("ref_prop","l0")) call self%cfg%get("ref_prop","l0",self%l0)
+    if (self%cfg%has_key("ref_prop","t0")) call self%cfg%get("ref_prop","t0",self%t0)
+    if (self%cfg%has_key("ref_prop","rho0")) call self%cfg%get("ref_prop","rho0",self%rho0)
+    if (self%cfg%has_key("ref_prop","rgas0")) call self%cfg%get("ref_prop","rgas0",self%rgas0)
 !
 !   Flow init
     call self%cfg%get("flow","flow_init",self%flow_init)
@@ -291,7 +312,6 @@ contains
       call self%cfg%get("grid","ysmoosteps",rtemp) ; grid_vars(6) = rtemp
     end select
 !
-    self%l0 = 1._rkind
     call self%grid%initialize(periodic, nxmax, nymax, nzmax, ng, grid_type, &
       domain_size_x, domain_size_y, domain_size_z, self%l0, &
       grid_vars, metrics_order, rebuild_ghost, ystaggering)
@@ -302,6 +322,8 @@ contains
     self%nv_stat    = 70
     self%nv_stat_3d = 14
 !
+!   Set fluid properties
+    call self%set_fluid_prop()
 !   Set flow parameters
     call self%set_flow_params()
 !
@@ -314,6 +336,11 @@ contains
     endif
     call self%cfg%get("numerics","weno_scheme",self%weno_scheme)
     call self%cfg%get("numerics","weno_version",self%weno_version)
+    if (self%cfg%has_key("numerics","flux_splitting")) then
+      call self%cfg%get("numerics","flux_splitting",self%flux_splitting)
+    else
+      self%flux_splitting = 0
+    endif
     call self%cfg%get("numerics","visc_order",self%visc_order)
     call self%cfg%get("numerics","conservative_viscous",self%conservative_viscous)
     allocate(self%supported_orders(1:4))
@@ -389,13 +416,13 @@ contains
 !
     self%recyc = .false.
 !   only ncoords(1) procs have bctags 10, otherwise MPI tag replaced it
-    if(self%field%ncoords(1) == 0) then
+    if (self%field%ncoords(1) == 0) then
       if(self%bctags(1) == 10) then
         self%recyc = .true.
       endif
     endif
     call mpi_bcast(self%recyc,1,mpi_logical,0,self%field%mp_cartx,self%mpi_err)
-    if(self%recyc) call self%recyc_prepare()
+    if (self%recyc) call self%recyc_prepare()
 !
     self%time     = self%time0
     self%icyc     = self%icyc0
@@ -698,6 +725,7 @@ contains
     integer :: ig_recyc, j
 !
     call self%cfg%get("bc","x_recyc",self%x_recyc)
+    self%x_recyc = self%x_recyc*self%l0
 !
     associate(ng => self%grid%ng, ny => self%field%ny)
       allocate(self%yplus_inflow(1-ng:ny+ng))
@@ -713,7 +741,7 @@ contains
       ng => self%grid%ng, xrecyc => self%x_recyc, i_recyc => self%i_recyc, ib_recyc => self%ib_recyc, &
       deltavec => self%deltavec, deltavvec => self%deltavvec, betarecyc => self%betarecyc, &
       y => self%field%y, yplus_inflow => self%yplus_inflow, eta_inflow => self%eta_inflow, &
-      yplus_recyc  => self%yplus_recyc,  eta_recyc  => self%eta_recyc, &
+      yplus_recyc  => self%yplus_recyc,  eta_recyc  => self%eta_recyc, l0 => self%l0, &
       map_j_inn => self%map_j_inn, map_j_out => self%map_j_out, weta_inflow => self%weta_inflow &
       )
       call locateval(xg(1:nxmax),nxmax,xrecyc,ig_recyc) ! xrecyc is between xg(ii) and xg(ii+1), ii is between 0 and nxmax
@@ -732,7 +760,7 @@ contains
 !     if (self%masterproc) write(*,*) 'xrecyc: ',xrecyc, self%Reynolds
       if (self%masterproc) then
         write(*,*) 'Urbin-Knight beta factor = ', &
-          ((1._rkind+xrecyc*0.27_rkind**1.2_rkind/self%Reynolds**0.2_rkind)**(5._rkind/6._rkind))**0.1_rkind
+          ((1._rkind+(xrecyc/l0)*0.27_rkind**1.2_rkind/self%Reynolds**0.2_rkind)**(5._rkind/6._rkind))**0.1_rkind
       endif
 !
       do j=1-ng,ny+ng
@@ -972,46 +1000,6 @@ contains
     endassociate
   endsubroutine write_stats_3d
 ! 
-  function get_temperature_from_e(ee, T_start, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
-    integer, intent(in) :: indx_cp_l, indx_cp_r,calorically_perfect
-    real(rkind), intent(in) :: ee, T_start, cv0
-    real(rkind), dimension(indx_cp_l:indx_cp_r), intent(in) :: cv_coeff
-    real(rkind) :: get_temperature_from_e
-    real(rkind) :: tt, T_old, ebar, den, num, T_pow, T_powp
-    integer :: l, iter, max_iter
-!
-    max_iter = 50
-!   
-    if (calorically_perfect==1) then
-!     tt    = (rhoe-rho*qq)/(rho*cv_coeff(0))
-      tt    = ee/cv0
-    else
-      T_old = T_start
-      ebar  = ee - cv0
-      do iter = 1, max_iter
-        den = 0._rkind
-        num = 0._rkind
-        do l=indx_cp_l,indx_cp_r
-          if (l==-1) then
-            T_pow  = T_old**l
-            den    = den+cv_coeff(l)*T_pow
-            num    = num+cv_coeff(l)*log(T_old)
-          else
-            T_pow  = T_old**l
-            T_powp = T_old*T_pow
-            den    = den+cv_coeff(l)*T_pow
-            num    = num+cv_coeff(l)*(T_powp-1._rkind)/(l+1._rkind)
-          endif
-        enddo
-        tt = T_old+(ebar-num)/den
-        if (abs(tt-T_old) < tol_iter_nr) exit
-        T_old = tt
-      enddo
-    endif
-    get_temperature_from_e = tt
-!   
-  endfunction get_temperature_from_e
-!
   subroutine compute_stats(self)
     class(equation_singleideal_object), intent(inout) :: self
     real(rkind), dimension(self%nv_stat, self%field%nx, self%field%ny) :: w_stat_z
@@ -1022,13 +1010,13 @@ contains
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat => self%nv_stat, &
       ng => self%grid%ng, nv_aux => self%nv_aux, w_stat => self%w_stat, nzmax => self%grid%nzmax, &
       w => self%field%w, visc_model => self%visc_model, &
-      powerlaw_vtexp => self%powerlaw_vtexp, t0 => self%t0, mu0 => self%mu0, &
+      powerlaw_vtexp => self%powerlaw_vtexp, mu0 => self%mu0, &
       T_ref_dim => self%T_ref_dim, itav => self%itav, mp_cartz => self%field%mp_cartz, &
       sutherland_S => self%sutherland_S, &
       mpi_err => self%mpi_err, cv_coeff => self%cv_coeff, w_aux => self%w_aux, &
       dcsidx => self%field%dcsidx, detady => self%field%detady, dzitdz => self%field%dzitdz, &
       indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cp_coeff => self%cp_coeff, &
-      calorically_perfect => self%calorically_perfect)
+      calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
 !
       lmax = self%visc_order/2
 !
@@ -1084,13 +1072,13 @@ contains
 !           tt   = pp*ri
 !
             tt = w_aux(i,j,k,6)
-            pp = rho*tt
+            pp = rho*rgas0*tt
             mu = w_aux(i,j,k,7)
             nu = mu/rho
 !           
-            gamloc    = get_gamloc(tt,indx_cp_l,indx_cp_r,cp_coeff,calorically_perfect)
-            cploc     = gamloc/(gamloc-1._rkind)
-            c         = sqrt(gamloc*tt)
+            gamloc    = get_gamloc(tt,t0,indx_cp_l,indx_cp_r,cp_coeff,calorically_perfect,rgas0)
+            cploc     = gamloc/(gamloc-1._rkind)*rgas0
+            c         = sqrt(gamloc*rgas0*tt)
             machlocal = sqrt(2._rkind*qq)/c
             t_tot     = tt+qq*(gamloc-1._rkind)/gamloc
 !           
@@ -1332,138 +1320,87 @@ contains
     endif
   endsubroutine write_field_info
 !
-  function get_e_from_temperature(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
-    real(rkind), intent(in) :: tt, cv0
+  function get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+    real(rkind), intent(in) :: tt, t0
     integer, intent(in) :: indx_cp_l, indx_cp_r,calorically_perfect
-    real(rkind), dimension(indx_cp_l: indx_cp_r), intent(in) :: cv_coeff
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff
     real(rkind) :: get_e_from_temperature
     real(rkind) :: ee
     integer :: l
 !
     if (calorically_perfect==1) then
-      ee = tt * cv0
+      ee = cv_coeff(0)*(tt-t0)
     else
-      ee = cv0
+      ee = cv_coeff(indx_cp_r+1)
       do l=indx_cp_l, indx_cp_r
         if (l==-1) then
-          ee = ee+cv_coeff(l)*log(tt)
+          ee = ee+cv_coeff(l)*log(tt/t0)
         else
-          ee = ee+cv_coeff(l)/(l+1._rkind)*(tt**(l+1)-1._rkind)
+          ee = ee+cv_coeff(l)/(l+1._rkind)*((tt/t0)**(l+1)-1._rkind)
         endif
       enddo
+      ee = ee*t0
     endif
     get_e_from_temperature = ee
   endfunction get_e_from_temperature
 !
-  subroutine set_flow_params(self)
+  subroutine set_fluid_prop(self)
     class(equation_singleideal_object), intent(inout) :: self
 !   
-!   -------------------------------------------------
-!   flow_init = -1 (wind tunnel)
-!   -------------------------------------------------
-!   l0   = 1.
-!   u0   = free-stream velocity (if Mach > 0)
-!   t0   = free-stream temperature
-!   rho0 = free-stream density
-!   p0   = free-stream pressure
-!   -------------------------------------------------
-!   -------------------------------------------------
-!   flow_init = 0 (channel)
-!   -------------------------------------------------
-!   l0   = half-height of the channel
-!   u0   = bulk velocity
-!   t0   = wall temperature
-!   rho0 = bulk density (is constant)
-!   p0   = rho0*t0
-!   -------------------------------------------------
-!   flow_init = 1 (BL, SBLI)
-!   -------------------------------------------------
-!   l0   = inflow boundary layer thickness delta-99-incompressible
-!   u0   = free-stream velocity
-!   t0   = free-stream temperature
-!   rho0 = free-stream density
-!   p0   = free-stream pressure (rho0*t0)
-!   -------------------------------------------------
-!   
-!
-    real(rkind) :: Trat, Re_out, s2tinf
-    real(rkind) :: trec_over_tb, tw_over_tb, tb_over_tw, tw_over_tr
-    real(rkind) :: thtmp, rmb, rmtw
-    logical :: visc_exp
+    integer :: l, num_coeff_cp
+    real(rkind) :: cp_tref, cv_tref, hstar_over_rgas_tref_dim, bcoeff
     real(rkind), allocatable, dimension(:) :: cp_temp
-    real(rkind), allocatable, dimension(:) :: uvec, rhovec, tvec, viscvec
-    real(rkind) :: cp_tref
-    real(rkind) :: cf, thrat
-    integer :: l, i, m
-    real(rkind) :: sins,coss,Mach_normal,Mach_normal2,vel_ratio,rho_ratio,p_ratio,deflection_angle_tan,deflection_angle
-    real(rkind) :: Mach_past_shock, Mach_normal_past_shock, t_past_shock, c_past_shock, u_past_shock, v_past_shock, t_ratio
-    real(rkind) :: rho_past_shock, e_past_shock, etot_past_shock, xshock_top
-    real(rkind) :: xx, tanhf
-    real(rkind) :: gamloc,gamlocold,gamlocgm1
-    integer :: num_coeff_cp
-    integer :: ig_shock
-    integer :: max_iter
+!   
+    associate(Prandtl => self%Prandtl, gam => self%gam, visc_model => self%visc_model, &
+      sutherland_S => self%sutherland_S, calorically_perfect => self%calorically_perfect, &
+      powerlaw_vtexp => self%powerlaw_vtexp, indx_cp_l => self%indx_cp_l, &
+      indx_cp_r => self%indx_cp_r, T_ref_dim => self%T_ref_dim, &
+      gm => self%gm, gm1 => self%gm1, rfac => self%rfac, rgas0 => self%rgas0, &
+      cfg => self%cfg,t0 => self%t0)
 !
-    allocate(self%winf(self%nv))
-    allocate(self%winf_past_shock(self%nv))
-!
-    associate(Mach => self%Mach, Reynolds => self%Reynolds, Prandtl => self%Prandtl, &
-      u0 => self%u0, p0 => self%p0, rho0 => self%rho0, t0 => self%t0, c0 => self%c0, l0 => self%l0,    &
-      cp0 => self%cp0, cv0 => self%cv0, mu0 => self%mu0, k0 => self%k0,  &
-      gam => self%gam,  T_wall => self%T_wall, theta_wall => self%theta_wall, T_recovery => self%T_recovery, &
-      T_bulk_target => self%T_bulk_target, &
-      sutherland_S => self%sutherland_S, &
-      rfac => self%rfac, T_ref_dim => self%T_ref_dim, &
-      powerlaw_vtexp => self%powerlaw_vtexp, cfg => self%cfg, visc_model => self%visc_model, &
-      gm => self%gm, gm1 => self%gm1, &
-      nymax => self%grid%nymax, yg => self%grid%yg, Reynolds_friction => self%Reynolds_friction, yn => self%grid%yn, &
-      winf => self%winf, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, e0 => self%e0, etot0 => self%etot0, &
-      xshock_imp => self%xshock_imp, shock_angle => self%shock_angle, winf_past_shock => self%winf_past_shock, &
-      nxmax => self%grid%nxmax, tanhfacs => self%tanhfacs, channel_case => self%channel_case, bl_case => self%bl_case, &
-      calorically_perfect => self%calorically_perfect, flow_params_cfg => self%flow_params_cfg)
-!     
-      allocate(uvec(nymax),tvec(nymax),rhovec(nymax),viscvec(nymax))
-!     
-      t0    = 1._rkind
-      p0    = 1._rkind
-!     
-      call cfg%get("flow","Reynolds",Reynolds)
-      call cfg%get("flow","Mach",Mach)
-      call cfg%get("flow","theta_wall",theta_wall)
       call cfg%get("flow","T_ref",T_ref_dim)
-!     
       call cfg%get("fluid","Prandtl",Prandtl)
       call cfg%get("fluid","gam",gam)
       call cfg%get("fluid","visc_model",visc_model)
       call cfg%get("fluid","s_suth",sutherland_S)
       call cfg%get("fluid","vt_exp",powerlaw_vtexp)
-!     
-      visc_exp = .false.
-      if (visc_model == VISC_POWER) visc_exp = .true.
-!     
-      calorically_perfect = 1
-      indx_cp_l = 0
-      indx_cp_r = 0
-      if (self%cfg%has_key("fluid","calorically_perfect")) then
-        call cfg%get("fluid","calorically_perfect",calorically_perfect)
-        if (calorically_perfect==0) then
-          call cfg%get("fluid","indx_cp_l",indx_cp_l)
-          call cfg%get("fluid","indx_cp_r",indx_cp_r)
-        elseif (calorically_perfect/=1) then
-          call fail_input_any("calorically_perfect must be 0 or 1")
-        endif
+      call cfg%get("fluid","calorically_perfect",calorically_perfect)
+      if (calorically_perfect==0) then
+        call cfg%get("fluid","indx_cp_l",indx_cp_l)
+        call cfg%get("fluid","indx_cp_r",indx_cp_r)
+      elseif (calorically_perfect==1) then
+        indx_cp_l = 0
+        indx_cp_r = 0
+      elseif (calorically_perfect/=1) then
+        call fail_input_any("calorically_perfect must be 0 or 1")
       endif
 !     
-      allocate(self%cp_coeff(indx_cp_l:indx_cp_r))
-      allocate(self%cv_coeff(indx_cp_l:indx_cp_r))
+      rfac = Prandtl**(1._rkind/3._rkind)
+!     
+      allocate(self%cp_coeff(indx_cp_l:indx_cp_r+1))
+      allocate(self%cv_coeff(indx_cp_l:indx_cp_r+1))
 !     
       self%cp_coeff = 0._rkind
       self%cv_coeff = 0._rkind
+      bcoeff = 1._rkind
       if (calorically_perfect==0) then
         call cfg%get("fluid","cp_coeff",cp_temp)
         num_coeff_cp = size(cp_temp)
         if (num_coeff_cp==(indx_cp_r-indx_cp_l+1)) then
-          self%cp_coeff(indx_cp_l:indx_cp_r)  = cp_temp(1:num_coeff_cp)
+          self%cp_coeff(indx_cp_l:indx_cp_r)  = cp_temp(1:num_coeff_cp) ! Assume constant zero
+        elseif (num_coeff_cp==(indx_cp_r-indx_cp_l+2)) then
+          self%cp_coeff(indx_cp_l:indx_cp_r+1)  = cp_temp(1:num_coeff_cp) ! Read also NASA b1 coefficient
+          hstar_over_rgas_tref_dim = self%cp_coeff(indx_cp_r+1)
+          do l = indx_cp_l, indx_cp_r
+            if (l==-1) then
+              hstar_over_rgas_tref_dim = hstar_over_rgas_tref_dim+self%cp_coeff(l)*log(T_ref_dim)
+            else
+              hstar_over_rgas_tref_dim = hstar_over_rgas_tref_dim+self%cp_coeff(l)/(l+1)*T_ref_dim**(l+1)
+            endif
+          enddo
+          bcoeff = hstar_over_rgas_tref_dim/T_ref_dim
+          if (self%masterproc) write(*,*) 'h(T_ref_dim) (kJ/mol):', hstar_over_rgas_tref_dim*8.314510_rkind/1000._rkind
+          if (self%masterproc) write(*,*) 'bcoeff:', bcoeff
         else
           call fail_input_any("Error! Check number of cp coefficients")
         endif
@@ -1471,108 +1408,75 @@ contains
         do l=indx_cp_l,indx_cp_r
           cp_tref = cp_tref + self%cp_coeff(l)*T_ref_dim**l
         enddo
-        gam = cp_tref/(cp_tref-1._rkind)
+        cp_tref = cp_tref*rgas0
+        cv_tref = cp_tref-rgas0
+        gam = cp_tref/cv_tref
         do l=indx_cp_l,indx_cp_r
-          self%cp_coeff(l) = self%cp_coeff(l) * T_ref_dim**l
+          self%cp_coeff(l) = self%cp_coeff(l)*T_ref_dim**l
+          self%cv_coeff(l) = self%cp_coeff(l)
         enddo
-        self%cv_coeff     = self%cp_coeff
-        self%cv_coeff(0)  = self%cp_coeff(0) - 1._rkind ! 1 is R_gas adimensional
+        self%cv_coeff(0)  = self%cp_coeff(0) - 1._rkind
       endif
 !     
       gm1 = gam-1._rkind
       gm  = 1._rkind/gm1
-      cv0 = gm
-      cp0 = cv0*gam
       if (self%masterproc) write(*,*) 'Gamma: ', gam
 !     
       if (calorically_perfect==1) then
-        self%cv_coeff(0) = cv0
-        self%cp_coeff(0) = cp0
+        self%cv_coeff(0) = gm
+        self%cp_coeff(0) = gm*gam
       endif
-!     
-      rfac  = Prandtl**(1._rkind/3._rkind)
-!     
-      T_recovery = t0 * (1._rkind+gm1/2._rkind*rfac*Mach**2)
-      T_wall     = theta_wall * (T_recovery-t0) + t0
-      Trat       = T_wall/T_recovery
-!     
-      if (channel_case) then
-        T_wall = t0 ! Reference temperature in the channel is twall
-!       
-        if (theta_wall>=-1._rkind) then ! T bulk fixed
-          thtmp         = theta_wall
-          rmb           = Mach ! Bulk Mach number based on T_bulk (input)
-!         
-!         trec_over_tb  = 1._rkind+gm1/2._rkind*rfac*rmb**2
-!         tw_over_tb    = 1._rkind+thtmp*(trec_over_tb-1._rkind)
-!         tb_over_tw    = 1._rkind/tw_over_tb
-!         tw_over_tr    = 1._rkind/(trec_over_tb*tb_over_tw)
-!         rmtw          = rmb*sqrt(tb_over_tw) ! Bulk Mach number based on T_wall
-!         T_bulk_target = tb_over_tw*T_wall
-!         if (self%masterproc) write(*,*) 'Target bulk temperature: ', T_bulk_target
-!         Mach          = rmtw
-!         
-          gamloc    = gam
-          max_iter = 50
-!         Iterative loop to find gamma at bulk temperature
-          do l=1,max_iter
-            gamlocold = gamloc
-            gamlocgm1 = gamloc-1._rkind
-            trec_over_tb  = 1._rkind+gamlocgm1/2._rkind*rfac*rmb**2
-            tw_over_tb    = 1._rkind+thtmp*(trec_over_tb-1._rkind)
-            tb_over_tw    = 1._rkind/tw_over_tb
-            tw_over_tr    = 1._rkind/(trec_over_tb*tb_over_tw)
-            T_bulk_target = tb_over_tw*T_wall
-            gamloc = get_gamloc(T_bulk_target,indx_cp_l,indx_cp_r,self%cp_coeff,calorically_perfect)
-            if (abs(gamloc-gamlocold)<1.D-9) exit
-          enddo
-          if (self%masterproc) write(*,*) 'Target bulk temperature: ', T_bulk_target
-          rmtw          = rmb*sqrt(tb_over_tw) ! Bulk Mach number based on T_wall
-          Mach          = rmtw
-        else
-          thtmp = -1._rkind ! For estimation of Re_out
-          rmtw  = Mach      ! Bulk Mach number based on T_wall
-          rmb   = sqrt(rmtw**2/(1._rkind-gm1/2._rkind*rfac*thtmp*rmtw**2))
-          trec_over_tb = 1._rkind+gm1/2._rkind*rfac*rmb**2
-          tw_over_tb   = 1._rkind+thtmp*(trec_over_tb-1._rkind)
-          tb_over_tw   = 1._rkind/tw_over_tb
-          tw_over_tr   = 1._rkind/(trec_over_tb*tb_over_tw)
-        endif
-!       
-        if (self%masterproc) write(*,*) 'Mach number (based on T bulk): ', rmb
-        if (self%masterproc) write(*,*) 'Mach number (based on T wall): ', rmtw
-!       
-        Reynolds_friction = Reynolds
-        s2tinf = sutherland_S/T_ref_dim
-!       call get_reynolds_chan_old(nymax/2,yg(1:nymax/2),yn(1:nymax/2+1),Reynolds_friction,rmb,tw_over_tr,s2tinf, &
-!         Re_out,gam,rfac,Prandtl,powerlaw_vtexp,visc_exp)
-        call get_reynolds_cha(Reynolds_friction,rmb,tw_over_tr,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac, &
-          nymax/2,yg(1:nymax/2),yn(1:nymax/2+1),Re_out)
-!       
-        Reynolds = Re_out
-        if (self%masterproc) write(*,*) 'Re bulk (viscosity evaluated at Twall) = ', Reynolds
-      else
-        if (self%masterproc) write(*,*) 'Wall Temperature: ', T_wall
-        if (self%masterproc) write(*,*) 'Wall-to-recovery T ratio: ', Trat
-      endif
-!     
-      if (bl_case) then
-        s2tinf = sutherland_S/T_ref_dim
-        if (.not.self%bl_laminar) then
-          if (self%masterproc) write(*,*) 'Input friction Reynolds number: ', Reynolds
-          Reynolds_friction  = Reynolds
-!         call get_reynolds(nymax,yg(1:nymax),Reynolds_friction,Mach,Trat,s2tinf,Re_out,gam,rfac,Prandtl,powerlaw_vtexp,visc_exp)
-          call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac,nymax,yg(1:nymax),uvec,&
-            rhovec,tvec,viscvec,Re_out,cf,thrat)
-          Reynolds = Re_out
-        endif
-        if (self%masterproc) write(*,*) 'Reynolds based on free-stream properties: ', Reynolds
-      endif
+      self%cp_coeff(indx_cp_r+1) =  bcoeff
+      self%cv_coeff(indx_cp_r+1) = (bcoeff-1._rkind)
 !
-      rho0 = p0/t0
-      c0   = sqrt(gam*p0/rho0)
-      u0   = Mach*c0
-      e0    = get_e_from_temperature(t0, cv0, indx_cp_l, indx_cp_r, self%cv_coeff, calorically_perfect)
+      self%cv_coeff = self%cv_coeff*rgas0
+      self%cp_coeff = self%cp_coeff*rgas0
+!     
+    endassociate
+!
+  endsubroutine set_fluid_prop
+!
+  subroutine set_flow_params(self)
+    class(equation_singleideal_object), intent(inout) :: self
+!   
+    real(rkind) :: gm1h
+    real(rkind) :: c0, e0, etot0, k0
+!   
+    allocate(self%winf(self%nv))
+    allocate(self%winf_past_shock(self%nv))
+!   
+    associate(Mach => self%Mach, Reynolds => self%Reynolds, theta_wall => self%theta_wall, &
+      t0 => self%t0, rho0 => self%rho0, l0 => self%l0, p0 => self%p0, &
+      u0 => self%u0, mu0 => self%mu0, &
+      powerlaw_vtexp => self%powerlaw_vtexp, T_ref_dim => self%T_ref_dim, &
+      rgas0 => self%rgas0, rfac => self%rfac, gm1 => self%gm1, gam => self%gam, &
+      T_recovery => self%T_recovery, T_wall => self%T_wall, &
+      winf => self%winf, flow_params_cfg => self%flow_params_cfg, &
+      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, Prandtl => self%Prandtl, &
+      cv_coeff => self%cv_coeff, calorically_perfect => self%calorically_perfect, &
+      cfg => self%cfg, winf_past_shock => self%winf_past_shock, cp_coeff => self%cp_coeff)
+!     
+      call cfg%get("flow","Reynolds",Reynolds)
+      call cfg%get("flow","Mach",Mach)
+      call cfg%get("flow","theta_wall",theta_wall)
+      if (self%bctags(4)==7) call self%set_oblique_shock()
+!
+      gm1h       = 0.5_rkind*gm1
+      T_recovery = t0 * (1._rkind+gm1h*rfac*Mach**2)
+      T_wall     = theta_wall * (T_recovery-t0) + t0
+!
+      select case(self%flow_init)
+      case(0)
+        call self%set_chan_prop()
+      case(1)
+        call self%set_bl_prop()
+      end select
+!
+      p0    = rho0*rgas0*t0
+!     
+      c0    = sqrt(gam*rgas0*t0)
+      u0    = Mach*c0
+      e0    = get_e_from_temperature(t0, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
       etot0 = e0+0.5_rkind*u0**2
 !
       winf(1) = rho0
@@ -1580,81 +1484,16 @@ contains
       winf(3) = 0._rkind
       winf(4) = 0._rkind
       winf(5) = rho0*etot0
-!     winf(5) = p0*gm+0.5_rkind*rho0*u0**2
-!     
-      if (self%bctags(4)==7) then
-!       Oblique shock deflection is assumed to be negative
-        call cfg%get("flow","xshock_imp",xshock_imp)
-        call cfg%get("flow","shock_angle",shock_angle)
-!       Compute flow variables past shock
-        shock_angle = shock_angle*pi/180._rkind
-!       
-        xshock_top = xshock_imp-yg(nymax)/tan(shock_angle)
-        call locateval(self%grid%xg(1:nxmax),nxmax,xshock_top,ig_shock)
-        tanhfacs = self%grid%dxg(ig_shock)
-        if (self%masterproc) write(*,*) 'xshock_top, tanhfacs:', xshock_top
-!       
-        sins = sin(shock_angle)
-        coss = cos(shock_angle)
-        Mach_normal  = Mach*sins
-        Mach_normal2 = Mach_normal**2
-        Mach_normal_past_shock = (1._rkind+0.5_rkind*gm1*Mach_normal2)/(gam*Mach_normal2-0.5_rkind*gm1)
-        Mach_normal_past_shock = sqrt(Mach_normal_past_shock)
-        vel_ratio = (2._rkind+gm1*Mach_normal2)/((gam+1._rkind)*Mach_normal2)
-        rho_ratio = 1._rkind/vel_ratio
-        p_ratio   = 1._rkind+2._rkind*gam/(gam+1._rkind)*(Mach_normal2-1._rkind)
-        t_ratio   = p_ratio/rho_ratio
-        deflection_angle_tan = 2._rkind*coss/sins*(Mach**2*sins**2-1._rkind)&
-        /(2._rkind+Mach**2*(gam+cos(2._rkind*shock_angle)))
-        deflection_angle = atan(deflection_angle_tan)
-        if (self%masterproc) write(*,*) 'Deflection angle:', deflection_angle*180._rkind/pi
-        Mach_past_shock = Mach_normal_past_shock/sin(shock_angle-deflection_angle)
-        t_past_shock = t0*t_ratio
-        c_past_shock = sqrt(gam*t_past_shock)
-        u_past_shock = Mach_past_shock*c_past_shock*cos(deflection_angle)
-        v_past_shock = Mach_past_shock*c_past_shock*sin(deflection_angle)
-        if (self%masterproc) write(*,*) 'Streamwise velocity past shock:', u_past_shock
-        if (self%masterproc) write(*,*) 'Vertical velocity past shock:', v_past_shock
-        rho_past_shock = rho0*rho_ratio
-        e_past_shock    = get_e_from_temperature(t_past_shock, cv0, indx_cp_l, indx_cp_r, self%cv_coeff, calorically_perfect)
-        etot_past_shock = e_past_shock+0.5_rkind*(u_past_shock**2+v_past_shock**2)
-        winf_past_shock(1) =  rho_past_shock
-        winf_past_shock(2) =  rho_past_shock*u_past_shock
-        winf_past_shock(3) = -rho_past_shock*v_past_shock
-        winf_past_shock(4) = 0._rkind
-        winf_past_shock(5) =  rho_past_shock*etot_past_shock
-        if (self%masterproc) then
-          open(18,file='shock_profile.dat')
-          do i=1,nxmax
-            xx = self%grid%xg(i)-xshock_top
-            tanhf = 0.5_rkind*(1._rkind+tanh(xx/tanhfacs))
-            write(18,100) self%grid%xg(i), ((winf(m)+tanhf*(winf_past_shock(m)-winf(m))),m=1,5)
-            100  format(20ES20.10)
-          enddo
-          close(18)
-        endif
-      endif
 !     
       if (abs(u0)<tol_iter) then
         mu0  = c0*rho0*l0/Reynolds ! Reynolds number based on speed of sound
+        u0   = c0
         if (self%masterproc) write(*,*) 'Reynolds number based on speed of sound'
       else
-        mu0  = u0*rho0*l0/Reynolds
+        mu0 = u0*rho0*l0/Reynolds
       endif
-      k0 = mu0*cp0/Prandtl
-!
-!     -------------------------------------
-!     STREAMS v1.0 : mu0 = sqgmr  ;  ggmopr = cp/Pr ; k = sqgmr * ggmopr
-!     mu = mu0 * (T / T0)**1.5 * (1+S/T_ref_dim)/((T/T0 + S/T_ref_dim)
-!     k  = mu * cp / Prandtl
-!
-!     BOHmu    = (T / T0)**1.5 * (1+S/T_ref_dim)/((T/T0 + S/T_ref_dim)
-!     BOHk     = k0*mu
-!
-!     WRONGmu = mu0 * (T / T0)**1.5 * (T_ref_dim+S)/(T + S)
-!     NO mu   = mu0 * T**0.5 / (1 + sutherland_S / T)
-!     -------------------------------------
-!
+      k0 = mu0*cp_coeff(0)/Prandtl
+!     
       if(self%masterproc) then
         call flow_params_cfg%set("flow_params","u0",             u0)
         call flow_params_cfg%set("flow_params","p0",             p0)
@@ -1662,8 +1501,8 @@ contains
         call flow_params_cfg%set("flow_params","t0",             t0)
         call flow_params_cfg%set("flow_params","c0",             c0)
         call flow_params_cfg%set("flow_params","l0",             l0)
-        call flow_params_cfg%set("flow_params","cp0",            cp0)
-        call flow_params_cfg%set("flow_params","cv0",            cv0)
+        call flow_params_cfg%set("flow_params","cp0",            cp_coeff(0))
+        call flow_params_cfg%set("flow_params","cv0",            cv_coeff(0))
         call flow_params_cfg%set("flow_params","mu0",            mu0)
         call flow_params_cfg%set("flow_params","k0",             k0)
         call flow_params_cfg%set("flow_params","gam",            gam)
@@ -1677,33 +1516,193 @@ contains
         call flow_params_cfg%set("flow_params","Prandtl",        Prandtl)
 !
         call flow_params_cfg%write("flow_params.dat")
-!
-!       open(unit=15, file="flow_params.dat")   Reynolds         ", Reynolds)
-!       write(15,*) 'u0               = ', u0
-!       write(15,*) 'p0               = ', p0
-!       write(15,*) 'rho0             = ', rho0
-!       write(15,*) 't0               = ', t0
-!       write(15,*) 'c0               = ', c0
-!       write(15,*) 'l0               = ', l0
-!       write(15,*) 'cp0              = ', cp0
-!       write(15,*) 'cv0              = ', cv0
-!       write(15,*) 'mu0              = ', mu0
-!       write(15,*) 'k0               = ', k0
-!       write(15,*) 'gam              = ', gam
-!       write(15,*) 'T_wall           = ', T_wall
-!       write(15,*) 'theta_wall       = ', theta_wall
-!       write(15,*) 'rfac             = ', rfac
-!       write(15,*) 'powerlaw_vtexp   = ', powerlaw_vtexp
-!       write(15,*) 'T_ref_dim        = ', T_ref_dim
-!       write(15,*) 'Reynolds         = ', Reynolds
-!       close(15)
       endif
-!
-      call cfg%get("fluid","visc_model",visc_model)
 !
     endassociate
 !
   endsubroutine set_flow_params
+!
+  subroutine set_bl_prop(self)
+    class(equation_singleideal_object), intent(inout) :: self
+!   
+    real(rkind) :: Re_out, s2tinf, Trat
+    real(rkind), allocatable, dimension(:) :: uvec, rhovec, tvec, viscvec, yl0
+    real(rkind) :: cf, thrat
+    integer :: l, i, m
+    logical :: visc_exp
+!
+    associate(nymax => self%grid%nymax, Reynolds_friction => self%Reynolds_friction, &
+      Reynolds => self%Reynolds, l0 => self%l0, &
+      Mach => self%Mach, powerlaw_vtexp => self%powerlaw_vtexp, &
+      gam => self%gam, rfac => self%rfac, yg => self%grid%yg)
+!     
+      allocate(uvec(nymax),tvec(nymax),rhovec(nymax),viscvec(nymax),yl0(nymax))
+!     
+      visc_exp = .false.
+      if (self%visc_model == VISC_POWER) visc_exp = .true.
+!     
+      if (self%bl_case) then
+        s2tinf = self%sutherland_S/self%T_ref_dim
+        if (.not.self%bl_laminar) then
+          if (self%masterproc) write(*,*) 'Input friction Reynolds number: ', Reynolds
+          Reynolds_friction  = Reynolds
+          Trat = self%T_wall/self%T_recovery
+          yl0  = yg(1:nymax)/l0
+          call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac,nymax,yl0(1:nymax),uvec,&
+            rhovec,tvec,viscvec,Re_out,cf,thrat)
+          Reynolds = Re_out
+        endif
+        if (self%masterproc) write(*,*) 'Reynolds based on free-stream properties: ', Reynolds
+      endif
+!     
+    endassociate
+!   
+  endsubroutine set_bl_prop
+!
+  subroutine set_chan_prop(self)
+    class(equation_singleideal_object), intent(inout) :: self
+!   
+    real(rkind) :: s2tinf, Re_out
+    real(rkind) :: trec_over_tb, tw_over_tb, tb_over_tw, tw_over_tr
+    real(rkind) :: thtmp, rmb, rmtw
+    real(rkind) :: gamloc,gamlocold,gamlocgm1
+    logical :: visc_exp
+    integer :: l, max_iter
+!   
+    associate(T_wall => self%T_wall, t0 => self%t0, theta_wall => self%theta_wall, &
+      T_bulk_target => self%T_bulk_target, &
+      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, &
+      cp_coeff => self%cp_coeff, calorically_perfect => self%calorically_perfect, &
+      Mach => self%Mach, gam => self%gam, rfac => self%rfac, &
+      Reynolds => self%Reynolds, Reynolds_friction => self%Reynolds_friction, &
+      powerlaw_vtexp => self%powerlaw_vtexp, gm1 => self%gm1, rgas0 => self%rgas0, &
+      yg => self%grid%yg, nymax => self%grid%nymax, yn => self%grid%yn)
+!     
+      self%T_wall = self%t0 ! Reference temperature in the channel is twall
+!     
+      if (theta_wall>=-1._rkind) then ! T bulk fixed
+        thtmp     = theta_wall
+        rmb       = Mach ! Bulk Mach number based on T_bulk (input)
+!       
+        gamloc    = gam
+        max_iter = 50
+!       Iterative loop to find gamma at bulk temperature
+        do l=1,max_iter
+          gamlocold = gamloc
+          gamlocgm1 = gamloc-1._rkind
+          trec_over_tb  = 1._rkind+gamlocgm1/2._rkind*rfac*rmb**2
+          tw_over_tb    = 1._rkind+thtmp*(trec_over_tb-1._rkind)
+          tb_over_tw    = 1._rkind/tw_over_tb
+          tw_over_tr    = 1._rkind/(trec_over_tb*tb_over_tw)
+          T_bulk_target = tb_over_tw*T_wall
+          gamloc = get_gamloc(T_bulk_target,t0,indx_cp_l,indx_cp_r,cp_coeff,calorically_perfect,rgas0)
+          if (abs(gamloc-gamlocold)<1.D-9) exit
+        enddo
+        if (self%masterproc) write(*,*) 'Target bulk temperature: ', T_bulk_target
+        if (self%masterproc) write(*,*) 'Gamma at bulk temperature: ', gamloc
+        rmtw = rmb*sqrt(tb_over_tw) ! Bulk Mach number based on T_wall
+        Mach = rmtw
+      else
+        thtmp = -1._rkind ! For estimation of Re_out
+        rmtw  = Mach      ! Bulk Mach number based on T_wall
+        rmb   = sqrt(rmtw**2/(1._rkind-gm1/2._rkind*rfac*thtmp*rmtw**2))
+        trec_over_tb = 1._rkind+gm1/2._rkind*rfac*rmb**2
+        tw_over_tb   = 1._rkind+thtmp*(trec_over_tb-1._rkind)
+        tb_over_tw   = 1._rkind/tw_over_tb
+        tw_over_tr   = 1._rkind/(trec_over_tb*tb_over_tw)
+      endif
+!     
+      if (self%masterproc) write(*,*) 'Mach number (based on T bulk): ', rmb
+      if (self%masterproc) write(*,*) 'Mach number (based on T wall): ', rmtw
+!     
+      visc_exp = .false.
+      if (self%visc_model == VISC_POWER) visc_exp = .true.
+!     
+      s2tinf = self%sutherland_S/self%T_ref_dim
+      Reynolds_friction = Reynolds
+      call get_reynolds_cha(Reynolds_friction,rmb,tw_over_tr,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac, &
+        nymax/2,yn(1:nymax/2+1),Re_out)
+!     
+      Reynolds = Re_out
+      if (self%masterproc) write(*,*) 'Re bulk (viscosity evaluated at Twall) = ', Reynolds
+!     
+    endassociate
+!
+  endsubroutine set_chan_prop
+! 
+  subroutine set_oblique_shock(self)
+    class(equation_singleideal_object), intent(inout) :: self
+!   
+    integer :: i, m
+    real(rkind) :: sins,coss,Mach_normal,Mach_normal2,vel_ratio,rho_ratio,p_ratio,deflection_angle_tan,deflection_angle
+    real(rkind) :: Mach_past_shock, Mach_normal_past_shock, t_past_shock, c_past_shock, u_past_shock, v_past_shock, t_ratio
+    real(rkind) :: rho_past_shock, e_past_shock, etot_past_shock, xshock_top
+    real(rkind) :: xx, tanhf
+    integer :: ig_shock
+!
+    associate(Mach => self%Mach, u0 => self%u0, rho0 => self%rho0, &
+      gam => self%gam, gm => self%gm, gm1 => self%gm1, &
+      nymax => self%grid%nymax, yg => self%grid%yg, &
+      winf => self%winf, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, &
+      xshock_imp => self%xshock_imp, shock_angle => self%shock_angle, winf_past_shock => self%winf_past_shock, &
+      nxmax => self%grid%nxmax, tanhfacs => self%tanhfacs, cfg => self%cfg, rgas0 => self%rgas0, &
+      calorically_perfect => self%calorically_perfect, t0 => self%t0, l0 => self%l0)
+!     
+!     Oblique shock deflection is assumed to be negative
+!     
+      call cfg%get("flow","xshock_imp",xshock_imp)
+      xshock_imp = xshock_imp*l0
+      call cfg%get("flow","shock_angle",shock_angle)
+!     
+      shock_angle = shock_angle*pi/180._rkind
+      xshock_top  = xshock_imp-yg(nymax)/tan(shock_angle)
+      call locateval(self%grid%xg(1:nxmax),nxmax,xshock_top,ig_shock)
+      tanhfacs = self%grid%dxg(ig_shock)
+      if (self%masterproc) write(*,*) 'xshock_top, tanhfacs:', xshock_top
+!     
+      sins = sin(shock_angle)
+      coss = cos(shock_angle)
+      Mach_normal  = Mach*sins
+      Mach_normal2 = Mach_normal**2
+      Mach_normal_past_shock = (1._rkind+0.5_rkind*gm1*Mach_normal2)/(gam*Mach_normal2-0.5_rkind*gm1)
+      Mach_normal_past_shock = sqrt(Mach_normal_past_shock)
+      vel_ratio = (2._rkind+gm1*Mach_normal2)/((gam+1._rkind)*Mach_normal2)
+      rho_ratio = 1._rkind/vel_ratio
+      p_ratio   = 1._rkind+2._rkind*gam/(gam+1._rkind)*(Mach_normal2-1._rkind)
+      t_ratio   = p_ratio/rho_ratio
+      deflection_angle_tan = 2._rkind*coss/sins*(Mach**2*sins**2-1._rkind)&
+      /(2._rkind+Mach**2*(gam+cos(2._rkind*shock_angle)))
+      deflection_angle = atan(deflection_angle_tan)
+      if (self%masterproc) write(*,*) 'Deflection angle:', deflection_angle*180._rkind/pi
+      Mach_past_shock = Mach_normal_past_shock/sin(shock_angle-deflection_angle)
+      t_past_shock = t0*t_ratio
+      c_past_shock = sqrt(gam*rgas0*t_past_shock)
+      u_past_shock = Mach_past_shock*c_past_shock*cos(deflection_angle)
+      v_past_shock = Mach_past_shock*c_past_shock*sin(deflection_angle)
+      if (self%masterproc) write(*,*) 'Streamwise velocity past shock:', u_past_shock
+      if (self%masterproc) write(*,*) 'Vertical velocity past shock:', v_past_shock
+      rho_past_shock = rho0*rho_ratio
+      e_past_shock    = get_e_from_temperature(t_past_shock, t0, indx_cp_l, indx_cp_r, self%cv_coeff, calorically_perfect)
+      etot_past_shock = e_past_shock+0.5_rkind*(u_past_shock**2+v_past_shock**2)
+      winf_past_shock(1) =  rho_past_shock
+      winf_past_shock(2) =  rho_past_shock*u_past_shock
+      winf_past_shock(3) = -rho_past_shock*v_past_shock
+      winf_past_shock(4) = 0._rkind
+      winf_past_shock(5) =  rho_past_shock*etot_past_shock
+      if (self%masterproc) then
+        open(18,file='shock_profile.dat')
+        do i=1,nxmax
+          xx = self%grid%xg(i)-xshock_top
+          tanhf = 0.5_rkind*(1._rkind+tanh(xx/tanhfacs))
+          write(18,100) self%grid%xg(i), ((winf(m)+tanhf*(winf_past_shock(m)-winf(m))),m=1,5)
+          100  format(20ES20.10)
+        enddo
+        close(18)
+      endif
+!     
+    endassociate
+!
+  endsubroutine set_oblique_shock
 !
   subroutine initial_conditions(self)
     class(equation_singleideal_object), intent(inout) :: self
@@ -1732,13 +1731,12 @@ contains
     endselect
   endsubroutine initial_conditions
 ! 
-  subroutine get_reynolds_cha(retau,rm,trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,y,yn,rebulk)
+  subroutine get_reynolds_cha(retau,rm,trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yn,rebulk)
 !   
     logical, intent(in) :: visc_exp
     integer, intent(in) :: ny
     real(rkind), intent(in)  :: retau,rm,trat,s2tinf,gam,rfac,vtexp
     real(rkind), intent(out) :: rebulk
-    real(rkind), dimension(ny), intent(in)  :: y
     real(rkind), dimension(ny+1), intent(in)  :: yn
 !   
     integer :: j,m,itransf,jp99,jj99,jj,l
@@ -1747,7 +1745,7 @@ contains
     real(rkind) :: fuu, du, rhow_over_rho, rhow_over_rhojm, rmu_over_rmuw, rmu_over_rmuwjm
     real(rkind) :: ucij, ucijm, res, dy, ycij, ycijm, u99, d99, d99plus, yy, ui
     real(rkind) :: ue, uuu, uuum, thi
-    real(rkind) :: rhosum,rhousum,ubulk
+    real(rkind) :: rhosum,rhousum,ubulk,ysum
     real(rkind) :: vkc,bcost,c1,b_rich,eta_rich
 !   
     real(rkind), dimension(ny+1) :: yplus       ! Incompressible (transformed) y
@@ -1775,7 +1773,8 @@ contains
 !   
     ycplus = 0._rkind
     do j=2,ny+1
-      ycplus(j) = (1._rkind+yn(j))*retau ! y^+ (compressible)
+      ycplus(j) = (yn(j)-yn(1))/(yn(ny+1)-yn(1))*retau ! y^+ (compressible)
+!     ycplus(j) = (1._rkind+yn(j))*retau ! y^+ (compressible)
     enddo
     yplus    = ycplus  ! Assume as initial guess incompressible (transformed) yplus equal to ycplus
     yplusold = yplus
@@ -1874,13 +1873,17 @@ contains
 !   
     rhosum   = 0._rkind
     rhousum  = 0._rkind
+    ysum     = 0._rkind
     do j=1,ny
       dy      = yn(j+1)-yn(j)
+      ysum    = ysum+dy
       rhosum  = rhosum+0.5*(density(j)+density(j+1))*dy
       rhousum = rhousum+0.5*(density(j)*ucplus(j)+density(j+1)*ucplus(j+1))*dy
     enddo
-    ubulk  = rhousum/rhosum
-    rebulk = retau*ubulk*rhosum/density(1)
+    rhosum  = rhosum/ysum
+    rhousum = rhousum/ysum
+    ubulk   = rhousum/rhosum
+    rebulk  = retau*ubulk*rhosum/density(1)
 !   
     return
   end subroutine get_reynolds_cha
@@ -1900,13 +1903,13 @@ contains
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, &
       x => self%field%x, y => self%field%y, z => self%field%z, Reynolds => self%Reynolds, &
       xg => self%grid%xg, nxmax => self%grid%nxmax, &
-      rho0 => self%rho0, l0 => self%l0, u0 => self%u0, p0 => self%p0, gm => self%gm, &
+      rho0 => self%rho0, u0 => self%u0, p0 => self%p0, gm => self%gm, &
       wmean => self%wmean, w => self%field%w, Mach => self%Mach, gam => self%gam, &
       rfac => self%rfac, Prandtl => self%Prandtl, w_aux => self%w_aux,  &
       deltavec => self%deltavec ,deltavvec => self%deltavvec, cfvec => self%cfvec, &
-      t0 => self%t0, T_ref_dim => self%T_ref_dim, T_wall => self%T_wall, &
-      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, cv0 => self%cv0, &
-      calorically_perfect => self%calorically_perfect)
+      t0 => self%t0, T_ref_dim => self%T_ref_dim, T_wall => self%T_wall, l0 => self%l0, &
+      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, &
+      calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0)
 !     
       etad = 20._rkind
       deta = 0.02_rkind
@@ -1917,12 +1920,12 @@ contains
       allocate(tbl(0:ne))
       allocate(eta(0:ne))
 !     
-      Tinf_dim = t0*T_ref_dim
-      Twall_dim = T_wall*T_ref_dim
+      Tinf_dim  = t0*T_ref_dim/t0
+      Twall_dim = T_wall*T_ref_dim/t0
 !     
       call compressible_blasius(ne,etad,deta,gam,Mach,Prandtl,Tinf_dim,Twall_dim,eta,ubl,vbl,tbl,etaedge)
 !     
-      xbl = Reynolds/(etaedge**2)
+      xbl = Reynolds/(etaedge**2)*l0
       if (self%masterproc) write(*,*) 'XBL', xbl
 !     
       wmean = 0._rkind
@@ -1931,7 +1934,7 @@ contains
         do j=1,ny
           xx = xg(ii)+xbl
           yy = y(j)
-          etast = yy*etaedge*sqrt(xbl/xx)
+          etast = (yy/l0)*etaedge*sqrt(xbl/xx)
           nst = 1
           do n=1,ne-1
             if (eta(n+1)<etast) nst = n
@@ -1939,9 +1942,9 @@ contains
           wl = etast - eta(nst)
           wr = eta(nst+1) - etast
           ust = (wr*ubl(nst)+wl*ubl(nst+1))/deta * u0
-          vst = (wr*vbl(nst)+wl*vbl(nst+1))/deta/sqrt(Reynolds*xx)*u0
+          vst = (wr*vbl(nst)+wl*vbl(nst+1))/deta/sqrt(Reynolds*xx/l0)*u0
           tst = (wr*tbl(nst)+wl*tbl(nst+1))/deta/Tinf_dim*t0
-          rst = p0/tst
+          rst = p0/rgas0/tst
           wmean(i,j,1) = rst
           wmean(i,j,2) = rst*ust
           wmean(i,j,3) = rst*vst
@@ -1962,9 +1965,9 @@ contains
             w(2,i,j,k) = rhouu
             w(3,i,j,k) = rhovv
             w(4,i,j,k) = rhoww
-            tt         = p0/rho
+            tt         = p0/rgas0/rho
             w_aux(i,j,k,6) = tt
-            ee = get_e_from_temperature(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+            ee = get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
             w(5,i,j,k) = rho*ee + 0.5_rkind*(rhouu**2+rhovv**2+rhoww**2)/rho
           enddo
         enddo
@@ -1977,7 +1980,7 @@ contains
     class(equation_singleideal_object), intent(inout) :: self
 !
     real(rkind), dimension(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1) :: thvec
-    real(rkind), dimension(self%field%ny) :: uvec, rhovec, tvec, viscvec
+    real(rkind), dimension(self%field%ny) :: uvec, rhovec, tvec, viscvec, yl0
     real(rkind), dimension(3) :: rr
     real(rkind) :: Trat,thrat,cf
     real(rkind) :: retau,retauold,delta,deltav,th
@@ -1998,25 +2001,25 @@ contains
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, &
       y => self%field%y, z => self%field%z, Reynolds_friction => self%Reynolds_friction, &
       xg => self%grid%xg, nxmax => self%grid%nxmax, &
-      rho0 => self%rho0, l0 => self%l0, u0 => self%u0, p0 => self%p0, gm => self%gm, &
+      rho0 => self%rho0, u0 => self%u0, p0 => self%p0, gm => self%gm, l0 => self%l0, &
       wmean => self%wmean, w => self%field%w, Mach => self%Mach, gam => self%gam, &
       rfac => self%rfac, Prandtl => self%Prandtl, w_aux => self%w_aux,  &
       deltavec => self%deltavec ,deltavvec => self%deltavvec, cfvec => self%cfvec, &
-      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, cv0 => self%cv0, &
-      calorically_perfect => self%calorically_perfect)
+      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, &
+      calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
 !
       Trat = self%T_wall/self%T_recovery
 !
-      deltavec(1)  = 1._rkind
-      deltavvec(1) = 1._rkind/Reynolds_friction
+      deltavec(1)  = l0
+      deltavvec(1) = l0/Reynolds_friction
+      yl0          = y(1:ny)/l0
 !
       s2tinf = self%sutherland_S/self%T_ref_dim
       vtexp  = self%powerlaw_vtexp
       visc_exp = .false.
       if (self%visc_model == VISC_POWER) visc_exp = .true.
-      call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,y(1:ny),uvec,&
+      call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
         rhovec,tvec,viscvec,redelta,cf,thrat)
-!     call meanvelocity_bl_old(ny,y(1:ny),uvec,rhovec,tvec,Reynolds_friction,Mach,Trat,thrat,cf,gam,rfac,Prandtl)
       cfvec(1)     = cf
       thvec(1)     = thrat*deltavec(1)
       retauold     = Reynolds_friction
@@ -2024,8 +2027,7 @@ contains
       do i=1,ng
         retau = retauold
         do
-!         call meanvelocity_bl_old(ny,y(1:ny),uvec,rhovec,tvec,retau,Mach,Trat,thrat,cf,gam,rfac,Prandtl)
-          call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,y(1:ny),uvec,&
+          call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
             rhovec,tvec,viscvec,redelta,cf,thrat)
           th = thvec(2-i)-0.25_rkind*abs((xg(1-i)-xg(2-i)))*(cf+cfvec(2-i)) ! dthdx evaluated with second order accuracy
           delta  = th/thrat
@@ -2046,8 +2048,7 @@ contains
       do i=2,nxmax+ng+1
         retau = retauold
         do
-!         call meanvelocity_bl_old(ny,y(1:ny),uvec,rhovec,tvec,retau,Mach,Trat,thrat,cf,gam,rfac,Prandtl)
-          call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,y(1:ny),uvec,&
+          call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
             rhovec,tvec,viscvec,redelta,cf,thrat)
           th = thvec(i-1)+0.25_rkind*(xg(i)-xg(i-1))*(cf+cfvec(i-1))
           delta  = th/thrat
@@ -2073,19 +2074,18 @@ contains
         delta  = deltavec(ii)
         deltav = deltavvec(ii)
         retau  = delta/deltav
-!       call meanvelocity_bl_old(ny,y(1:ny),uvec,rhovec,tvec,retau,Mach,Trat,thrat,cf,gam,rfac,Prandtl)
-        call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,y(1:ny),uvec,&
+        call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
           rhovec,tvec,viscvec,redelta,cf,thrat)
         do j=1,ny
           yl = y(j)/delta
-          call locateval(y(1:ny),ny,yl,jj) ! yl is between yvec(jj) and yvec(jj+1)
+          call locateval(yl0(1:ny),ny,yl,jj) ! yl is between yvec(jj) and yvec(jj+1)
           m = 4
           jjj = min(max(jj-(m-1)/2,1),ny+1-m)
-          call pol_int(y(jjj),rhovec(jjj),m,yl,rhoi)
-          call pol_int(y(jjj),uvec(jjj),m,yl,ui  )
-          call pol_int(y(jjj),tvec(jjj),m,yl,ti  )
+          call pol_int(yl0(jjj),rhovec(jjj),m,yl,rhoi)
+          call pol_int(yl0(jjj),uvec(jjj),m,yl,ui  )
+          call pol_int(yl0(jjj),tvec(jjj),m,yl,ti  )
           wmean(i,j,1) = rhoi*self%rho0
-          wmean(i,j,2) = rhoi*ui*self%u0
+          wmean(i,j,2) = rhoi*ui*self%u0*self%rho0
         enddo
       enddo
 !     
@@ -2117,9 +2117,9 @@ contains
             w(2,i,j,k) = rhouu
             w(3,i,j,k) = rhovv
             w(4,i,j,k) = rhoww
-            tt        = p0/rho
+            tt         = p0/rgas0/rho
             w_aux(i,j,k,6) = tt
-            ee = get_e_from_temperature(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+            ee = get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
             w(5,i,j,k) = rho*ee + 0.5_rkind*(rhouu**2+rhovv**2+rhoww**2)/rho
           enddo
         enddo
@@ -2152,10 +2152,10 @@ contains
 !
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, &
       deltavec => self%deltavec, deltavvec => self%deltavvec, wmean => self%wmean, cfvec => self%cfvec, &
-      rho0 => self%rho0, u0 => self%u0, lz => self%grid%domain_size(3), w => self%field%w, &
+      rho0 => self%rho0, u0 => self%u0, lz => self%grid%domain_size(3), w => self%field%w, l0 => self%l0, &
       x => self%field%x, y => self%field%y, z => self%field%z, p0 => self%p0, gm => self%gm, &
       w_aux => self%w_aux, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, &
-      cv0 => self%cv0, calorically_perfect => self%calorically_perfect)
+      calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
 !
       rho_wall = wmean(1,1,1) ! inflow, wall, density
       tau_wall = cfvec(1)*rho0*u0**2*0.5_rkind
@@ -2213,18 +2213,18 @@ contains
             if (y(j)<delta) then
               call get_crandom_f(rr3)
               rr3 = rr3-0.5_rkind
-              up = up+0.03_rkind*u0*rr3(1)*y(j)
-              vp = vp+0.03_rkind*u0*rr3(2)*y(j)
-              wp = wp+0.03_rkind*u0*rr3(3)*y(j)
+              up = up+0.03_rkind*u0*rr3(1)*(y(j)/l0)
+              vp = vp+0.03_rkind*u0*rr3(2)*(y(j)/l0)
+              wp = wp+0.03_rkind*u0*rr3(3)*(y(j)/l0)
             endif
 !           
             rho        = w(1,i,j,k)
             w(2,i,j,k) = w(2,i,j,k) + up*w(1,i,j,k)
             w(3,i,j,k) = w(3,i,j,k) + vp*w(1,i,j,k)
             w(4,i,j,k) = w(4,i,j,k) + wp*w(1,i,j,k)
-            tt         = p0/rho
+            tt         = p0/rgas0/rho
             w_aux(i,j,k,6) = tt
-            ee = get_e_from_temperature(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+            ee = get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
             w(5,i,j,k) = rho*ee + 0.5_rkind*(w(2,i,j,k)**2 + w(3,i,j,k)**2 + w(4,i,j,k)**2)/w(1,i,j,k)
 !           
           enddo
@@ -2737,90 +2737,6 @@ contains
     return
   end subroutine meanvelocity_bl
 ! 
-! subroutine meanvelocity_bl_old(ny,eta,u,rho,t,retau,rm,trat,th,cf,gam,rfac,pr)
-!   integer :: ny
-!   real(rkind), intent(in)  :: retau,rm,trat,gam,rfac,pr
-!   real(rkind), intent(out) :: th,cf
-!   real(rkind), dimension(ny), intent(in)  :: eta
-!   real(rkind), dimension(ny), intent(out) :: u,rho,t
-!   
-!   real(rkind), dimension(ny) :: uplus       ! Incompressible velocity profile
-!   real(rkind), dimension(ny) :: ucplus      ! Compressible velocity profile
-!   real(rkind), dimension(ny) :: ucplusold
-!   real(rkind), dimension(ny) :: density     ! Density profile
-!   real(rkind), dimension(ny) :: temperature ! Temperature profile
-!   !
-!   real(rkind) :: dstar,dstari,du,dy,gm1,gm1h,res,rhow,thi,tr,tw,uci,ue,uu,uum,yplus
-!   real(rkind) :: alf,s,fuu
-!   integer :: j
-!   !
-!   uplus = 0._rkind
-!   do j=2,ny
-!     yplus    = eta(j)*retau
-!     uplus(j) = velmusker(yplus,retau) ! Incompressible velocity profile(Musker, AIAA J 1979)
-!   enddo
-!   !
-!   !gam   = 1.4_rkind
-!   gm1   = gam - 1._rkind
-!   gm1h  = 0.5_rkind*gm1
-!   !rfac  = 0.89_rkind                ! Recovery factor
-!   tr    = 1._rkind+gm1h*rfac*rm**2  ! Recovery temperature
-!   tw    = trat*tr                    ! Wall temperature
-!   rhow  = 1._rkind/tw
-!   !alf   = 0.8259_rkind              ! Duan & Martin
-!   !pr    = 0.72_rkind                ! Prandtl number
-!   s     = 1.1_rkind                 ! Reynolds analogy factor
-!   alf   = s*pr                       ! see Zhang
-!   !
-!   !Iterative loop to find the compressible profile
-!   ucplus = uplus
-!   do
-!     !
-!     ucplusold = ucplus
-!     do j=1,ny
-!       uu = ucplus(j)/ucplus(ny)
-!       !  temperature(j) = tw+(tr-tw)*uu+(1._rkind-tr)*uu**2 ! Walz pag 399 Zhang JFM 2014
-!       fuu = alf*uu+(1-alf)*uu**2
-!       temperature(j) = tw+(tr-tw)*fuu+(1._rkind-tr)*uu**2 ! Duan & Martin (see Zhang)
-!       density(j) = 1._rkind/temperature(j)
-!     enddo
-!     do j=2,ny
-!       du        = uplus(j)-uplus(j-1)
-!       uci       = 0.5_rkind*(sqrt(rhow/density(j))+sqrt(rhow/density(j-1)))
-!       ucplus(j) = ucplus(j-1)+uci*du
-!     enddo
-!     res = 0._rkind
-!     do j=1,ny
-!       res = res+abs(ucplus(j)-ucplusold(j))
-!     enddo
-!     res = res/ny
-!     if (res < tol_iter) exit
-!     !
-!   enddo ! End of iterative loop
-!   !
-!   dstar = 0._rkind
-!   th    = 0._rkind
-!   ue    = ucplus(ny)
-!   cf    = 2._rkind*rhow/ue**2
-!   !
-!   do j=2,ny
-!     uu     = ucplus(j)  /ue
-!     uum    = ucplus(j-1)/ue
-!     dy     = eta(j)-eta(j-1)
-!     dstari = 0.5_rkind*((1._rkind-density(j)*uu)+(1._rkind-density(j-1)*uum))
-!     dstar  = dstar+dstari*dy
-!     thi    = 0.5_rkind*(density(j)*uu*(1._rkind-uu)+density(j-1)*uum*(1._rkind-uum))
-!     th     = th+thi*dy
-!   enddo
-!   
-!   do j=1,ny
-!     u(j)   = ucplus(j)/ucplus(ny)
-!     rho(j) = density(j)
-!     t(j)   = temperature(j)
-!   enddo
-!   
-! end subroutine meanvelocity_bl_old
-! 
   subroutine init_wind_tunnel(self)
     class(equation_singleideal_object), intent(inout) :: self
 !
@@ -2868,7 +2784,7 @@ contains
       wmean => self%wmean, w => self%field%w, winf => self%winf, w_aux => self%w_aux, &
       rho0 => self%rho0, u0 => self%u0, p0 => self%p0, gam => self%gam, y => self%field%y, z => self%field%z, &
       x => self%field%x, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, &
-      cv0 => self%cv0, calorically_perfect => self%calorically_perfect)
+      calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
 !
       wmean = 0._rkind
       do j=1,ny
@@ -2895,9 +2811,9 @@ contains
             w(2,i,j,k) = rhouu
             w(3,i,j,k) = rhovv
             w(4,i,j,k) = rhoww
-            tt         = pp/rho
+            tt         = pp/rgas0/rho
             w_aux(i,j,k,6) = tt
-            ee = get_e_from_temperature(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+            ee = get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
             w(5,i,j,k) = rho*ee + 0.5_rkind*(rhouu**2+rhovv**2+rhoww**2)/rho
           enddo
         enddo
@@ -2921,11 +2837,11 @@ contains
 !
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, &
       y => self%field%y, z => self%field%z, &
-      rho0 => self%rho0, l0 => self%l0, u0 => self%u0, p0 => self%p0, gm => self%gm, &
-      wmean => self%wmean, w => self%field%w, w_aux => self%w_aux, &
-      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, cv0 => self%cv0, &
+      rho0 => self%rho0, u0 => self%u0, p0 => self%p0, gm => self%gm, t0 => self%t0, &
+      wmean => self%wmean, w => self%field%w, w_aux => self%w_aux, l0 => self%l0, &
+      indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, &
       volchan => self%volchan, nxmax => self%grid%nxmax, nzmax => self%grid%nzmax, yn => self%grid%yn, &
-      lz => self%grid%domain_size(3), calorically_perfect => self%calorically_perfect)
+      lz => self%grid%domain_size(3), calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0)
 !
       volchan = yn(ny+1)-yn(1)
       volchan = volchan*nxmax
@@ -2943,7 +2859,7 @@ contains
 !
       u0_02 = 0.02_rkind*u0
       u0_05 = 0.05_rkind*u0
-      nroll = int(lz/l0)
+      nroll = int(lz/yn(ny+1))
 !
       do k=1,nz
         do j=1,ny
@@ -2972,9 +2888,9 @@ contains
             w(2,i,j,k) = rhouu
             w(3,i,j,k) = rhovv
             w(4,i,j,k) = rhoww
-            tt        = p0/rho
+            tt        = p0/rgas0/rho
             w_aux(i,j,k,6) = tt
-            ee = get_e_from_temperature(tt, cv0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+            ee = get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
             w(5,i,j,k) = rho*ee + 0.5_rkind*(rhouu**2+rhovv**2+rhoww**2)/rho
           enddo
         enddo
@@ -3029,11 +2945,11 @@ contains
     enddo
   endsubroutine bc_preproc
 !
-  function get_gamloc(tt,indx_cp_l,indx_cp_r,cp_coeff,calorically_perfect)
+  function get_gamloc(tt,t0,indx_cp_l,indx_cp_r,cp_coeff,calorically_perfect,rgas0)
     real(rkind) :: get_gamloc
     integer :: indx_cp_l,indx_cp_r,calorically_perfect
-    real(rkind) :: tt
-    real(rkind), dimension(indx_cp_l:indx_cp_r) :: cp_coeff
+    real(rkind) :: tt, rgas0, t0
+    real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff
     real(rkind) :: cploc, gamloc
     integer :: l
 !
@@ -3042,10 +2958,10 @@ contains
     else
       cploc = 0._rkind
       do l=indx_cp_l,indx_cp_r
-        cploc = cploc+cp_coeff(l)*tt**l
+        cploc = cploc+cp_coeff(l)*(tt/t0)**l
       enddo
     endif
-    gamloc = cploc/(cploc-1._rkind)
+    gamloc = cploc/(cploc-rgas0)
     get_gamloc = gamloc
 !
   endfunction get_gamloc
@@ -3100,4 +3016,5 @@ contains
 ! 
 ! 
 endmodule streams_equation_singleideal_object
+!
 !
