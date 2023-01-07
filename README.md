@@ -13,3 +13,5 @@ To start using it please go to the documentation page <https://STREAmS-CFD.githu
 # References
 
 Bernardini, M., Modesti, D., Salvadore, F., & Pirozzoli, S. (2021). STREAmS: A high-fidelity accelerated solver for direct numerical simulation of compressible turbulent flows. Computer Physics Communications, 263, 107906. https://doi.org/10.1016/j.cpc.2021.107906
+
+Bernardini, M., Modesti, D., Salvadore, F., Sathyanarayana, S., Della Posta, G., & Pirozzoli, S. (2023). STREAmS-2.0: Supersonic turbulent accelerated Navier-Stokes solver version 2.0. In Computer Physics Communications, 285, 108644. https://doi.org/10.1016/j.cpc.2022.108644

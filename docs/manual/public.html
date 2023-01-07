@@ -122,12 +122,6 @@ a subfolder work_public and clone private and public streams_2 repositories</p><
 </pre></div>
 </div>
 <ul class="simple">
-<li><p>Switch back full docs in private repo:</p></li>
-</ul>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">cd streams_2 &amp;&amp; git checkout -- docs/source/index.rst</span>
-</pre></div>
-</div>
-<ul class="simple">
 <li><p>Copy selected content to the work_public folder</p></li>
 </ul>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">mkdir work_public/code work_public/docs work_public/tools work_public/examples</span>
@@ -138,6 +132,8 @@ a subfolder work_public and clone private and public streams_2 repositories</p><
 <span class="go">cp -r streams_2/examples/subsonic_channel work_public/examples</span>
 <span class="go">cp -r streams_2/examples/supersonic_channel work_public/examples</span>
 <span class="go">cp -r streams_2/examples/supersonic_boundary_layer work_public/examples</span>
+<span class="go">cp -r streams_2/examples/subsonic_boundary_layer work_public/examples</span>
+<span class="go">cp -r streams_2/examples/sbli_supersonic work_public/examples</span>
 </pre></div>
 </div>
 <ul class="simple">
@@ -154,12 +150,12 @@ a subfolder work_public and clone private and public streams_2 repositories</p><
 </pre></div>
 </div>
 <ul class="simple">
-<li><p>Copy work_public/code/src/singleideal/main_gpu.F90 to work_public/code/src/singleideal/main_cpu.F90 and replace each occurrence of gpu with cpu</p></li>
 <li><p>Prune manually makefile.inc.m100_cuda and makefile.inc.dgx_cuda</p></li>
 <li><p>Scrupoluously review content of <code class="docutils literal notranslate"><span class="pre">work_public</span></code> folder</p></li>
 <li><p>Copy content of work_public to public repo folder</p></li>
 </ul>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">cp -r work_public/* STREAmS-2</span>
+<span class="go">cp -r work_public/.* STREAmS-2</span>
 </pre></div>
 </div>
 <ul class="simple">

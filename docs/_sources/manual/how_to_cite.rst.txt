@@ -6,7 +6,8 @@ To properly reference STREAmS-2.0, please consider citing the following publicat
 
 [1] Bernardini, M., Modesti, D., Salvadore, F., & Pirozzoli, S. (2021). STREAmS: A high-fidelity accelerated solver for direct numerical simulation of compressible turbulent flows. Computer Physics Communications, 263, 107906. https://doi.org/10.1016/j.cpc.2021.107906
 
-[2] STREAmS 2
+[2] Bernardini, M., Modesti, D., Salvadore, F., Sathyanarayana, S., Della Posta, G., & Pirozzoli, S. (2023). STREAmS-2.0: Supersonic turbulent accelerated Navier-Stokes solver version 2.0. In Computer Physics Communications, 285, 108644. https://doi.org/10.1016/j.cpc.2022.108644
+
 
 -----------------------------------
 Bibtex
@@ -27,16 +28,16 @@ Bibtex
      journal = {Computer Physics Communications}
    }
 
-   @article{Bernardini2022,
-     doi = {},
-     url = {},
-     year = {2022},
-     month = ,
+   @article{Bernardini2023,
+     doi = {10.1016/j.cpc.2022.108644},
+     url = {https://doi.org/10.1016/j.cpc.2022.108644},
+     year = {2023},
+     month = apr,
      publisher = {Elsevier {BV}},
-     volume = {},
-     pages = {},
-     author = {Bernardini and D. Modesti and F. Salvadore S. Sathyanarayana, G. Della Posta, and S. Pirozzoli},
-     title = {{STREAmS}-2.0: {S}upersonic turbulent accelerated {N}avier--{S}tokes solver version 2.0},
+     volume = {285},
+     pages = {108644},
+     author = {Matteo Bernardini and Davide Modesti and Francesco Salvadore and Srikanth Sathyanarayana and Giacomo Della Posta and Sergio Pirozzoli},
+     title = {{STREAmS}-2.0: Supersonic turbulent accelerated Navier-Stokes solver version 2.0},
      journal = {Computer Physics Communications}
    }
 

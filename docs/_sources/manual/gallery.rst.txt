@@ -2,7 +2,7 @@
 Gallery of STREAmS results
 =====================================
 
-* Supersonic turbulent boundary layer over a micro-ramp. **This video was awarded in the APS DFD Gallery of Fluid Motion 2022**
+* Supersonic turbulent boundary layer over a micro-ramp. **This video was awarded in the APS DFD Gallery of Fluid Motion 2022**: `Link <https://www.aps.org/newsroom/pressreleases/gfm22-winners.cfm>`_
 
 .. raw:: html
 
