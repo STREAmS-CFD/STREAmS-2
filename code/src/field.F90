@@ -44,7 +44,9 @@ module streams_field_object
     procedure, pass(self) :: define_corners
     procedure, pass(self) :: set_local_grid
     procedure, pass(self) :: read_field
+    procedure, pass(self) :: read_field_serial
     procedure, pass(self) :: write_field
+    procedure, pass(self) :: write_field_serial
     procedure, pass(self) :: write_plot3d
     procedure, pass(self) :: write_vtk
     procedure, pass(self) :: check_cpu_mem
@@ -294,6 +296,21 @@ contains
     endassociate
   endsubroutine set_local_grid
 !
+  subroutine read_field_serial(self)
+    class(field_object), intent(inout)           :: self            !< The field.
+    character(4) :: chx,chy,chz
+!
+    if (self%masterproc) write(*,*) 'Reading rst0_XXX_XXX_XXX.bin'
+    1004 format(I4.4)
+    write(chx,1004) self%ncoords(1)
+    write(chy,1004) self%ncoords(2)
+    write(chz,1004) self%ncoords(3)
+!
+    open (11,file='rst0_'//chx//'_'//chy//'_'//chz//'.bin',form='unformatted')
+    read(11) self%w(1:self%nv,1:self%nx,1:self%ny,1:self%nz)
+    close(11)
+  endsubroutine read_field_serial
+!
   subroutine read_field(self)
     class(field_object), intent(inout)           :: self            !< The field.
 !   Writing rst.bin
@@ -347,6 +364,22 @@ contains
     endif
     call mpi_barrier(mpi_comm_world, self%mpi_err)
   endsubroutine read_field
+!
+  subroutine write_field_serial(self)
+    class(field_object), intent(inout)           :: self            !< The field.
+    character(4) :: chx,chy,chz
+!
+    if (self%masterproc) write(*,*) 'Writing rst1_XXX_XXX_XXX.bin'
+    1004 format(I4.4)
+    write(chx,1004) self%ncoords(1)
+    write(chy,1004) self%ncoords(2)
+    write(chz,1004) self%ncoords(3)
+!
+    open (11,file='rst1_'//chx//'_'//chy//'_'//chz//'.bin',form='unformatted')
+    write(11) self%w(1:self%nv,1:self%nx,1:self%ny,1:self%nz)
+    close(11)
+!
+  endsubroutine write_field_serial
 !
   subroutine write_field(self)
     class(field_object), intent(inout)           :: self            !< The field.

@@ -82,6 +82,7 @@ module streams_equation_singleideal_object
     real(rkind)               :: dtsave, dtsave_restart, dtstat, dtslice
     real(rkind)               :: time_from_last_rst, time_from_last_write, time_from_last_stat, time_from_last_slice
     integer                   :: restart_type
+    integer                   :: io_type
     integer                   :: istore
     integer                   :: itav
     integer                   :: enable_plot3d, enable_vtk
@@ -171,10 +172,14 @@ module streams_equation_singleideal_object
     procedure, pass(self) :: bc_preproc
     procedure, pass(self) :: compute_stats
     procedure, pass(self) :: write_stats
+    procedure, pass(self) :: write_stats_serial
     procedure, pass(self) :: read_stats
+    procedure, pass(self) :: read_stats_serial
     procedure, pass(self) :: compute_stats_3d
     procedure, pass(self) :: write_stats_3d
     procedure, pass(self) :: read_stats_3d
+    procedure, pass(self) :: write_stats_3d_serial
+    procedure, pass(self) :: read_stats_3d_serial
     procedure, pass(self) :: recyc_prepare
     procedure, pass(self) :: add_synthetic_perturbations
     procedure, pass(self) :: sliceprobe_prepare
@@ -402,16 +407,24 @@ contains
       self%w_stat = 0._rkind
       if (self%enable_stat_3d>0)  self%w_stat_3d = 0._rkind
     case(1)
-      call self%field%read_field()
+      if (self%io_type==1) call self%field%read_field_serial()
+      if (self%io_type==2) call self%field%read_field()
       call self%read_field_info()
       self%itav   = 0
       self%w_stat = 0._rkind
       if (self%enable_stat_3d>0)  self%w_stat_3d = 0._rkind
     case(2)
-      call self%field%read_field()
+      if (self%io_type==1) then
+        call self%field%read_field_serial()
+        call self%read_stats_serial()
+        if (self%enable_stat_3d>0) call self%read_stats_3d_serial()
+      endif
+      if (self%io_type==2) then
+        call self%field%read_field()
+        call self%read_stats()
+        if (self%enable_stat_3d>0) call self%read_stats_3d()
+      endif
       call self%read_field_info()
-      call self%read_stats()
-      if (self%enable_stat_3d>0) call self%read_stats_3d()
     endselect
 !
     self%recyc = .false.
@@ -437,6 +450,10 @@ contains
     call self%cfg%get("output","igslice",self%igslice)
     call self%cfg%get("output","jgslice",self%jgslice)
     call self%cfg%get("output","kgslice",self%kgslice)
+    self%io_type = 2 ! (0 => no IO, 1 => serial, 2 => parallel)
+    if (self%cfg%has_key("output","io_type")) then
+      call self%cfg%get("output","io_type",self%io_type)
+    endif
     call self%sliceprobe_prepare()
 !
     call self%cfg%get("output","print_control",self%print_control)
@@ -854,6 +871,32 @@ contains
 !
   endsubroutine read_stats
 !
+  subroutine read_stats_serial(self)
+    class(equation_singleideal_object), intent(inout) :: self
+    character(4) :: chx,chy
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat => self%nv_stat, &
+      w_stat => self%w_stat, ncoords => self%field%ncoords, mp_cartz => self%field%mp_cartz, &
+      iermpi => self%mpi_err)
+!
+      if (ncoords(3)==0) then
+!
+        if (self%masterproc) write(*,*) 'Reading stat0_XXX_XXX.bin'
+        1004 format(I4.4)
+        write(chx,1004) ncoords(1)
+        write(chy,1004) ncoords(2)
+!
+        open (11,file='stat0_'//chx//'_'//chy//'.bin',form='unformatted')
+        read(11) w_stat(1:nv_stat,1:nx,1:ny)
+        close(11)
+!
+      endif
+!     
+      call mpi_bcast(w_stat,nv_stat*nx*ny,mpi_prec,0,mp_cartz,iermpi)
+!     
+    endassociate
+!
+  endsubroutine read_stats_serial
+!
   subroutine read_stats_3d(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer, dimension(3) :: sizes    ! Dimensions of the total grid
@@ -955,6 +998,29 @@ contains
     endassociate
   endsubroutine write_stats
 !
+  subroutine write_stats_serial(self)
+    class(equation_singleideal_object), intent(inout) :: self
+    character(4) :: chx,chy
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat => self%nv_stat, &
+      w_stat => self%w_stat, ncoords => self%field%ncoords, mp_cartz => self%field%mp_cartz)
+!
+      if (ncoords(3)==0) then
+!
+        if (self%masterproc) write(*,*) 'Writing stat1_XXX_XXX.bin'
+        1004 format(I4.4)
+        write(chx,1004) ncoords(1)
+        write(chy,1004) ncoords(2)
+!
+        open (11,file='stat1_'//chx//'_'//chy//'.bin',form='unformatted')
+        write(11) w_stat(1:nv_stat,1:nx,1:ny)
+        close(11)
+!
+      endif
+!     
+    endassociate
+!
+  endsubroutine write_stats_serial
+!
   subroutine write_stats_3d(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer, dimension(3) :: sizes    ! Dimensions of the total grid
@@ -999,6 +1065,44 @@ contains
 !
     endassociate
   endsubroutine write_stats_3d
+! 
+  subroutine write_stats_3d_serial(self)
+    class(equation_singleideal_object), intent(inout) :: self
+    character(4) :: chx,chy,chz
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat_3d => self%nv_stat_3d, &
+      w_stat_3d => self%w_stat_3d, ncoords => self%field%ncoords)
+!
+      if (self%masterproc) write(*,*) 'Writing stat3d1_XXX_XXX_XXX.bin'
+      1004 format(I4.4)
+      write(chx,1004) ncoords(1)
+      write(chy,1004) ncoords(2)
+      write(chz,1004) ncoords(3)
+!
+      open (11,file='stat3d1_'//chx//'_'//chy//'_'//chz//'.bin',form='unformatted')
+      write(11) w_stat_3d(1:nv_stat_3d,1:nx,1:ny,1:nz)
+      close(11)
+!
+    endassociate
+  endsubroutine write_stats_3d_serial
+! 
+  subroutine read_stats_3d_serial(self)
+    class(equation_singleideal_object), intent(inout) :: self
+    character(4) :: chx,chy,chz
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat_3d => self%nv_stat_3d, &
+      w_stat_3d => self%w_stat_3d, ncoords => self%field%ncoords)
+!
+      if (self%masterproc) write(*,*) 'Reading stat3d0_XXX_XXX_XXX.bin'
+      1004 format(I4.4)
+      write(chx,1004) ncoords(1)
+      write(chy,1004) ncoords(2)
+      write(chz,1004) ncoords(3)
+!
+      open (11,file='stat3d0_'//chx//'_'//chy//'_'//chz//'.bin',form='unformatted')
+      read(11) w_stat_3d(1:nv_stat_3d,1:nx,1:ny,1:nz)
+      close(11)
+!
+    endassociate
+  endsubroutine read_stats_3d_serial
 ! 
   subroutine compute_stats(self)
     class(equation_singleideal_object), intent(inout) :: self
@@ -1991,6 +2095,7 @@ contains
     real(rkind) :: s2tinf, vtexp, redelta
     integer :: i,j,k,ii,jj,jjj,m
     logical :: visc_exp
+    logical :: file_exists
 !
 !   ghost only on x dir
     allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
@@ -2018,53 +2123,66 @@ contains
       vtexp  = self%powerlaw_vtexp
       visc_exp = .false.
       if (self%visc_model == VISC_POWER) visc_exp = .true.
-      call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
-        rhovec,tvec,viscvec,redelta,cf,thrat)
-      cfvec(1)     = cf
-      thvec(1)     = thrat*deltavec(1)
-      retauold     = Reynolds_friction
+!     
+      inquire(file='blvec.bin',exist=file_exists)
+      if (file_exists) then
+        open(183,file='blvec.bin',form='unformatted')
+        read(183) cfvec,thvec,deltavec,deltavvec
+        close(183)
+      else
+        call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
+          rhovec,tvec,viscvec,redelta,cf,thrat)
+        cfvec(1)     = cf
+        thvec(1)     = thrat*deltavec(1)
+        retauold     = Reynolds_friction
 !
-      do i=1,ng
-        retau = retauold
-        do
-          call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
-            rhovec,tvec,viscvec,redelta,cf,thrat)
-          th = thvec(2-i)-0.25_rkind*abs((xg(1-i)-xg(2-i)))*(cf+cfvec(2-i)) ! dthdx evaluated with second order accuracy
-          delta  = th/thrat
-          deltav = deltavvec(2-i)*sqrt(cfvec(2-i)/cf)
-          retau  = delta/deltav
-          if (abs(retau-retauold) < 0.01_rkind) exit
-          retauold = retau
+        do i=1,ng
+          retau = retauold
+          do
+            call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
+              rhovec,tvec,viscvec,redelta,cf,thrat)
+            th = thvec(2-i)-0.25_rkind*abs((xg(1-i)-xg(2-i)))*(cf+cfvec(2-i)) ! dthdx evaluated with second order accuracy
+            delta  = th/thrat
+            deltav = deltavvec(2-i)*sqrt(cfvec(2-i)/cf)
+            retau  = delta/deltav
+            if (abs(retau-retauold) < 0.01_rkind) exit
+            retauold = retau
+          enddo
+          thvec    (1-i) = th
+          cfvec    (1-i) = cf
+          deltavec (1-i) = delta
+          deltavvec(1-i) = deltav
         enddo
-        thvec    (1-i) = th
-        cfvec    (1-i) = cf
-        deltavec (1-i) = delta
-        deltavvec(1-i) = deltav
-      enddo
 !
-      retauold = Reynolds_friction
+        retauold = Reynolds_friction
 !
-      if (self%masterproc) open(182,file='cfstart.dat')
-      do i=2,nxmax+ng+1
-        retau = retauold
-        do
-          call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
-            rhovec,tvec,viscvec,redelta,cf,thrat)
-          th = thvec(i-1)+0.25_rkind*(xg(i)-xg(i-1))*(cf+cfvec(i-1))
-          delta  = th/thrat
-          deltav = deltavvec(i-1)*sqrt(cfvec(i-1)/cf)
-          retau  = delta/deltav
-          if (abs(retau-retauold)<0.01_rkind) exit
-          retauold = retau
+        if (self%masterproc) open(182,file='cfstart.dat')
+        do i=2,nxmax+ng+1
+          retau = retauold
+          do
+            call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
+              rhovec,tvec,viscvec,redelta,cf,thrat)
+            th = thvec(i-1)+0.25_rkind*(xg(i)-xg(i-1))*(cf+cfvec(i-1))
+            delta  = th/thrat
+            deltav = deltavvec(i-1)*sqrt(cfvec(i-1)/cf)
+            retau  = delta/deltav
+            if (abs(retau-retauold)<0.01_rkind) exit
+            retauold = retau
+          enddo
+          thvec    (i) = th
+          cfvec    (i) = cf
+          deltavec (i) = delta
+          deltavvec(i) = deltav
+          if (self%masterproc) write(182,100) xg(i),delta,deltav,cf,th
+          100  format(20ES20.10)
         enddo
-        thvec    (i) = th
-        cfvec    (i) = cf
-        deltavec (i) = delta
-        deltavvec(i) = deltav
-        if (self%masterproc) write(182,100) xg(i),delta,deltav,cf,th
-        100  format(20ES20.10)
-      enddo
-      if (self%masterproc) close(182)
+        if (self%masterproc) close(182)
+        if (self%masterproc) then
+          open(183,file='blvec.bin',form='unformatted')
+          write(183) cfvec,thvec,deltavec,deltavvec
+          close(183)
+        endif
+      endif
 !     
 !     Compute locally wmean from 1-ng to nx+ng+1
 !     

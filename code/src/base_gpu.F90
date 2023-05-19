@@ -670,7 +670,7 @@ contains
     self%mpi_err = cudaGetDeviceProperties(device_properties, self%mydev)
 !
     device_mem_avail = real(device_properties%totalGlobalMem, rkind)/(1024_rkind**3)
-    write(*,'(A,F5.2,A)') ' available device memory ', device_mem_avail, ' Gb'
+!   write(*,'(A,F5.2,A)') ' available device memory ', device_mem_avail, ' Gb'
 !
     call self%alloc()
 !

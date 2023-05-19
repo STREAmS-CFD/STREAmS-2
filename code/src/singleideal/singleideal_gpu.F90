@@ -1218,6 +1218,11 @@ contains
 !           call self%rk()
 !         end select
           if (mod(icyc-icyc0, self%equation_base%print_control)==0) call self%compute_residual()
+          if (ieee_is_nan(self%equation_base%residual_rhou)) then
+            if (self%masterproc) write(*,*) 'BOOM!!!'
+            call mpi_barrier(mpi_comm_world,self%mpi_err)
+            call mpi_abort(mpi_comm_world,99,self%mpi_err)
+          endif
         endif
 !       
         call self%manage_output()
@@ -1246,10 +1251,17 @@ contains
       endif
 !
       call self%base_gpu%copy_gpu_cpu()
-      call self%field%write_field()
+      if (self%equation_base%io_type==1) then
+        call self%field%write_field_serial()
+        call self%equation_base%write_stats_serial()
+        if (self%equation_base%enable_stat_3d>0) call self%equation_base%write_stats_3d_serial()
+      endif
+      if (self%equation_base%io_type==2) then
+        call self%field%write_field()
+        call self%equation_base%write_stats()
+        if (self%equation_base%enable_stat_3d>0) call self%equation_base%write_stats_3d()
+      endif
       call self%equation_base%write_field_info()
-      call self%equation_base%write_stats()
-      if (self%equation_base%enable_stat_3d>0) call self%equation_base%write_stats_3d()
 !
     endassociate
   endsubroutine run
@@ -1442,10 +1454,18 @@ contains
       if (time_from_last_rst >= self%equation_base%dtsave_restart) then
         if (self%masterproc) write(*,*) 'time_from_last_rst=',time_from_last_rst
         call self%base_gpu%copy_gpu_cpu()
-        call self%field%write_field()
+!
+        if (self%equation_base%io_type==1) then
+          call self%field%write_field_serial()
+          call self%equation_base%write_stats_serial()
+          if (self%equation_base%enable_stat_3d>0) call self%equation_base%write_stats_3d_serial()
+        endif
+        if (self%equation_base%io_type==2) then
+          call self%field%write_field()
+          call self%equation_base%write_stats()
+          if (self%equation_base%enable_stat_3d>0) call self%equation_base%write_stats_3d()
+        endif
         call self%equation_base%write_field_info()
-        call self%equation_base%write_stats()
-        if (self%equation_base%enable_stat_3d>0) call self%equation_base%write_stats_3d()
         time_from_last_rst = 0._rkind ! time_from_last_rst - self%equation_base%dtsave_restart
       endif
 !

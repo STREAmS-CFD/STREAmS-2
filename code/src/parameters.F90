@@ -2,6 +2,7 @@
 module streams_parameters
 !
   use, intrinsic :: iso_fortran_env
+  use, intrinsic :: ieee_arithmetic
   use mpi
   use iso_c_binding
   use tcp
@@ -18,6 +19,7 @@ module streams_parameters
   public :: c_rkind
   public :: pol_int, locateval
   public :: invmat, detmat, fail_input_any
+  public :: ieee_is_nan
   public :: error_unit
 ! 
 ! INSITU
