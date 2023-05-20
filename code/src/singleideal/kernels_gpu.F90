@@ -2438,7 +2438,8 @@ contains
     qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !   
     if (calorically_perfect==1) then
-      cc       = gm1 * (h-qq+cv0*t0) ! cv0*t0 needed because e = cv*(tt-t0)
+!     cc       = gm1 * (h-qq+cv0*t0) ! cv0*t0 needed because e = cv*(tt-t0)
+      cc       = gm1 * (h-qq       )
       tt       = cc/gam/rgas0
       gm1loc   = gm1
     else
@@ -4993,7 +4994,8 @@ contains
     max_iter = 50
 !
     if (calorically_perfect==1) then
-      tt  = t0+ee/cv_coeff_gpu(0)
+!     tt  = t0+ee/cv_coeff_gpu(0)
+      tt  =    ee/cv_coeff_gpu(0)
     else
       T_old = T_start
       ebar  = ee - cv_coeff_gpu(indx_cp_r+1)*t0
@@ -5030,7 +5032,8 @@ contains
     integer :: l
 !
     if (calorically_perfect==1) then
-      ee = cv_coeff_gpu(0)*(tt-t0)
+!     ee = cv_coeff_gpu(0)*(tt-t0)
+      ee = cv_coeff_gpu(0)* tt
     else
       ee = cv_coeff_gpu(indx_cp_r+1)
       do l=indx_cp_l,indx_cp_r

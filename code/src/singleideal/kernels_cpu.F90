@@ -2460,7 +2460,8 @@ endsubroutine euler_y_hybrid_rusanov_kernel
         qq        =  0.5_rkind * (uu*uu  +vv*vv + ww*ww)
 !
         if (calorically_perfect==1) then
-         cc       = gm1 * (h-qq+cv0*t0) ! cv0*t0 needed because e = cv*(tt-t0)
+!        cc       = gm1 * (h-qq+cv0*t0) ! cv0*t0 needed because e = cv*(tt-t0)
+         cc       = gm1 * (h-qq       )
          tt       = cc/gam/rgas0
          gm1loc   = gm1
         else
@@ -4939,7 +4940,8 @@ endsubroutine bc_nr_lat_z_kernel
     max_iter = 50
 
     if (calorically_perfect==1) then
-        tt  = t0+ee/cv_coeff_cpu(0)
+!       tt  = t0+ee/cv_coeff_cpu(0)
+        tt  =    ee/cv_coeff_cpu(0)
     else
         T_old = T_start 
         ebar  = ee - cv_coeff_cpu(indx_cp_r+1)*t0
@@ -4976,7 +4978,8 @@ endsubroutine bc_nr_lat_z_kernel
         integer :: l
 
         if (calorically_perfect==1) then
-            ee = cv_coeff_cpu(0)*(tt-t0)
+!           ee = cv_coeff_cpu(0)*(tt-t0)
+            ee = cv_coeff_cpu(0)* tt    
         else
             ee = cv_coeff_cpu(indx_cp_r+1)
             do l=indx_cp_l,indx_cp_r

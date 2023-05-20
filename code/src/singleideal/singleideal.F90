@@ -339,6 +339,12 @@ contains
     else
       self%nkeep = 0
     endif
+    if (self%calorically_perfect/=1) then
+      if (self%nkeep>0) then
+        if (self%masterproc) write(*,*) "nkeep forced equal to zero for non calorically perfect gas"
+        self%nkeep = 0
+      endif
+    endif
     call self%cfg%get("numerics","weno_scheme",self%weno_scheme)
     call self%cfg%get("numerics","weno_version",self%weno_version)
     if (self%cfg%has_key("numerics","flux_splitting")) then
@@ -1433,7 +1439,8 @@ contains
     integer :: l
 !
     if (calorically_perfect==1) then
-      ee = cv_coeff(0)*(tt-t0)
+!     ee = cv_coeff(0)*(tt-t0)
+      ee = cv_coeff(0)* tt
     else
       ee = cv_coeff(indx_cp_r+1)
       do l=indx_cp_l, indx_cp_r
