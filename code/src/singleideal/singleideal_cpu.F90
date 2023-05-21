@@ -6,6 +6,7 @@ module streams_equation_singleideal_cpu_object
     use streams_grid_object
     use streams_kernels_cpu
     use streams_parameters
+    use crandom_f_mod
     use streams_equation_singleideal_object
     use MPI
     use ISO_C_BINDING
@@ -77,6 +78,7 @@ module streams_equation_singleideal_cpu_object
         real(rkind), allocatable, dimension(:,:,:) :: wrecycav_cpu
         real(rkind), dimension(:,:,:), allocatable   :: wmean_cpu
 
+        real(rkind), dimension(:,:,:), allocatable :: inflow_random_plane_cpu
         real(rkind), dimension(:), allocatable :: weta_inflow_cpu
         real(rkind), dimension(:), allocatable :: yplus_inflow_cpu, eta_inflow_cpu
         real(rkind), dimension(:), allocatable :: yplus_recyc_cpu, eta_recyc_cpu
@@ -539,7 +541,9 @@ contains
                   calorically_perfect => self%equation_base%calorically_perfect, &
                   ep_ord_change_cpu => self%ep_ord_change_cpu, nkeep => self%equation_base%nkeep, &
                   flux_splitting => self%equation_base%flux_splitting, &
-                  rgas0 => self%equation_base%rgas0)
+                  rgas0 => self%equation_base%rgas0, &
+                  inflow_random_plane => self%equation_base%inflow_random_plane, &
+                  inflow_random_plane_cpu => self%inflow_random_plane_cpu)
         weno_size = 2*weno_scheme
         lmax = ep_order/2 ! max stencil width
         force_zero_flux_min = force_zero_flux(5)
@@ -561,6 +565,8 @@ contains
              ep_ord_change_cpu, calorically_perfect, tol_iter_nr,self%equation_base%rho0,self%equation_base%u0, &
              self%equation_base%t0)
         endif
+        if (self%equation_base%recyc) call get_crandom_f(inflow_random_plane(2:self%equation_base%jbl_inflow,1:nz,1:3))
+
         endassociate
     endsubroutine euler_z
 
@@ -820,10 +826,17 @@ contains
                rgas0 => self%equation_base%rgas0, &
                calorically_perfect => self%equation_base%calorically_perfect, &
                t0 => self%equation_base%t0, &
-               cv_coeff_cpu => self%cv_coeff_cpu)
+               u0 => self%equation_base%u0, &
+               l0 => self%equation_base%l0, &
+               cv_coeff_cpu => self%cv_coeff_cpu, &
+               inflow_random_plane => self%equation_base%inflow_random_plane, &
+               inflow_random_plane_cpu => self%inflow_random_plane_cpu)
       ! Compute spanwise averages at the recycling station
       call bcrecyc_cpu_1(nx, ny, nz, ng, nv, wrecycav_cpu, wrecyc_cpu)
     
+      !     call get_crandom_f(inflow_random_plane(2:ny,1:nz,1:3)) ! this is done in euler z to overlap
+      inflow_random_plane_cpu = inflow_random_plane
+
       ntot = ng*ny*nv
       call mpi_allreduce(MPI_IN_PLACE,wrecycav_cpu,ntot,mpi_prec,mpi_sum,mp_cartz,iermpi)
     
@@ -831,9 +844,9 @@ contains
       call bcrecyc_cpu_2(nx, ny, nz, nzmax, ng, wrecycav_cpu, wrecyc_cpu)
     
       ! Apply bc recycling
-      call bcrecyc_cpu_3(nx, ny, nz, ng, p0, rgas0, w_cpu, wmean_cpu, wrecyc_cpu, &
+      call bcrecyc_cpu_3(nx, ny, nz, ng, p0, u0, rgas0, w_cpu, wmean_cpu, wrecyc_cpu, &
           weta_inflow_cpu, map_j_inn_cpu, map_j_out_cpu, &
-          yplus_inflow_cpu, eta_inflow_cpu, yplus_recyc_cpu, eta_recyc_cpu, betarecyc, &
+          yplus_inflow_cpu, eta_inflow_cpu, yplus_recyc_cpu, eta_recyc_cpu, betarecyc, inflow_random_plane_cpu, &
           indx_cp_l, indx_cp_r, cv_coeff_cpu, t0, calorically_perfect)
      endassociate
     endif
@@ -972,6 +985,7 @@ contains
         allocate(self%map_j_inn_cpu(1:ny))
         allocate(self%map_j_out_cpu(1:ny))
         allocate(self%weta_inflow_cpu(1:ny))
+        allocate(self%inflow_random_plane_cpu(1:ny,1:nz,3))
 
         allocate(self%cv_coeff_cpu(indx_cp_l:indx_cp_r+1))
         allocate(self%cp_coeff_cpu(indx_cp_l:indx_cp_r+1))

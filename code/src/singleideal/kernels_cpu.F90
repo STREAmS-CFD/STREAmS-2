@@ -4312,27 +4312,29 @@ endsubroutine bc_nr_lat_z_kernel
 
  endsubroutine  bcrecyc_cpu_2
 
- subroutine bcrecyc_cpu_3(nx, ny, nz, ng, p0, rgas0, w_cpu, wmean_cpu, wrecyc_cpu, &
+ subroutine bcrecyc_cpu_3(nx, ny, nz, ng, p0, u0, rgas0, w_cpu, wmean_cpu, wrecyc_cpu, &
      weta_inflow_cpu, map_j_inn_cpu, map_j_out_cpu, &
-     yplus_inflow_cpu, eta_inflow_cpu, yplus_recyc_cpu, eta_recyc_cpu, betarecyc, &
+     yplus_inflow_cpu, eta_inflow_cpu, yplus_recyc_cpu, eta_recyc_cpu, betarecyc, inflow_random_plane_cpu, &
      indx_cp_l, indx_cp_r, cv_coeff_cpu, t0, calorically_perfect)
      integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-     real(rkind) :: p0, rgas0, betarecyc, t0
+     real(rkind) :: p0, rgas0, betarecyc, t0, u0
      real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cv_coeff_cpu
      real(rkind), dimension(1-ng:,:,:), intent(in) :: wmean_cpu
      real(rkind), dimension(:,:,:,:), intent(in) :: wrecyc_cpu
+     real(rkind), dimension(:,:,:), intent(in) :: inflow_random_plane_cpu
      real(rkind), dimension(1-ng:,1-ng:,1-ng:,:), intent(inout) :: w_cpu
      real(rkind), dimension(:), intent(in) :: weta_inflow_cpu 
      real(rkind), dimension(1-ng:), intent(in) :: yplus_inflow_cpu, eta_inflow_cpu, yplus_recyc_cpu, eta_recyc_cpu
      integer, dimension(:), intent(in) :: map_j_inn_cpu, map_j_out_cpu
      integer :: i,j,k
-     real(rkind) :: weta, weta1, bdamp, disty_inn, disty_out, rhofluc, ufluc, vfluc, wfluc, rhof_inn, rhof_out
+     real(rkind) :: eta, weta, weta1, bdamp, disty_inn, disty_out, rhofluc, ufluc, vfluc, wfluc, rhof_inn, rhof_out
      real(rkind) :: uf_inn, uf_out, vf_inn, vf_out, wf_inn, wf_out
      real(rkind) :: rhomean, uumean , vvmean , wwmean , tmean  , rho , uu , vv , ww , rhou , rhov , rhow, tt, ee
      integer :: j_inn, j_out
 
       do k=1,nz
        do j=1,ny
+        eta   = eta_inflow_cpu(j)
         weta  = weta_inflow_cpu(j)
         weta1 = 1._rkind-weta
         bdamp = 0.5_rkind*(1._rkind-tanh(4._rkind*(eta_inflow_cpu(j)-2._rkind))) 
@@ -4366,6 +4368,9 @@ endsubroutine bc_nr_lat_z_kernel
           ufluc   = ufluc  *bdamp*betarecyc 
           vfluc   = vfluc  *bdamp*betarecyc 
           wfluc   = wfluc  *bdamp*betarecyc 
+          ufluc   = ufluc+0.05_rkind*u0*(inflow_random_plane_cpu(j,k,1)-0.5_rkind)*eta
+          vfluc   = vfluc+0.05_rkind*u0*(inflow_random_plane_cpu(j,k,2)-0.5_rkind)*eta
+          wfluc   = wfluc+0.05_rkind*u0*(inflow_random_plane_cpu(j,k,3)-0.5_rkind)*eta
          endif
      
          rhomean = wmean_cpu(1-i,j,1)

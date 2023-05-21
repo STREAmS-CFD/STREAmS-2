@@ -4321,21 +4321,22 @@ contains
 !
   endsubroutine  bcrecyc_cuf_2
 !
-  subroutine bcrecyc_cuf_3(nx, ny, nz, ng, p0, rgas0, w_gpu, wmean_gpu, wrecyc_gpu, &
+  subroutine bcrecyc_cuf_3(nx, ny, nz, ng, p0, u0, rgas0, w_gpu, wmean_gpu, wrecyc_gpu, &
     weta_inflow_gpu, map_j_inn_gpu, map_j_out_gpu, &
-    yplus_inflow_gpu, eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu, betarecyc, &
+    yplus_inflow_gpu, eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu, betarecyc, inflow_random_plane_gpu, &
     indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect)
     integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
-    real(rkind) :: p0, rgas0, betarecyc, t0
+    real(rkind) :: p0, rgas0, betarecyc, t0, u0
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
     real(rkind), dimension(1-ng:,:,:), intent(in), device :: wmean_gpu
     real(rkind), dimension(:,:,:,:), intent(in), device :: wrecyc_gpu
+    real(rkind), dimension(:,:,:), intent(in), device :: inflow_random_plane_gpu
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,:), intent(inout), device :: w_gpu
     real(rkind), dimension(:), intent(in), device :: weta_inflow_gpu
     real(rkind), dimension(1-ng:), intent(in), device :: yplus_inflow_gpu, eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu
     integer, dimension(:), intent(in), device :: map_j_inn_gpu, map_j_out_gpu
     integer :: i,j,k,iercuda
-    real(rkind) :: weta, weta1, bdamp, disty_inn, disty_out, rhofluc, ufluc, vfluc, wfluc, rhof_inn, rhof_out
+    real(rkind) :: eta, weta, weta1, bdamp, disty_inn, disty_out, rhofluc, ufluc, vfluc, wfluc, rhof_inn, rhof_out
     real(rkind) :: uf_inn, uf_out, vf_inn, vf_out, wf_inn, wf_out
     real(rkind) :: rhomean, uumean , vvmean , wwmean , tmean  , rho , uu , vv , ww , rhou , rhov , rhow, tt, ee
     integer :: j_inn, j_out
@@ -4343,6 +4344,7 @@ contains
     !$cuf kernel do(2) <<<*,*>>>
     do k=1,nz
       do j=1,ny
+        eta   = eta_inflow_gpu(j)
         weta  = weta_inflow_gpu(j)
         weta1 = 1._rkind-weta
         bdamp = 0.5_rkind*(1._rkind-tanh(4._rkind*(eta_inflow_gpu(j)-2._rkind)))
@@ -4376,6 +4378,9 @@ contains
             ufluc   = ufluc  *bdamp*betarecyc
             vfluc   = vfluc  *bdamp*betarecyc
             wfluc   = wfluc  *bdamp*betarecyc
+            ufluc   = ufluc+0.05_rkind*u0*(inflow_random_plane_gpu(j,k,1)-0.5_rkind)*eta
+            vfluc   = vfluc+0.05_rkind*u0*(inflow_random_plane_gpu(j,k,2)-0.5_rkind)*eta
+            wfluc   = wfluc+0.05_rkind*u0*(inflow_random_plane_gpu(j,k,3)-0.5_rkind)*eta
           endif
 !
           rhomean = wmean_gpu(1-i,j,1)

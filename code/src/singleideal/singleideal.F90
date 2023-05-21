@@ -127,7 +127,9 @@ module streams_equation_singleideal_object
     real(rkind), dimension(:), allocatable :: yplus_recyc
     real(rkind), dimension(:), allocatable :: eta_recyc
     integer, dimension(:), allocatable :: map_j_inn, map_j_out
+    integer :: jbl_inflow
     real(rkind), dimension(:), allocatable :: weta_inflow
+    real(rkind), dimension(:,:,:), allocatable :: inflow_random_plane
 !
     integer :: calorically_perfect, indx_cp_l, indx_cp_r
     real(rkind), allocatable, dimension(:) :: cp_coeff, cv_coeff
@@ -745,12 +747,12 @@ contains
 !
   subroutine recyc_prepare(self)
     class(equation_singleideal_object), intent(inout) :: self
-    integer :: ig_recyc, j
+    integer :: ig_recyc, j, k
 !
     call self%cfg%get("bc","x_recyc",self%x_recyc)
     self%x_recyc = self%x_recyc*self%l0
 !
-    associate(ng => self%grid%ng, ny => self%field%ny)
+    associate(ng => self%grid%ng, ny => self%field%ny, nz => self%field%nz)
       allocate(self%yplus_inflow(1-ng:ny+ng))
       allocate(self%eta_inflow(1-ng:ny+ng))
       allocate(self%yplus_recyc(1-ng:ny+ng))
@@ -758,6 +760,7 @@ contains
       allocate(self%map_j_inn(1:ny))
       allocate(self%map_j_out(1:ny))
       allocate(self%weta_inflow(1:ny))
+      allocate(self%inflow_random_plane(1:ny,1:nz,3))
     endassociate
 !
     associate(xg => self%grid%xg, nxmax => self%grid%nxmax, nx => self%field%nx, ny => self%field%ny, &
@@ -765,8 +768,11 @@ contains
       deltavec => self%deltavec, deltavvec => self%deltavvec, betarecyc => self%betarecyc, &
       y => self%field%y, yplus_inflow => self%yplus_inflow, eta_inflow => self%eta_inflow, &
       yplus_recyc  => self%yplus_recyc,  eta_recyc  => self%eta_recyc, l0 => self%l0, &
-      map_j_inn => self%map_j_inn, map_j_out => self%map_j_out, weta_inflow => self%weta_inflow &
-      )
+      map_j_inn => self%map_j_inn, map_j_out => self%map_j_out, weta_inflow => self%weta_inflow, &
+      inflow_random_plane => self%inflow_random_plane)
+!
+      inflow_random_plane = 0._rkind
+!
       call locateval(xg(1:nxmax),nxmax,xrecyc,ig_recyc) ! xrecyc is between xg(ii) and xg(ii+1), ii is between 0 and nxmax
       ib_recyc = (ig_recyc-1)/nx
       i_recyc  = ig_recyc-nx*ib_recyc
@@ -2118,7 +2124,10 @@ contains
       rfac => self%rfac, Prandtl => self%Prandtl, w_aux => self%w_aux,  &
       deltavec => self%deltavec ,deltavvec => self%deltavvec, cfvec => self%cfvec, &
       indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, &
-      calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
+      calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0, &
+      jbl_inflow => self%jbl_inflow)
+!
+      call locateval(y(1:ny),ny,l0,jbl_inflow) ! l0 is between yvec(jbl_inflow) and yvec(jbl_inflow+1)
 !
       Trat = self%T_wall/self%T_recovery
 !
