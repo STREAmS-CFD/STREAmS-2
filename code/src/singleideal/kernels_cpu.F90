@@ -65,6 +65,7 @@ contains
         ! Passed arguments
         integer :: nv, nx, ny, nz, ng, nv_aux
         integer :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+        integer :: weno_scheme, weno_size, weno_version
         integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_cpu
         real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:8) :: w_aux_trans_cpu
         real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:nv) :: fhat_trans_cpu
@@ -75,7 +76,6 @@ contains
         real(rkind), dimension(nx) :: dcsidx_cpu
         integer :: force_zero_flux_min, force_zero_flux_max
         real(rkind) :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
-        integer :: weno_scheme, weno_size, weno_version
         ! Local variables
         integer :: i, j, k, m, l
         real(rkind) :: fh1, fh2, fh3, fh4, fh5

@@ -71,6 +71,7 @@ contains
 !   Passed arguments
     integer, value :: nv, nx, ny, nz, ng, nv_aux
     integer, value :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+    integer, value :: weno_scheme, weno_size, weno_version
     integer, dimension(0:ny,0:nx,0:nz) :: ep_ord_change_x_gpu
     real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:8) :: w_aux_trans_gpu
     real(rkind), dimension(1-ng:ny+ng,1-ng:nx+ng,1-ng:nz+ng,1:nv) :: fhat_trans_gpu
@@ -81,7 +82,6 @@ contains
     real(rkind), dimension(nx) :: dcsidx_gpu
     integer, value :: force_zero_flux_min, force_zero_flux_max
     real(rkind), value :: sensor_threshold, rgas0, tol_iter_nr,rho0,u0,t0
-    integer, value :: weno_scheme, weno_size, weno_version
 !   Local variables
     integer :: i, j, k, m, l
     real(rkind) :: fh1, fh2, fh3, fh4, fh5
