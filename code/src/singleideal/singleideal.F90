@@ -771,7 +771,7 @@ contains
       map_j_inn => self%map_j_inn, map_j_out => self%map_j_out, weta_inflow => self%weta_inflow, &
       inflow_random_plane => self%inflow_random_plane)
 !
-      inflow_random_plane = 0._rkind
+      inflow_random_plane = 0.5_rkind
 !
       call locateval(xg(1:nxmax),nxmax,xrecyc,ig_recyc) ! xrecyc is between xg(ii) and xg(ii+1), ii is between 0 and nxmax
       ib_recyc = (ig_recyc-1)/nx
