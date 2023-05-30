@@ -400,6 +400,12 @@ contains
     call self%cfg%get("controls","cfl",self%cfl)
     call self%cfg%get("controls","num_iter",self%num_iter)
 !
+!   IO type
+    self%io_type = 2 ! (0 => no IO, 1 => serial, 2 => parallel)
+    if (self%cfg%has_key("output","io_type")) then
+      call self%cfg%get("output","io_type",self%io_type)
+    endif
+!
 !
     call self%initial_conditions()
     select case(self%restart_type)
@@ -458,10 +464,6 @@ contains
     call self%cfg%get("output","igslice",self%igslice)
     call self%cfg%get("output","jgslice",self%jgslice)
     call self%cfg%get("output","kgslice",self%kgslice)
-    self%io_type = 2 ! (0 => no IO, 1 => serial, 2 => parallel)
-    if (self%cfg%has_key("output","io_type")) then
-      call self%cfg%get("output","io_type",self%io_type)
-    endif
     call self%sliceprobe_prepare()
 !
     call self%cfg%get("output","print_control",self%print_control)
