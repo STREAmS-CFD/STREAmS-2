@@ -14,9 +14,9 @@ module streams_field_object
 !
   type :: field_object
 !   < Field class definition.
-    type(grid_object), pointer  :: grid=>null()
-    integer(ikind)              :: nv=1_ikind
-    integer(ikind)              :: nx, ny, nz
+    type(grid_object), pointer :: grid=>null()
+    integer(ikind) :: nv=1_ikind
+    integer(ikind) :: nx, ny, nz
     real(rkind), allocatable, dimension(:) :: x, y, z, yn
     real(rkind), allocatable, dimension(:) :: dcsidx,dcsidx2,dcsidxs
     real(rkind), allocatable, dimension(:) :: detady,detady2,detadys
@@ -25,11 +25,11 @@ module streams_field_object
     real(rkind), allocatable, dimension(:,:,:,:) :: w
 !
 !   MPI data
-    integer(ikind)              :: mpi_err
-    integer(ikind)              :: myrank
-    integer(ikind)              :: nprocs
+    integer(ikind) :: mpi_err
+    integer(ikind) :: myrank
+    integer(ikind) :: nprocs
     logical :: masterproc
-    integer, dimension(3)       :: nblocks, ncoords
+    integer, dimension(3) :: nblocks, ncoords
     integer :: mp_cart,mp_cartx,mp_carty,mp_cartz
     integer :: nproc,nrank_x, nrank_y, nrank_z
     integer :: ileftx,irightx,ilefty,irighty,ileftz,irightz
@@ -57,7 +57,7 @@ contains
   subroutine check_cpu_mem(self, description)
     class(field_object), intent(inout) :: self !< The field backend.
     character(*) :: description
-    integer                       :: ierr
+    integer :: ierr
     character(128) :: proc_name
     integer :: resultlen
 !
@@ -71,18 +71,18 @@ contains
     memtotal = real(mem_total,rkind)/(1024_rkind**3)
     memav = real(mem_av,rkind)/(1024_rkind**3)
 !   call mpi_barrier(mpi_comm_world, ierr)
-    write(error_unit, "(A,2x,A,2x,A,2x,I0,2x,I0,2x,I0)") 'CPU rank,mems: ', &
-      description,proc_name(1:resultlen),self%myrank, mem_av, mem_total
+    write(error_unit, "(A,2x,A,2x,A,2x,I0,2x,I0,2x,I0)") 'CPU rank,mems: ', description,proc_name(1:&
+    &resultlen),self%myrank, mem_av, mem_total
   endsubroutine check_cpu_mem
 !
   subroutine initialize(self, grid, nv, mpi_splits)
-    class(field_object), intent(inout)           :: self            !< The field.
-    type(grid_object),   intent(in), target      :: grid            !< Grid data.
-    integer(ikind),      intent(in),    optional :: nv              !< Number of field variables.
+    class(field_object), intent(inout) :: self !< The field.
+    type(grid_object), intent(in), target :: grid !< Grid data.
+    integer(ikind), intent(in), optional :: nv !< Number of field variables.
     integer, dimension(3) :: mpi_splits
 !
     self%grid => grid
-    self%nv   = nv
+    self%nv = nv
 !
     call get_mpi_basic_info(self%nprocs, self%myrank, self%masterproc, self%mpi_err)
 !
@@ -95,18 +95,18 @@ contains
   endsubroutine initialize
 !
   subroutine cartesian_mpi(self, mpi_splits)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
     integer, dimension(3) :: mpi_splits
     integer, parameter :: ndims=3
     logical :: remain_dims(ndims)
     logical :: reord
 !
-    associate(nblocks => self%nblocks, ncoords => self%ncoords, nprocs => self%nprocs, mpi_err => self%mpi_err, &
-      pbc => self%grid%is_xyz_periodic, masterproc => self%masterproc, &
-      mp_cart=>self%mp_cart,mp_cartx=>self%mp_cartx,mp_carty=>self%mp_carty,mp_cartz=> self%mp_cartz, &
-      nrank=>self%myrank,nproc=>self%nprocs,nrank_x=>self%nrank_x, nrank_y=>self%nrank_y, nrank_z=>self%nrank_z, &
-      ileftx=>self%ileftx,irightx=>self%irightx,ilefty=>self%ilefty,irighty=>self%irighty,&
-      ileftz=>self%ileftz,irightz=>self%irightz)
+    associate(nblocks => self%nblocks, ncoords => self%ncoords, nprocs => self%nprocs, mpi_err => se&
+    &lf%mpi_err, pbc => self%grid%is_xyz_periodic, masterproc => self%masterproc, mp_cart=>self%mp_cart,m&
+    &p_cartx=>self%mp_cartx,mp_carty=>self%mp_carty,mp_cartz=> self%mp_cartz, nrank=>self%myrank,nproc=>s&
+    &elf%nprocs,nrank_x=>self%nrank_x, nrank_y=>self%nrank_y, nrank_z=>self%nrank_z, ileftx=>self%ileftx,&
+    &irightx=>self%irightx,ilefty=>self%ilefty,irighty=>self%irighty,ileftz=>self%ileftz,irightz=>self%ir&
+    &ightz)
 !
       nblocks(:) = mpi_splits(:)
 !
@@ -146,19 +146,18 @@ contains
   endsubroutine cartesian_mpi
 !
   subroutine define_corners(self)
-    class(field_object), intent(inout)           :: self
+    class(field_object), intent(inout) :: self
 !   
     integer, dimension(3) :: ncoords_nei
 !   
-    associate(ileftbottom => self%ileftbottom, irightbottom => self%irightbottom, &
-      ilefttop => self%ilefttop, irighttop => self%irighttop, &
-      ncoords => self%ncoords, nblocks => self%nblocks, iermpi => self%mpi_err, &
-      mp_cart => self%mp_cart, pbc => self%grid%is_xyz_periodic)
+    associate(ileftbottom => self%ileftbottom, irightbottom => self%irightbottom, ilefttop => self%i&
+    &lefttop, irighttop => self%irighttop, ncoords => self%ncoords, nblocks => self%nblocks, iermpi => se&
+    &lf%mpi_err, mp_cart => self%mp_cart, pbc => self%grid%is_xyz_periodic)
 !
-      ileftbottom  = mpi_proc_null
+      ileftbottom = mpi_proc_null
       irightbottom = mpi_proc_null
-      ilefttop     = mpi_proc_null
-      irighttop    = mpi_proc_null
+      ilefttop = mpi_proc_null
+      irighttop = mpi_proc_null
 !     
 !     ileftbottom
       ncoords_nei(1) = ncoords(1)-1
@@ -234,7 +233,7 @@ contains
   end subroutine define_corners
 !
   subroutine alloc(self)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
     associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%grid%ng, nv => self%nv)
       allocate(self%w(nv,1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
       allocate(self%x(1-ng:nx+ng))
@@ -248,17 +247,16 @@ contains
   endsubroutine alloc
 !
   subroutine set_local_grid(self)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
     integer :: i, j, k
     integer :: ii, jj, kk
 !
-    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%grid%ng, ncoords => self%ncoords, &
-      x => self%x, xg => self%grid%xg, y => self%y, yg => self%grid%yg, z => self%z, zg => self%grid%zg, &
-      dcsidx => self%dcsidx, dcsidxs => self%dcsidxs, dcsidx2 => self%dcsidx2, &
-      detady => self%detady, detadys => self%detadys, detady2 => self%detady2, &
-      dzitdz => self%dzitdz, dzitdzs => self%dzitdzs, dzitdz2 => self%dzitdz2, &
-      dxg => self%grid%dxg, dyg => self%grid%dyg, dzg => self%grid%dzg, &
-      d2xg => self%grid%d2xg, d2yg => self%grid%d2yg, d2zg => self%grid%d2zg)
+    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%grid%ng, ncoords => self%ncoor&
+    &ds, x => self%x, xg => self%grid%xg, y => self%y, yg => self%grid%yg, z => self%z, zg => self%grid%z&
+    &g, dcsidx => self%dcsidx, dcsidxs => self%dcsidxs, dcsidx2 => self%dcsidx2, detady => self%detady, d&
+    &etadys => self%detadys, detady2 => self%detady2, dzitdz => self%dzitdz, dzitdzs => self%dzitdzs, dzi&
+    &tdz2 => self%dzitdz2, dxg => self%grid%dxg, dyg => self%grid%dyg, dzg => self%grid%dzg, d2xg => self&
+    &%grid%d2xg, d2yg => self%grid%d2yg, d2zg => self%grid%d2zg)
 !     local coordinates (nodes)
       ii = nx*ncoords(1)
       do i=1-ng,nx+ng
@@ -297,7 +295,7 @@ contains
   endsubroutine set_local_grid
 !
   subroutine read_field_serial(self)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
     character(4) :: chx,chy,chz
 !
     if (self%masterproc) write(*,*) 'Reading rst0_XXX_XXX_XXX.bin'
@@ -312,13 +310,13 @@ contains
   endsubroutine read_field_serial
 !
   subroutine read_field(self)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
 !   Writing rst.bin
     integer :: mpi_io_file
     integer :: filetype
-    integer, dimension(3) :: sizes     ! Dimensions of the total grid
-    integer, dimension(3) :: subsizes  ! Dimensions of grid local to a procs
-    integer, dimension(3) :: starts    ! Starting coordinates
+    integer, dimension(3) :: sizes ! Dimensions of the total grid
+    integer, dimension(3) :: subsizes ! Dimensions of grid local to a procs
+    integer, dimension(3) :: starts ! Starting coordinates
     integer :: size_real
     integer :: ntot
     integer (kind=mpi_offset_kind) :: offset
@@ -366,7 +364,7 @@ contains
   endsubroutine read_field
 !
   subroutine write_field_serial(self)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
     character(4) :: chx,chy,chz
 !
     if (self%masterproc) write(*,*) 'Writing rst1_XXX_XXX_XXX.bin'
@@ -382,13 +380,13 @@ contains
   endsubroutine write_field_serial
 !
   subroutine write_field(self)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
 !   Writing rst.bin and finaltime.dat
     integer :: mpi_io_file
     integer :: filetype
-    integer, dimension(3) :: sizes     ! Dimensions of the total grid
-    integer, dimension(3) :: subsizes  ! Dimensions of grid local to a procs
-    integer, dimension(3) :: starts    ! Starting coordinates
+    integer, dimension(3) :: sizes ! Dimensions of the total grid
+    integer, dimension(3) :: subsizes ! Dimensions of grid local to a procs
+    integer, dimension(3) :: starts ! Starting coordinates
     integer :: size_real
     integer :: ntot
     integer (kind=mpi_offset_kind) :: offset
@@ -427,7 +425,7 @@ contains
   endsubroutine write_field
 !
   subroutine write_plot3d(self, mach, reynolds, time, istore, w_io, plot3dgrid, plot3dfield, file_prefix, w_aux_io)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
 !   Writing field (MPI I/O)
     real(rkind), optional :: mach, reynolds, time
     real(rkind) :: mach_, reynolds_, time_
@@ -444,9 +442,9 @@ contains
     integer :: i,j,k,l,m
     integer :: mpi_io_file
     integer :: filetype
-    integer,dimension(3) :: sizes     ! Dimensions of the total grid
-    integer,dimension(3) :: subsizes  ! Dimensions of grid local to a procs
-    integer,dimension(3) :: starts    ! Starting coordinates
+    integer,dimension(3) :: sizes ! Dimensions of the total grid
+    integer,dimension(3) :: subsizes ! Dimensions of grid local to a procs
+    integer,dimension(3) :: starts ! Starting coordinates
     integer :: size_real,size_integer
     integer :: ntot
     integer (kind=mpi_offset_kind) :: offset
@@ -456,11 +454,11 @@ contains
 !
     write(chstore(1:4), '(I4.4)') istore
 !
-    mach_        = 1._rkind ; if(present(mach))        mach_        = mach
-    reynolds_    = 1._rkind ; if(present(reynolds))    reynolds_    = reynolds
-    time_        = 1._rkind ; if(present(time))        time_        = time
-    plot3dfield_ = .true.   ; if(present(plot3dfield)) plot3dfield_ = plot3dfield
-    plot3dgrid_  = .false.  ; if(present(plot3dgrid))  plot3dgrid_  = plot3dgrid
+    mach_ = 1._rkind ; if(present(mach)) mach_ = mach
+    reynolds_ = 1._rkind ; if(present(reynolds)) reynolds_ = reynolds
+    time_ = 1._rkind ; if(present(time)) time_ = time
+    plot3dfield_ = .true. ; if(present(plot3dfield)) plot3dfield_ = plot3dfield
+    plot3dgrid_ = .false. ; if(present(plot3dgrid)) plot3dgrid_ = plot3dgrid
 !
     if(plot3dgrid_) then
       allocate(grid3d(3,self%nx,self%ny,self%nz))
@@ -580,29 +578,29 @@ contains
   end subroutine write_plot3d
 !
   subroutine correct_bc(self, ibc)
-    class(field_object), intent(inout)   :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
     integer, dimension(6), intent(inout) :: ibc
     integer, dimension(6) :: itag
     integer :: iend, jend, kend
-    itag   = ibc
-    ibc    = 0
-    iend   = self%nblocks(1)-1
-    jend   = self%nblocks(2)-1
-    kend   = self%nblocks(3)-1
+    itag = ibc
+    ibc = 0
+    iend = self%nblocks(1)-1
+    jend = self%nblocks(2)-1
+    kend = self%nblocks(3)-1
 !
-    if (self%ncoords(1)==   0) ibc(1) = itag(1)
+    if (self%ncoords(1)== 0) ibc(1) = itag(1)
     if (self%ncoords(1)==iend) ibc(2) = itag(2)
-    if (self%ncoords(2)==   0) ibc(3) = itag(3)
+    if (self%ncoords(2)== 0) ibc(3) = itag(3)
     if (self%ncoords(2)==jend) ibc(4) = itag(4)
-    if (self%ncoords(3)==   0) ibc(5) = itag(5)
+    if (self%ncoords(3)== 0) ibc(5) = itag(5)
     if (self%ncoords(3)==kend) ibc(6) = itag(6)
   endsubroutine correct_bc
 !
   subroutine write_vtk(self, time, istore, w_aux_io)
-    class(field_object), intent(inout)           :: self            !< The field.
+    class(field_object), intent(inout) :: self !< The field.
 !   Writing field (MPI I/O)
     real(rkind), optional :: time
-    real(rkind) ::  time_
+    real(rkind) :: time_
     integer :: istore
     character(32) :: file_prefix_
     real(rkind), dimension(:,:,:,:), allocatable :: w_io_
@@ -611,9 +609,9 @@ contains
     integer :: l
     integer :: mpi_io_file
     integer :: filetype
-    integer,dimension(3) :: sizes     ! Dimensions of the total grid
-    integer,dimension(3) :: subsizes  ! Dimensions of grid local to a procs
-    integer,dimension(3) :: starts    ! Starting coordinates
+    integer,dimension(3) :: sizes ! Dimensions of the total grid
+    integer,dimension(3) :: subsizes ! Dimensions of grid local to a procs
+    integer,dimension(3) :: starts ! Starting coordinates
     integer :: size_real
     integer :: ntot
     integer (kind=mpi_offset_kind) :: offset
@@ -631,20 +629,20 @@ contains
 !
     write(chstore(1:4), '(I4.4)') istore
 !
-    time_        = 1._rkind ; if(present(time))        time_        = time
+    time_ = 1._rkind ; if(present(time)) time_ = time
     if (self%masterproc) print *, 'Storing VTK sol', istore,'at time', time
 !
     call MPI_TYPE_SIZE(mpi_prec,size_real,self%mpi_err)
     if(size_real == 4) then
       vtk_float = "Float32"
     elseif(size_real == 8) then
-      vtk_float  = "Float64"
+      vtk_float = "Float64"
     else
       if(self%masterproc) write(*,*) "Error on VTK write! size_real must be either 4 or 8"
       call MPI_ABORT(MPI_COMM_WORLD,self%mpi_err,self%mpi_err)
     endif
-    gridsize_64 = int(size_real,int64_kind)*int(self%grid%nxmax,int64_kind)*int(self%grid%nymax,int64_kind)*&
-    int(self%grid%nzmax,int64_kind)
+    gridsize_64 = int(size_real,int64_kind)*int(self%grid%nxmax,int64_kind)*int(self%grid%nymax,int6&
+    &4_kind)*int(self%grid%nzmax,int64_kind)
 !
     if(storage_size(gridsize_64) /= 64) then
       if(self%masterproc) write(*,*) "Error on VTK write! Size of int64_kind integers is not 8 bytes!"
@@ -671,34 +669,22 @@ contains
       delta_offset_w = gridsize_64 + storage_size(gridsize_64)/8 ! the second part is because of the header of bytes before data
 !
       open(unit=123, file=trim(file_prefix_)//chstore//'.vtr', access="stream", form="unformatted", status="replace")
-      xml_part = ' &
-      & <?xml version="1.0"?> &
-      & <VTKFile type="RectilinearGrid" version="1.0" byte_order="LittleEndian" header_type="UInt64"> &
-      &  <RectilinearGrid WholeExtent="+1 +'&
-      &   //int2str(self%grid%nxmax)//' +1 +'//int2str(self%grid%nymax)//' +1 +'//int2str(self%grid%nzmax)//'"> &
-      &   <Piece Extent="+1 +'//int2str(self%grid%nxmax)//&
-      &    ' +1 +'//int2str(self%grid%nymax)//' +1 +'//int2str(self%grid%nzmax)//'"> &
-      &    <Coordinates> &
-      &     <DataArray type="'//vtk_float//'" NumberOfComponents="1" Name="X" format="appended" offset="'//&
-      &       int2str_o(offset_x)//'"/> &
-      &     <DataArray type="'//vtk_float//'" NumberOfComponents="1" Name="Y" format="appended" offset="'//&
-      &       int2str_o(offset_y)//'"/> &
-      &     <DataArray type="'//vtk_float//'" NumberOfComponents="1" Name="Z" format="appended" offset="'//&
-      &       int2str_o(offset_z)//'"/> &
-      &    </Coordinates> &
-      &   <PointData> '
+      xml_part = ' <?xml version="1.0"?> <VTKFile type="RectilinearGrid" version="1.0" byte_order="L&
+      &ittleEndian" header_type="UInt64"> <RectilinearGrid WholeExtent="+1 +' //int2str(self%grid%nxmax)//'&
+      & +1 +'//int2str(self%grid%nymax)//' +1 +'//int2str(self%grid%nzmax)//'"> <Piece Extent="+1 +'//int2s&
+      &tr(self%grid%nxmax)// ' +1 +'//int2str(self%grid%nymax)//' +1 +'//int2str(self%grid%nzmax)//'"> <Coo&
+      &rdinates> <DataArray type="'//vtk_float//'" NumberOfComponents="1" Name="X" format="appended" offset&
+      &="'// int2str_o(offset_x)//'"/> <DataArray type="'//vtk_float//'" NumberOfComponents="1" Name="Y" fo&
+      &rmat="appended" offset="'// int2str_o(offset_y)//'"/> <DataArray type="'//vtk_float//'" NumberOfComp&
+      &onents="1" Name="Z" format="appended" offset="'// int2str_o(offset_z)//'"/> </Coordinates> <PointDat&
+      &a> '
       offset = offset_z + size_real*self%grid%nzmax + storage_size(gridsize_64)/8
       do l=1,nv_io
-        xml_part = trim(adjustl(xml_part)) // ' &
-        & <DataArray type="'//vtk_float//'" NumberOfComponents="1" Name="'//trim(names(l))//'" format="appended" &
-        &  offset="'//int2str_o(offset)//'"/>'
+        xml_part = trim(adjustl(xml_part)) // ' <DataArray type="'//vtk_float//'" NumberOfComponents&
+        &="1" Name="'//trim(names(l))//'" format="appended" offset="'//int2str_o(offset)//'"/>'
         offset = offset + delta_offset_w
       enddo
-      xml_part = trim(adjustl(xml_part)) // ' &
-      &       </PointData> &
-      &     </Piece> &
-      &   </RectilinearGrid> &
-      &   <AppendedData encoding="raw"> '
+      xml_part = trim(adjustl(xml_part)) // ' </PointData> </Piece> </RectilinearGrid> <AppendedData encoding="raw"> '
       write(123) trim(adjustl(xml_part))
 !
       write(123) "_"
@@ -746,11 +732,10 @@ contains
     call MPI_TYPE_FREE(filetype,self%mpi_err)
     if (self%masterproc) then
       open(unit=123, file=trim(file_prefix_)//chstore//'.vtr', access="stream", position="append", form="unformatted")
-      write(123) ' &
-        &    </AppendedData> &
-        &  </VTKFile>'
+      write(123) ' </AppendedData> </VTKFile>'
       close(123)
     endif
   end subroutine write_vtk
 !
 endmodule streams_field_object
+

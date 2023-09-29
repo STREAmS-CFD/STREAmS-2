@@ -9,7 +9,7 @@ module streams_parameters
 !
   implicit none
   private
-  public :: ikind, rkind, mpi_prec
+  public :: ikind, ikind64, rkind, mpi_prec
   public :: tol_iter, tol_iter_nr
   public :: int2str_o, int2str
   public :: get_mpi_basic_info
@@ -25,8 +25,11 @@ module streams_parameters
 ! INSITU
   public :: insitu_start, insitu_end
   public :: REAL64
+  public :: INT64
+  public :: byte_size
 !
   integer, parameter :: ikind = INT32
+  integer, parameter :: ikind64 = INT64
 #ifdef SINGLE_PRECISION
   integer, parameter :: rkind = REAL32
   integer, parameter :: mpi_prec = mpi_real4
@@ -49,6 +52,15 @@ module streams_parameters
       integer(c_int) :: rename_wrapper
       character(kind=c_char) :: filein(*), fileout(*)
     endfunction rename_wrapper
+  endinterface
+!
+  interface byte_size
+    module procedure byte_size_int32, &
+#ifdef SINGLE_PRECISION
+    byte_size_real32
+#else
+    byte_size_real64
+#endif
   endinterface
 !
 contains
@@ -300,5 +312,28 @@ contains
     if (fcoproc) CALL coprocessorfinalize() ! Finalize Catalyst
 !   
   end subroutine insitu_end
-! 
+!
+  elemental function byte_size_int32(x) result(bytes)
+  integer, intent(in) :: x
+  integer(ikind64)    :: bytes
+!
+  bytes = storage_size(x) / 8
+endfunction byte_size_int32
+#ifdef SINGLE_PRECISION
+elemental function byte_size_real32(x) result(bytes)
+real(rkind), intent(in) :: x
+integer(ikind64)        :: bytes
+!
+bytes = storage_size(x) / 8
+endfunction byte_size_real32
+#else
+elemental function byte_size_real64(x) result(bytes)
+real(rkind), intent(in) :: x
+integer(ikind64)        :: bytes
+!
+bytes = storage_size(x) / 8
+endfunction byte_size_real64
+#endif
+!
 endmodule streams_parameters
+
