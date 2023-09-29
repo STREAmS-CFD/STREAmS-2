@@ -1,10 +1,9 @@
 module streams_base_gpu_object
-! < STREAmS, base GPU class definition
 !
   use streams_field_object, only : field_object
   use streams_parameters
-  use MPI
-  use CUDAFOR
+  use mpi
+  use cudafor
 !
   implicit none
   private
@@ -12,18 +11,15 @@ module streams_base_gpu_object
 !
   type :: base_gpu_object
     type(field_object), pointer :: field=>null()
-!   Replica of field and grid sizes
     integer :: nx, ny, nz, ng, nv
-!   MPI data
-    integer(ikind) :: myrank=0_ikind !< MPI rank process.
-    integer(ikind) :: nprocs=1_ikind !< Number of MPI processes.
+    integer(ikind) :: myrank=0_ikind
+    integer(ikind) :: nprocs=1_ikind
     logical :: masterproc
-    integer(ikind) :: mpi_err=0_ikind !< Error traping flag.
-    integer(ikind) :: mydev=0_ikind !< My GPU rank.
-    integer(ikind) :: myhost=0_ikind !< My HOST rank (for OpenMP porting).
-    integer(ikind) :: ierr !< My HOST rank (for OpenMP porting).
-    integer(ikind) :: local_comm=0_ikind !< Local communicator.
-!   GPU data
+    integer(ikind) :: mpi_err=0_ikind
+    integer(ikind) :: mydev=0_ikind
+    integer(ikind) :: myhost=0_ikind
+    integer(ikind) :: ierr
+    integer(ikind) :: local_comm=0_ikind
     real(rkind), allocatable, dimension(:,:,:,:), device :: w_gpu
     real(rkind), allocatable, dimension(:,:,:,:) :: w_t
 !
@@ -36,7 +32,6 @@ module streams_base_gpu_object
     real(rkind), allocatable, dimension(:), device :: dzitdz_gpu, dzitdz2_gpu, dzitdzs_gpu
     real(rkind), allocatable, dimension(:), device :: x_gpu, y_gpu, z_gpu, yn_gpu
   contains
-!   public methods
     procedure, pass(self) :: alloc
     procedure, pass(self) :: copy_cpu_gpu
     procedure, pass(self) :: copy_gpu_cpu
@@ -48,17 +43,10 @@ module streams_base_gpu_object
     procedure, pass(self) :: check_gpu_mem
   endtype base_gpu_object
 !
-! interface assign_allocatable_gpu
-!   !< Safe assign allocatable arrays (GPU), generic interface.
-!   module procedure assign_allocatable_INT64_1D_gpu !< Safe assign allocatable arrays, I8P 1D type.
-!   module procedure assign_allocatable_INT64_2D_gpu !< Safe assign allocatable arrays, I8P 2D type.
-!   module procedure assign_allocatable_INT32_1D_gpu !< Safe assign allocatable arrays, ikind 1D type.
-! endinterface assign_allocatable_gpu
 !
 contains
-! public methods
   subroutine alloc(self)
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
 !
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%field%grid%ng, nv => self%field%nv)
 !
@@ -130,13 +118,8 @@ contains
         enddo
       enddo
     enddo
-    !@cuf iercuda=cudaDeviceSynchronize()
+    !@cuf iercuda=cudadevicesynchronize()
 !
-!   CUDA check (debugging purposes)
-!   iercuda = cudaGetLastError()
-!   if (iercuda /= cudaSuccess) then
-!     print*,"CUDA ERROR! ",cudaGetErrorString(iercuda)
-!   endif
 !
     !$cuf kernel do(3) <<<*,*>>>
     do k=1,nz
@@ -149,7 +132,7 @@ contains
         enddo
       enddo
     enddo
-    !@cuf iercuda=cudaDeviceSynchronize()
+    !@cuf iercuda=cudadevicesynchronize()
 !
     !$cuf kernel do(3) <<<*,*>>>
     do k=1,ng
@@ -162,7 +145,7 @@ contains
         enddo
       enddo
     enddo
-    !@cuf iercuda=cudaDeviceSynchronize()
+    !@cuf iercuda=cudadevicesynchronize()
 !
   endsubroutine bcswap_step_1_cuf
 !
@@ -177,15 +160,15 @@ contains
       do m=1,nv
         do k=1,ng
           do i=1,ng
-            wbuf1s_c_gpu(m,i,j,k) = w_gpu(i,j,k,m) ! ileftbottom
-            wbuf2s_c_gpu(m,i,j,k) = w_gpu(nx-ng+i,j,nz-ng+k,m) ! irighttop
-            wbuf3s_c_gpu(m,i,j,k) = w_gpu(i,j,nz-ng+k,m) ! ilefttop
-            wbuf4s_c_gpu(m,i,j,k) = w_gpu(nx-ng+i,j,k,m) ! irightbottom
+            wbuf1s_c_gpu(m,i,j,k) = w_gpu(i,j,k,m)
+            wbuf2s_c_gpu(m,i,j,k) = w_gpu(nx-ng+i,j,nz-ng+k,m)
+            wbuf3s_c_gpu(m,i,j,k) = w_gpu(i,j,nz-ng+k,m)
+            wbuf4s_c_gpu(m,i,j,k) = w_gpu(nx-ng+i,j,k,m)
           enddo
         enddo
       enddo
     enddo
-    !@cuf iercuda=cudaDeviceSynchronize()
+    !@cuf iercuda=cudadevicesynchronize()
 !
   endsubroutine bcswap_corner_step_1_cuf
 !
@@ -207,7 +190,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (irightx/=mpi_proc_null) then
       !$cuf kernel do(3) <<<*,*>>>
@@ -220,7 +203,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (ilefty/=mpi_proc_null) then
       !$cuf kernel do(3) <<<*,*>>>
@@ -233,7 +216,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (irighty/=mpi_proc_null) then
       !$cuf kernel do(3) <<<*,*>>>
@@ -246,7 +229,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (ileftz/=mpi_proc_null) then
       !$cuf kernel do(3) <<<*,*>>>
@@ -259,7 +242,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (irightz/=mpi_proc_null) then
       !$cuf kernel do(3) <<<*,*>>>
@@ -272,7 +255,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
   endsubroutine bcswap_step_3_cuf
 !
@@ -295,7 +278,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (irighttop/=mpi_proc_null) then
       !$cuf kernel do(2) <<<*,*>>>
@@ -308,7 +291,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (ilefttop/=mpi_proc_null) then
       !$cuf kernel do(2) <<<*,*>>>
@@ -321,7 +304,7 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
     if (irightbottom/=mpi_proc_null) then
       !$cuf kernel do(2) <<<*,*>>>
@@ -334,12 +317,12 @@ contains
           enddo
         enddo
       enddo
-      !@cuf iercuda=cudaDeviceSynchronize()
+      !@cuf iercuda=cudadevicesynchronize()
     endif
   endsubroutine bcswap_corner_step_3_cuf
 !
   subroutine bcswap_corner(self, steps)
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     logical, dimension(3), optional :: steps
     logical, dimension(3) :: steps_
     integer :: iercuda, indc
@@ -387,7 +370,7 @@ contains
   endsubroutine bcswap_corner
 !
   subroutine bcswap_corner_var(self, w_swap, steps)
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     real(rkind), dimension(1-self%ng:self%nx+self%ng, 1-self%ng:self%ny+self%ng, 1-self%ng:self%nz+self%ng,1:1), device :: w_swap
     logical, dimension(3), optional :: steps
     logical, dimension(3) :: steps_
@@ -435,7 +418,7 @@ contains
   endsubroutine bcswap_corner_var
 !
   subroutine bcswap(self, steps)
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     logical, dimension(3), optional :: steps
     logical, dimension(3) :: steps_
     integer :: iercuda, indx, indy, indz
@@ -460,11 +443,6 @@ contains
         indx = nv*ng*ny*nz
         indy = nv*nx*ng*nz
         indz = nv*nx*ny*ng
-!       http://developer.download.nvidia.com/compute/cuda/2_3/toolkit/...
-!       docs/online/group__CUDART__MEMORY_ge4366f68c6fa8c85141448f187d2aa13.html
-!       IMPORTANT NOTE: Copies with kind == cudaMemcpyDeviceToDevice are asynchronous
-!       with respect to the host, but never overlap with kernel execution
-!       For this reason here simple copies are used and not cudaMemcpyAsync D2D
         if(ileftx == nrank_x) then
           wbuf2r_gpu = wbuf1s_gpu
           wbuf1r_gpu = wbuf2s_gpu
@@ -495,7 +473,7 @@ contains
   endsubroutine bcswap
 !
   subroutine bcswap_var(self, w_swap, steps)
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     real(rkind), dimension(1-self%ng:self%nx+self%ng, 1-self%ng:self%ny+self%ng, 1-self%ng:self%nz+self%ng,1:1), device :: w_swap
     logical, dimension(3), optional :: steps
     logical, dimension(3) :: steps_
@@ -521,13 +499,8 @@ contains
         indx = ng*ny*nz
         indy = nx*ng*nz
         indz = nx*ny*ng
-!       http://developer.download.nvidia.com/compute/cuda/2_3/toolkit...
-!       /docs/online/group__CUDART__MEMORY_ge4366f68c6fa8c85141448f187d2aa13.html
-!       IMPORTANT NOTE: Copies with kind == cudaMemcpyDeviceToDevice are asynchronous
-!       with respect to the host, but never overlap with kernel execution
-!       For this reason here simple copies are used and not cudaMemcpyAsync D2D
         if(ileftx == nrank_x) then
-          wbuf2r_gpu = wbuf1s_gpu ! inefficient, only 1 variable here to be copied
+          wbuf2r_gpu = wbuf1s_gpu
           wbuf1r_gpu = wbuf2s_gpu
         else
           call mpi_sendrecv(wbuf1s_gpu,indx,mpi_prec,ileftx ,1,wbuf2r_gpu,indx,mpi_prec,irightx,1,mp_cartx,istatus,self%mpi_err)
@@ -556,8 +529,7 @@ contains
   endsubroutine bcswap_var
 !
   subroutine copy_cpu_gpu(self)
-!   < Copy data from CPU to GPU.
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     integer :: i,j,k,iv
 !
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%field%grid%ng, nv => self%field%nv)
@@ -572,33 +544,15 @@ contains
       enddo
     endassociate
 !
-!   copy cpu to gpu
     self%w_gpu = self%w_t
 !
   endsubroutine copy_cpu_gpu
 !
-! subroutine copy_gpu_cpu_var(self, w_var_gpu, w_var)
-!   class(base_gpu_object), intent(inout) :: self
-!   real(rkind), dimension(1-self%ng:, 1-self%ng, 1-self%ng, :), device :: w_io_gpu
-!   ! copy gpu to cpu
-!   self%w_var_t = self%w_var_gpu
-!   associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng)
-!     do k=1-ng,nz+ng
-!       do j=1-ng,ny+ng
-!         do i=1-ng,nx+ng
-!           w_var(i,j,k) = self%w_var_t(i,j,k,iv)
-!         enddo
-!       enddo
-!     enddo
-!   endassociate
-! endsubroutine copy_gpu_cpu_var
 !
   subroutine copy_gpu_cpu(self)
-!   < Copy data from CPU to GPU.
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     integer :: i,j,k,iv
 !
-!   copy gpu to cpu
     self%w_t = self%w_gpu
 !
     associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%ng, nv => self%nv)
@@ -616,11 +570,10 @@ contains
   endsubroutine copy_gpu_cpu
 !
   subroutine initialize(self, field)
-!   < Initialize base backend.
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     class(field_object), target :: field
-    type(cudadeviceprop) :: device_properties !< Device properties.
-    real(rkind) :: device_mem_avail !< Device memory available (Gb).
+    type(cudadeviceprop) :: device_properties
+    real(rkind) :: device_mem_avail
 !
     self%field => field
     self%nx = self%field%nx
@@ -631,32 +584,29 @@ contains
 !
     call get_mpi_basic_info(self%nprocs, self%myrank, self%masterproc, self%mpi_err)
 !
-    call self%field%check_cpu_mem(description="--Base-initialization--")
+    call self%field%check_cpu_mem(description="--base-initialization--")
 !
-    call MPI_COMM_SPLIT_TYPE(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, self%local_comm, self%mpi_err)
-    call MPI_COMM_RANK(self%local_comm, self%mydev, self%mpi_err)
-    self%mpi_err = CudaSetDevice(self%mydev)
-    self%mpi_err = cudaGetDeviceProperties(device_properties, self%mydev)
+    call mpi_comm_split_type(mpi_comm_world, mpi_comm_type_shared, 0, mpi_info_null, self%local_comm, self%mpi_err)
+    call mpi_comm_rank(self%local_comm, self%mydev, self%mpi_err)
+    self%mpi_err = cudasetdevice(self%mydev)
+    self%mpi_err = cudagetdeviceproperties(device_properties, self%mydev)
 !
-    device_mem_avail = real(device_properties%totalGlobalMem, rkind)/(1024_rkind**3)
-!   write(*,'(A,F5.2,A)') ' available device memory ', device_mem_avail, ' Gb'
+    device_mem_avail = real(device_properties%totalglobalmem, rkind)/(1024_rkind**3)
 !
     call self%alloc()
 !
   endsubroutine initialize
 !
   subroutine check_gpu_mem(self, description)
-    class(base_gpu_object), intent(inout) :: self !< The base backend.
+    class(base_gpu_object), intent(inout) :: self
     character(*) :: description
     integer :: ierr
     integer(cuda_count_kind) :: mem_free, mem_total
     character(128) :: proc_name
     integer :: resultlen
-!   call mpi_barrier(mpi_comm_world, ierr)
     call mpi_get_processor_name(proc_name, resultlen, ierr)
-    ierr = cudaMemGetInfo(mem_free, mem_total)
-!   call mpi_barrier(mpi_comm_world, ierr)
-    write(error_unit, "(A,2x,A,2x,A,2x,I0,2x,I0,2x,I0)") 'GPU rank,mems: ', description,proc_name(1:&
+    ierr = cudamemgetinfo(mem_free, mem_total)
+    write(error_unit, "(a,2x,a,2x,a,2x,i0,2x,i0,2x,i0)") 'gpu rank,mems: ', description,proc_name(1:&
     &resultlen),self%myrank, mem_free, mem_total
   endsubroutine check_gpu_mem
 !
