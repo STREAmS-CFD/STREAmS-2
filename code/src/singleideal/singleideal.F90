@@ -212,10 +212,10 @@ contains
       call init_crandom_f(0,reproducible=.true.)
       if (self%masterproc) write(*,*) 'Random numbers disabled'
     elseif(self%rand_type < 0) then
-      call init_crandom_f(self%myrank,reproducible=.false.)
+      call init_crandom_f(self%myrank+1,reproducible=.false.)
       if (self%masterproc) write(*,*) 'Random numbers NOT reproducible'
     else
-      call init_crandom_f(self%myrank,reproducible=.true.)
+      call init_crandom_f(self%myrank+1,reproducible=.true.)
       if (self%masterproc) write(*,*) 'Random numbers reproducible'
     endif
 !
@@ -1977,7 +1977,7 @@ contains
         enddo
       enddo
 !
-      u0_02 = 0._rkind
+      u0_02 = 0.02_rkind*u0
       if (self%rand_type==0) u0_02 = 0._rkind
       do k=1,nz
         do j=1,ny

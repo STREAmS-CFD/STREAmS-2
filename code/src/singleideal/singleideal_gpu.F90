@@ -1010,10 +1010,10 @@ contains
         call init_crandom_f(0,reproducible=.true.)
         if (self%masterproc) write(*,*) 'random numbers disabled'
       elseif(self%equation_base%rand_type < 0) then
-        call init_crandom_f(self%myrank,reproducible=.false.)
+        call init_crandom_f(self%myrank+1,reproducible=.false.)
         if (self%masterproc) write(*,*) 'random numbers not reproducible'
       else
-        call init_crandom_f(self%myrank,reproducible=.true.)
+        call init_crandom_f(self%myrank+1,reproducible=.true.)
         if (self%masterproc) write(*,*) 'random numbers reproducible'
       endif
       icyc_loop = icyc

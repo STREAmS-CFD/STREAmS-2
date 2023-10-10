@@ -124,7 +124,7 @@ module postpro_bl
    rethetainc = reout*thetainc*ftheta
    rethetawall = reout*theta*rmue/rmuw
 !
-   write(10,100) x(i),cf,retau,shapef,shapefinc,delta99,dstar,theta,utau/u0,rethetainc,cfinc,rethetawall,prmsp/utau**2
+   write(10,100) x(i),cf,retau,shapef,shapefinc,delta99,dstar,theta,utau/u0,rethetainc,cfinc,rethetawall,prmsp
   enddo
   close(10)
 !
