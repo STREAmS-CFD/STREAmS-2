@@ -3113,9 +3113,9 @@ contains
           sig32 = vz
           sig33 = wz-2._rkind*div3l
           sigx = mux*sig11 + muy*sig12 + muz*sig13
-          sigy = mux*sig12 + muy*sig22 + muz*sig23
-          sigz = mux*sig13 + muy*sig23 + muz*sig33
-          sigah = (sig11*ux+sig12*uy+sig13*uz+sig12*vx+sig22*vy+sig23*vz+sig13*wx+sig23*wy+sig33*wz)*mu
+          sigy = mux*sig21 + muy*sig22 + muz*sig23
+          sigz = mux*sig31 + muy*sig32 + muz*sig33
+          sigah = (sig11*ux+sig12*uy+sig13*uz+sig21*vx+sig22*vy+sig23*vz+sig31*wx+sig32*wy+sig33*wz)*mu
           sigq = sigx*uu+sigy*vv+sigz*ww+sigah
           fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
           fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
@@ -3261,9 +3261,9 @@ contains
           sig32 = vz
           sig33 = wz-2._rkind*div3l
           sigx = mux*sig11 + muy*sig12 + muz*sig13
-          sigy = mux*sig12 + muy*sig22 + muz*sig23
-          sigz = mux*sig13 + muy*sig23 + muz*sig33
-          sigah = (sig11*ux+sig12*uy+sig13*uz+sig12*vx+sig22*vy+sig23*vz+sig13*wx+sig23*wy+sig33*wz)*mu
+          sigy = mux*sig21 + muy*sig22 + muz*sig23
+          sigz = mux*sig31 + muy*sig32 + muz*sig33
+          sigah = (sig11*ux+sig12*uy+sig13*uz+sig21*vx+sig22*vy+sig23*vz+sig31*wx+sig32*wy+sig33*wz)*mu
           sigq = sigx*uu+sigy*vv+sigz*ww+sigah
           fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
           fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
