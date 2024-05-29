@@ -1,5 +1,5 @@
 module streams_equation_singleideal_object
-!
+
   use streams_field_object
   use streams_grid_object
   use streams_parameters
@@ -8,55 +8,55 @@ module streams_equation_singleideal_object
   use crandom_f_mod
   use MPI
   use ISO_C_BINDING
-!
-!
-!
+
+
+
   implicit none
   private
   public :: equation_singleideal_object
   public :: VISC_POWER, VISC_SUTHERLAND, VISC_NO
   public :: RK_WRAY, RK_JAMESON, RK_SHU
   public :: slicexy_aux, slicexz_aux, sliceyz_aux
-  public :: ibm_MAX_PARBC
-!
+  public :: IBM_MAX_PARBC
+
   integer(ikind), parameter :: VISC_NO = 0_ikind
   integer(ikind), parameter :: VISC_POWER = 1_ikind
   integer(ikind), parameter :: VISC_SUTHERLAND = 2_ikind
-!
+
   integer(ikind), parameter :: RK_WRAY = 1_ikind
   integer(ikind), parameter :: RK_JAMESON = 2_ikind
   integer(ikind), parameter :: RK_SHU = 3_ikind
-!
-  integer(ikind), parameter :: ibm_MAX_PARBC = 3_ikind
-!
+
+  integer(ikind), parameter :: IBM_MAX_PARBC = 3_ikind
+
   real(rkind), dimension(:,:,:,:), allocatable :: slicexy_aux, slicexz_aux, sliceyz_aux
-!
+
   type :: equation_singleideal_object
     type(grid_object) :: grid
     type(field_object) :: field
     type(cfg_t) :: cfg
     type(cfg_t) :: flow_params_cfg
     type(cfg_t) :: field_info_cfg
-!
+
     integer(ikind) :: nx, ny, nz
     integer(ikind) :: ng
     integer(ikind) :: mpi_err
     integer(ikind) :: myrank
     integer(ikind) :: nprocs
     logical :: masterproc
-!
+
     integer(ikind) :: nv
     integer(ikind) :: nv_aux
     integer(ikind) :: nv_stat
     integer(ikind) :: nv_stat_3d
     integer(ikind) :: enable_stat_3d
-!
+
     real(rkind) :: dt
     real(rkind) :: cfl
     real(rkind) :: time0, time
     integer :: num_iter
     integer :: icyc0, icyc
-!
+
     integer(ikind) :: visc_order, conservative_viscous
     integer(ikind) :: ep_order, nkeep
     integer(ikind) :: weno_scheme, weno_version, flux_splitting
@@ -66,19 +66,20 @@ module streams_equation_singleideal_object
     integer :: eul_imin, eul_imax, eul_jmin, eul_jmax, eul_kmin, eul_kmax
     integer, dimension(6) :: force_zero_flux
     integer(ikind), dimension(:), allocatable :: supported_orders
-!
+
     real(rkind), dimension(1:4,4) :: coeff_deriv1
     real(rkind), dimension(0:4,4) :: coeff_deriv2
-!
+
     integer(ikind) :: rk_type
     integer(ikind) :: nrk
     real(rkind), allocatable, dimension(:) :: rhork,gamrk,alprk
     real(rkind), allocatable, dimension(:) :: ark,brk,crk
-!
+
     integer :: iter_dt_recompute, print_control
-!
-    real(rkind) :: dtsave, dtsave_restart, dtstat, dtslice
-    real(rkind) :: time_from_last_rst, time_from_last_write, time_from_last_stat, time_from_last_slice
+
+    real(rkind) :: dtsave, dtsave_restart, dtstat, dtslice, dtprobe
+    real(rkind) :: time_from_last_rst, time_from_last_write, time_from_last_stat
+    real(rkind) :: time_from_last_slice, time_from_last_probe
     integer :: restart_type
     integer :: io_type_r
     integer :: io_type_w
@@ -86,9 +87,10 @@ module streams_equation_singleideal_object
     integer :: itav
     integer :: enable_plot3d, enable_vtk
     real(rkind) :: residual_rhou,vmax
-!
+
     integer :: flow_init
     real(rkind) :: Mach, Reynolds, Prandtl, theta_wall
+    real(rkind) :: aoa
     real(rkind) :: Reynolds_friction
     real(rkind) :: rgas0
     real(rkind) :: rho0
@@ -98,6 +100,7 @@ module streams_equation_singleideal_object
     real(rkind) :: gam, gm, gm1, rfac
     real(rkind) :: T_wall, T_bulk_target, T_recovery
     real(rkind) :: powerlaw_vtexp, T_ref_dim, sutherland_S
+    real(rkind) :: rhomin, rhomax, tmin, tmax, pmin, pmax
     integer :: visc_model
     real(rkind) :: dpdx,rhobulk,ubulk,tbulk,volchan
     logical :: channel_case, bl_case, bl_laminar
@@ -105,29 +108,29 @@ module streams_equation_singleideal_object
     logical :: recyc
     integer :: i_recyc, ib_recyc
     real(rkind), dimension(:), allocatable :: winf, winf_past_shock
-!
+
     real(rkind), dimension(:,:,:,:), allocatable :: w_aux
     real(rkind), dimension(:,:,:), allocatable :: wmean
     integer, dimension(:,:,:), allocatable :: fluid_mask
     integer, dimension(:,:,:,:), allocatable :: ep_ord_change
     integer :: correct_bound_ord
-!
+
     real(rkind), dimension(:,:,:), allocatable :: w_stat
     real(rkind), dimension(:,:,:,:), allocatable :: w_stat_3d
-!
+
     integer, dimension(6) :: bctags, bctags_nr
-!
+
     real(rkind), dimension(:), allocatable :: deltavec, deltavvec, cfvec
-    real(rkind) :: betarecyc
+    real(rkind) :: betarecyc, glund1
     real(rkind), dimension(:), allocatable :: yplus_inflow
     real(rkind), dimension(:), allocatable :: eta_inflow
     real(rkind), dimension(:), allocatable :: yplus_recyc
-    real(rkind), dimension(:), allocatable :: eta_recyc
-    integer, dimension(:), allocatable :: map_j_inn, map_j_out
+    real(rkind), dimension(:), allocatable :: eta_recyc,eta_recyc_blend
+    integer, dimension(:), allocatable :: map_j_inn,map_j_out,map_j_out_blend
     integer :: jbl_inflow
     real(rkind), dimension(:), allocatable :: weta_inflow
     real(rkind), dimension(:,:,:), allocatable :: inflow_random_plane
-!
+
     integer :: calorically_perfect, indx_cp_l, indx_cp_r
     real(rkind), allocatable, dimension(:) :: cp_coeff, cv_coeff
     integer(ikind), dimension(:), allocatable :: igslice, jgslice, kgslice
@@ -136,16 +139,13 @@ module streams_equation_singleideal_object
     real(rkind), dimension(:,:), allocatable :: probe_coord, w_aux_probe
     real(rkind), dimension(:,:,:,:), allocatable :: probe_coeff
     integer, dimension(:,:), allocatable :: ijk_probe
-!
+    integer, dimension(:), allocatable :: moving_probe, id_probe
+
     integer :: debug_memory = 0
     integer :: mode_async = 0
-!
-!
-!
+
     logical :: time_is_freezed=.false.
-!
-!
-!
+
   contains
     procedure, pass(self) :: initialize
     procedure, pass(self) :: read_input
@@ -160,8 +160,9 @@ module streams_equation_singleideal_object
     procedure, pass(self) :: set_chan_prop
     procedure, pass(self) :: init_channel
     procedure, pass(self) :: init_wind_tunnel
-    procedure, pass(self) :: init_bl
     procedure, pass(self) :: init_bl_lam
+    procedure, pass(self) :: init_bl_old
+    procedure, pass(self) :: init_bl
     procedure, pass(self) :: init_cv
     procedure, pass(self) :: alloc
     procedure, pass(self) :: bc_preproc
@@ -177,13 +178,16 @@ module streams_equation_singleideal_object
     procedure, pass(self) :: read_stats_3d_serial
     procedure, pass(self) :: recyc_prepare
     procedure, pass(self) :: add_synthetic_perturbations
-    procedure, pass(self) :: sliceprobe_prepare
+    procedure, pass(self) :: slice_prepare
+    procedure, pass(self) :: probe_prepare
+    procedure, pass(self) :: probe_compute_coeff
     procedure, pass(self) :: correct_bc_order
-!
+    procedure, pass(self) :: time_is_freezed_fun
+
   endtype equation_singleideal_object
-!
+
 contains
-!
+
   subroutine initialize(self, filename)
     class(equation_singleideal_object), intent(inout) :: self
     character(*) , intent(in) :: filename
@@ -198,15 +202,15 @@ contains
     integer :: bctag_temp, order
     real(rkind) :: d1_temp(1:4), d2_temp(0:4)
     integer :: i
-!
+
     call get_mpi_basic_info(self%nprocs, self%myrank, self%masterproc, self%mpi_err)
-!
+
     call self%read_input(filename)
-!
+
     if (self%cfg%has_key("output","debug_memory")) call self%cfg%get("output","debug_memory",self%debug_memory)
-!
+
     if (self%cfg%has_key("numerics","mode_async")) call self%cfg%get("numerics","mode_async",self%mode_async)
-!
+
     call self%cfg%get("numerics","rand_type",self%rand_type)
     if(self%rand_type == 0) then
       call init_crandom_f(0,reproducible=.true.)
@@ -218,7 +222,7 @@ contains
       call init_crandom_f(self%myrank+1,reproducible=.true.)
       if (self%masterproc) write(*,*) 'Random numbers reproducible'
     endif
-!
+
     self%l0 = 1._rkind
     self%t0 = 1._rkind
     self%rho0 = 1._rkind
@@ -227,7 +231,7 @@ contains
     if (self%cfg%has_key("ref_prop","t0")) call self%cfg%get("ref_prop","t0",self%t0)
     if (self%cfg%has_key("ref_prop","rho0")) call self%cfg%get("ref_prop","rho0",self%rho0)
     if (self%cfg%has_key("ref_prop","rgas0")) call self%cfg%get("ref_prop","rgas0",self%rgas0)
-!
+
     call self%cfg%get("flow","flow_init",self%flow_init)
     if (self%flow_init<-1 .or.self%flow_init>2) call fail_input_any("flow_init not implemented")
     self%channel_case = .false.
@@ -237,10 +241,17 @@ contains
       self%bl_case = .true.
       self%bl_laminar = .false.
     endif
-!
+    if (self%flow_init == -1) then
+      if (self%cfg%has_key("flow","aoa")) then
+        call self%cfg%get("flow","aoa",self%aoa)
+      else
+        self%aoa = 0._rkind
+      endif
+    endif
+
     ystaggering = .false.
     if (self%channel_case) ystaggering = .true.
-!
+
     call self%cfg%get("bc","xmin",bctag_temp) ; self%bctags(1) = bctag_temp
     if (self%bctags(1)==9) self%bl_laminar = .true.
     call self%cfg%get("bc","xmax",bctag_temp) ; self%bctags(2) = bctag_temp
@@ -272,7 +283,7 @@ contains
     rebuild_ghost = .false.
     if (grid_type == GRID_FROMFILE) rebuild_ghost = .true.
     if (self%restart_type > 0) grid_type = GRID_FROMFILE
-!
+
     call self%cfg%get("grid","nxmax",nxmax)
     call self%cfg%get("grid","nymax",nymax)
     call self%cfg%get("grid","nzmax",nzmax)
@@ -281,7 +292,7 @@ contains
     call self%cfg%get("grid","domain_size_y",domain_size_y)
     call self%cfg%get("grid","domain_size_z",domain_size_z)
     call self%cfg%get("grid","metrics_order",metrics_order)
-!
+
     select case (grid_type)
     case(GRID_FROMFILE)
     case(GRID_UNIFORM)
@@ -300,29 +311,23 @@ contains
       call self%cfg%get("flow","Reynolds",rtemp) ; grid_vars(5) = rtemp
       call self%cfg%get("grid","ysmoosteps",rtemp) ; grid_vars(6) = rtemp
     end select
-!
-    call self%grid%initialize(periodic, nxmax, nymax, nzmax, ng, grid_type, domain_size_x, domain_si&
-    &ze_y, domain_size_z, self%l0, grid_vars, metrics_order, rebuild_ghost, ystaggering)
-!
+
+    call self%grid%initialize(periodic, nxmax, nymax, nzmax, ng, grid_type, domain_size_x,&
+    & domain_size_y, domain_size_z, self%l0, grid_vars, metrics_order, rebuild_ghost, ystaggering)
+
     self%nv = 5
     self%nv_aux = 10
     self%nv_stat = 70
-    self%nv_stat_3d = 14
-!
+    self%nv_stat_3d = 2
+
     call self%set_fluid_prop()
     call self%set_flow_params()
-!
+
     call self%cfg%get("numerics","ep_order",self%ep_order)
     if (self%cfg%has_key("numerics","nkeep")) then
       call self%cfg%get("numerics","nkeep",self%nkeep)
     else
       self%nkeep = 0
-    endif
-    if (self%calorically_perfect/=1) then
-      if (self%nkeep>0) then
-        if (self%masterproc) write(*,*) "nkeep forced equal to zero for non calorically perfect gas"
-        self%nkeep = 0
-      endif
     endif
     call self%cfg%get("numerics","weno_scheme",self%weno_scheme)
     call self%cfg%get("numerics","weno_version",self%weno_version)
@@ -342,32 +347,32 @@ contains
       self%coeff_deriv2(:,i) = d2_temp
     enddo
     call self%cfg%get("numerics","sensor_threshold",self%sensor_threshold)
-!
+
     call self%cfg%get("output","enable_plot3d",self%enable_plot3d)
     if (self%cfg%has_key("output","enable_stat_3d")) then
       call self%cfg%get("output","enable_stat_3d",self%enable_stat_3d)
     else
       self%enable_stat_3d = 0
     endif
-!
+
     call self%cfg%get("mpi","x_split",mpi_split_x) ; mpi_splits(1) = mpi_split_x
     call self%cfg%get("mpi","y_split",mpi_split_y) ; mpi_splits(2) = mpi_split_y
     call self%cfg%get("mpi","z_split",mpi_split_z) ; mpi_splits(3) = mpi_split_z
-!
+
     call self%field%initialize(self%grid, self%nv, mpi_splits)
-!
+
     call self%alloc()
-!
+
     call self%field%correct_bc(self%bctags)
     call self%field%correct_bc(self%bctags_nr)
-!
+
     call self%bc_preproc()
-!
+
     call self%cfg%get("numerics","rk_type",self%rk_type)
     call self%runge_kutta_initialize()
     call self%cfg%get("controls","cfl",self%cfl)
     call self%cfg%get("controls","num_iter",self%num_iter)
-!
+
     self%io_type_r = 2
     if (self%cfg%has_key("output","io_type_r")) then
       call self%cfg%get("output","io_type_r",self%io_type_r)
@@ -376,7 +381,7 @@ contains
     if (self%cfg%has_key("output","io_type_w")) then
       call self%cfg%get("output","io_type_w",self%io_type_w)
     endif
-!
+
     call self%initial_conditions()
     select case(self%restart_type)
     case(0)
@@ -388,6 +393,7 @@ contains
       self%time_from_last_write = 0._rkind
       self%time_from_last_stat = 0._rkind
       self%time_from_last_slice = 0._rkind
+      self%time_from_last_probe = 0._rkind
       self%w_stat = 0._rkind
       if (self%enable_stat_3d>0) self%w_stat_3d = 0._rkind
     case(1)
@@ -410,7 +416,7 @@ contains
       endif
       call self%read_field_info()
     endselect
-!
+
     self%recyc = .false.
     if (self%field%ncoords(1) == 0) then
       if(self%bctags(1) == 10) then
@@ -419,42 +425,49 @@ contains
     endif
     call mpi_bcast(self%recyc,1,mpi_logical,0,self%field%mp_cartx,self%mpi_err)
     if (self%recyc) call self%recyc_prepare()
-!
+
     self%time = self%time0
     self%icyc = self%icyc0
-!
+
     call self%cfg%get("output","dtsave",self%dtsave)
     call self%cfg%get("output","dtsave_restart",self%dtsave_restart)
     call self%cfg%get("output","dtstat",self%dtstat)
     call self%cfg%get("output","enable_plot3d",self%enable_plot3d)
     call self%cfg%get("output","enable_vtk",self%enable_vtk)
     call self%cfg%get("output","dtslice",self%dtslice)
+    if (self%cfg%has_key("output","dtprobe")) then
+      call self%cfg%get("output","dtprobe",self%dtprobe)
+    else
+      self%dtprobe = self%dtslice
+    endif
     call self%cfg%get("output","igslice",self%igslice)
     call self%cfg%get("output","jgslice",self%jgslice)
     call self%cfg%get("output","kgslice",self%kgslice)
-    call self%sliceprobe_prepare()
-!
+    call self%slice_prepare()
+    call self%probe_prepare()
+    call self%probe_compute_coeff()
+
     call self%cfg%get("output","print_control",self%print_control)
     call self%cfg%get("controls","iter_dt_recompute",self%iter_dt_recompute)
-!
+
     self%correct_bound_ord = 0
     if (self%cfg%has_key("bc","correct_bound_ord")) then
       call self%cfg%get("bc","correct_bound_ord",self%correct_bound_ord)
     endif
     if (self%correct_bound_ord>0) call self%correct_bc_order()
-!
-!
-!
+
+
+
   endsubroutine initialize
-!
+
   subroutine correct_bc_order(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer :: i,j,k
     integer :: stencil_size
-    associate(nx => self%field%nx, ny => self%field%ny,nz => self%field%nz, ng => self%grid%ng, ep_o&
-    &rder => self%ep_order, weno_scheme => self%weno_scheme, ncoords => self%field%ncoords, bctags => sel&
-    &f%bctags, nblocks => self%field%nblocks)
-!
+    associate(nx => self%field%nx, ny => self%field%ny,nz => self%field%nz, ng => self%grid%ng,&
+    & ep_order => self%ep_order, weno_scheme => self%weno_scheme, ncoords => self%field%ncoords,&
+    & bctags => self%bctags, nblocks => self%field%nblocks)
+
       stencil_size = max(ep_order/2, weno_scheme)
       if ((ncoords(1)==0).and.(any(bctags(1:2)/=0))) then
         self%ep_ord_change(0,:,:,1) = -stencil_size+1
@@ -492,36 +505,34 @@ contains
           self%ep_ord_change(:,:,nz-k,3) = -stencil_size+k
         enddo
       endif
-!
+
     endassociate
   end subroutine correct_bc_order
-!
-!
-!
-!
-!
-!
-!
-!
-  subroutine sliceprobe_prepare(self)
+
+
+
+
+
+
+
+  function time_is_freezed_fun(self)
     class(equation_singleideal_object), intent(inout) :: self
-!
+    integer :: i
+    logical :: time_is_freezed_fun
+    time_is_freezed_fun = .false.
+  endfunction time_is_freezed_fun
+
+  subroutine slice_prepare(self)
+    class(equation_singleideal_object), intent(inout) :: self
+
     integer :: i, j, k, l, ip, jp, kp, n
     integer :: ii, jj, kk, ll
     integer :: icord, jcord, kcord
     integer :: inum, jnum, knum
-    real(rkind) :: xp, yp, zp
-    real(rkind) :: x0, y0, z0, dxloc, dyloc, dzloc
-    real(rkind) :: xyz1, xyz2, xyz3
-    logical :: probe_exists
-    logical :: in_i, in_j, in_k
-    logical, dimension(:), allocatable :: in_ijk
-    real(rkind), dimension(8,8) :: amat3d
-    real(rkind), dimension(1,8) :: xtrasp3d,alftrasp3d
-!
-    associate(ng => self%grid%ng, nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, x =&
-    &> self%field%x, y => self%field%y, z => self%field%z)
-!
+
+    associate(ng => self%grid%ng, nx => self%field%nx, ny => self%field%ny, nz => self%field%nz,&
+    & x => self%field%x, y => self%field%y, z => self%field%z)
+
       inum = 0
       do i = 1,size(self%igslice)
         if (self%igslice(i)>0) then
@@ -585,7 +596,27 @@ contains
           endif
         endif
       enddo
-!
+
+    endassociate
+
+  endsubroutine slice_prepare
+
+  subroutine probe_prepare(self)
+    class(equation_singleideal_object), intent(inout) :: self
+
+    integer :: i, j, k, l, ip, jp, kp, n
+    integer :: ii, jj, kk, ll
+    integer :: inum, jnum, knum
+    real(rkind) :: xp, yp, zp
+    logical :: probe_exists
+    logical :: in_i, in_j, in_k
+    logical, dimension(:), allocatable :: in_ijk
+    integer :: mp
+    integer :: idp
+
+    associate(ng => self%grid%ng, nx => self%field%nx, ny => self%field%ny, nz => self%field%nz,&
+    & x => self%field%x, y => self%field%y, z => self%field%z)
+
       inquire(file='probe_list.dat',exist=probe_exists)
       self%num_probe = 0
       if (probe_exists) then
@@ -594,7 +625,7 @@ contains
         allocate(in_ijk(self%num_probe_tot))
         in_ijk = .false.
         do l=1,self%num_probe_tot
-          read(18,*) xp, yp, zp
+          read(18,*) idp, xp, yp, zp
           in_i = .false.
           in_j = .false.
           in_k = .false.
@@ -607,110 +638,148 @@ contains
           endif
         enddo
         close(18)
-!
+
         if (self%num_probe>0) then
+          allocate(self%moving_probe(self%num_probe))
+          allocate(self%id_probe(self%num_probe))
           allocate(self%probe_coord(3,self%num_probe))
           allocate(self%w_aux_probe(6,self%num_probe))
           allocate(self%ijk_probe(3,self%num_probe))
           allocate(self%probe_coeff(2,2,2,self%num_probe))
         endif
-!
+
         open(18,file='probe_list.dat')
         read(18,*) self%num_probe_tot
         n = 0
         do l=1,self%num_probe_tot
-          read(18,*) xp, yp, zp
+          read(18,*) idp, xp, yp, zp, mp
           if (in_ijk(l)) then
             n = n+1
+            self%id_probe(n) = idp
             self%probe_coord(1,n) = xp
             self%probe_coord(2,n) = yp
             self%probe_coord(3,n) = zp
-            call locateval(x(1:nx),nx,xp,ip)
-            call locateval(y(1:ny),ny,yp,jp)
-            call locateval(z(1:nz),nz,zp,kp)
-            self%ijk_probe(1,n) = ip
-            self%ijk_probe(2,n) = jp
-            self%ijk_probe(3,n) = kp
-            x0 = x(ip)
-            y0 = y(jp)
-            z0 = z(kp)
-            dxloc = x(ip+1)-x(ip)
-            dyloc = y(jp+1)-y(jp)
-            dzloc = z(kp+1)-z(kp)
-            xp = (xp-x0)/dxloc
-            yp = (yp-y0)/dyloc
-            zp = (zp-z0)/dzloc
-            xtrasp3d(1,1) = xp*yp*zp
-            xtrasp3d(1,2) = xp*yp
-            xtrasp3d(1,3) = xp*zp
-            xtrasp3d(1,4) = yp*zp
-            xtrasp3d(1,5) = xp
-            xtrasp3d(1,6) = yp
-            xtrasp3d(1,7) = zp
-            xtrasp3d(1,8) = 1._rkind
-            ll = 0
-            do kk=0,1
-              do jj=0,1
-                do ii=0,1
-                  ll = ll+1
-                  xyz1 = x(ip+ii)
-                  xyz2 = y(jp+jj)
-                  xyz3 = z(kp+kk)
-                  xyz1 = (xyz1-x0)/dxloc
-                  xyz2 = (xyz2-y0)/dyloc
-                  xyz3 = (xyz3-z0)/dzloc
-                  amat3d(ll,:) = [xyz1*xyz2*xyz3,xyz1*xyz2,xyz1*xyz3,xyz2*xyz3,xyz1,xyz2,xyz3,1._rkind]
-                enddo
-              enddo
-            enddo
-            call invmat(amat3d,8)
-            alftrasp3d = matmul(xtrasp3d,amat3d)
-            self%probe_coeff(1,1,1,n) = alftrasp3d(1,1)
-            self%probe_coeff(2,1,1,n) = alftrasp3d(1,2)
-            self%probe_coeff(1,2,1,n) = alftrasp3d(1,3)
-            self%probe_coeff(2,2,1,n) = alftrasp3d(1,4)
-            self%probe_coeff(1,1,2,n) = alftrasp3d(1,5)
-            self%probe_coeff(2,1,2,n) = alftrasp3d(1,6)
-            self%probe_coeff(1,2,2,n) = alftrasp3d(1,7)
-            self%probe_coeff(2,2,2,n) = alftrasp3d(1,8)
+            self%moving_probe(n) = mp
           endif
-!
         enddo
         close(18)
       endif
-!
-!
     endassociate
-!
-  endsubroutine sliceprobe_prepare
-!
+
+  endsubroutine probe_prepare
+
+  subroutine probe_compute_coeff(self)
+    class(equation_singleideal_object), intent(inout) :: self
+
+    integer :: i, j, k, l, ip, jp, kp, n
+    integer :: ii, jj, kk, ll
+    integer :: inum, jnum, knum
+    real(rkind) :: xp, yp, zp
+    real(rkind) :: x0, y0, z0, dxloc, dyloc, dzloc
+    real(rkind) :: xyz1, xyz2, xyz3
+    logical :: probe_exists
+    real(rkind), dimension(8,8) :: amat3d
+    real(rkind), dimension(1,8) :: xtrasp3d,alftrasp3d
+    integer :: moving_probe
+
+    associate(ng => self%grid%ng, nx => self%field%nx, ny => self%field%ny, nz => self%field%nz,&
+    & x => self%field%x, y => self%field%y, z => self%field%z)
+
+      do n=1,self%num_probe
+        xp = self%probe_coord(1,n)
+        yp = self%probe_coord(2,n)
+        zp = self%probe_coord(3,n)
+        call locateval(x(1:nx),nx,xp,ip)
+        call locateval(y(1:ny),ny,yp,jp)
+        call locateval(z(1:nz),nz,zp,kp)
+        self%ijk_probe(1,n) = ip
+        self%ijk_probe(2,n) = jp
+        self%ijk_probe(3,n) = kp
+        x0 = x(ip)
+        y0 = y(jp)
+        z0 = z(kp)
+        dxloc = x(ip+1)-x(ip)
+        dyloc = y(jp+1)-y(jp)
+        dzloc = z(kp+1)-z(kp)
+        xp = (xp-x0)/dxloc
+        yp = (yp-y0)/dyloc
+        zp = (zp-z0)/dzloc
+        xtrasp3d(1,1) = xp*yp*zp
+        xtrasp3d(1,2) = xp*yp
+        xtrasp3d(1,3) = xp*zp
+        xtrasp3d(1,4) = yp*zp
+        xtrasp3d(1,5) = xp
+        xtrasp3d(1,6) = yp
+        xtrasp3d(1,7) = zp
+        xtrasp3d(1,8) = 1._rkind
+        ll = 0
+        do kk=0,1
+          do jj=0,1
+            do ii=0,1
+              ll = ll+1
+              xyz1 = x(ip+ii)
+              xyz2 = y(jp+jj)
+              xyz3 = z(kp+kk)
+              xyz1 = (xyz1-x0)/dxloc
+              xyz2 = (xyz2-y0)/dyloc
+              xyz3 = (xyz3-z0)/dzloc
+              amat3d(ll,:) = [xyz1*xyz2*xyz3,xyz1*xyz2,xyz1*xyz3,xyz2*xyz3,xyz1,xyz2,xyz3,1._rkind]
+            enddo
+          enddo
+        enddo
+        call invmat(amat3d,8)
+        alftrasp3d = matmul(xtrasp3d,amat3d)
+        self%probe_coeff(1,1,1,n) = alftrasp3d(1,1)
+        self%probe_coeff(2,1,1,n) = alftrasp3d(1,2)
+        self%probe_coeff(1,2,1,n) = alftrasp3d(1,3)
+        self%probe_coeff(2,2,1,n) = alftrasp3d(1,4)
+        self%probe_coeff(1,1,2,n) = alftrasp3d(1,5)
+        self%probe_coeff(2,1,2,n) = alftrasp3d(1,6)
+        self%probe_coeff(1,2,2,n) = alftrasp3d(1,7)
+        self%probe_coeff(2,2,2,n) = alftrasp3d(1,8)
+      enddo
+
+    endassociate
+
+  endsubroutine probe_compute_coeff
+
   subroutine recyc_prepare(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer :: ig_recyc, j, k
-!
+    real(rkind) :: bexprecyc_base, my_eta0, my_deltablend
+    real(rkind) :: alfa_blend, beta_blend, c_blend
+
     call self%cfg%get("bc","x_recyc",self%x_recyc)
     self%x_recyc = self%x_recyc*self%l0
-!
+
     associate(ng => self%grid%ng, ny => self%field%ny, nz => self%field%nz)
       allocate(self%yplus_inflow(1-ng:ny+ng))
       allocate(self%eta_inflow(1-ng:ny+ng))
       allocate(self%yplus_recyc(1-ng:ny+ng))
       allocate(self%eta_recyc(1-ng:ny+ng))
+      allocate(self%eta_recyc_blend(1-ng:ny+ng))
       allocate(self%map_j_inn(1:ny))
       allocate(self%map_j_out(1:ny))
+      allocate(self%map_j_out_blend(1:ny))
       allocate(self%weta_inflow(1:ny))
       allocate(self%inflow_random_plane(1:ny,1:nz,3))
     endassociate
-!
+
     associate(xg => self%grid%xg, nxmax => self%grid%nxmax, nx => self%field%nx, ny => self%field%ny&
-    &, ng => self%grid%ng, xrecyc => self%x_recyc, i_recyc => self%i_recyc, ib_recyc => self%ib_recyc, de&
-    &ltavec => self%deltavec, deltavvec => self%deltavvec, betarecyc => self%betarecyc, y => self%field%y&
-    &, yplus_inflow => self%yplus_inflow, eta_inflow => self%eta_inflow, yplus_recyc => self%yplus_recyc,&
-    & eta_recyc => self%eta_recyc, l0 => self%l0, map_j_inn => self%map_j_inn, map_j_out => self%map_j_ou&
-    &t, weta_inflow => self%weta_inflow, inflow_random_plane => self%inflow_random_plane)
-!
+    &, ng => self%grid%ng, xrecyc => self%x_recyc, i_recyc => self%i_recyc, ib_recyc => self%ib_recyc,&
+    & deltavec => self%deltavec, deltavvec => self%deltavvec, betarecyc => self%betarecyc,&
+    & y => self%field%y, yplus_inflow => self%yplus_inflow, eta_inflow => self%eta_inflow,&
+    & yplus_recyc => self%yplus_recyc, eta_recyc => self%eta_recyc, l0 => self%l0, eta_recyc_blend => sel&
+    &f%eta_recyc_blend, map_j_out_blend => self%map_j_out_blend, map_j_inn => self%map_j_inn,&
+    & map_j_out => self%map_j_out, weta_inflow => self%weta_inflow, inflow_random_plane => self%inflow_ra&
+    &ndom_plane, glund1 => self%glund1)
+
       inflow_random_plane = 0.5_rkind
-!
+
+      bexprecyc_base = 0.13_rkind
+      my_eta0 = 0.08_rkind
+      my_deltablend = 1.10_rkind
+
       call locateval(xg(1:nxmax),nxmax,xrecyc,ig_recyc)
       ib_recyc = (ig_recyc-1)/nx
       i_recyc = ig_recyc-nx*ib_recyc
@@ -719,35 +788,44 @@ contains
         ig_recyc = i_recyc+nx*ib_recyc
       endif
       if (self%masterproc) write(*,*) 'Recycling station exactly at = ', xg(ig_recyc)
-!
+
       betarecyc = deltavvec(ig_recyc)/deltavvec(1)
+      glund1 = (deltavec(ig_recyc)/deltavec(1))**bexprecyc_base
       if (self%masterproc) write(*,*) 'Recycling beta factor = ', betarecyc
-      if (self%masterproc) write(*,*) 'Pirozzoli-Ceci beta factor = ', (deltavec(ig_recyc)/deltavec(1))**0.13_rkind
+      if (self%masterproc) write(*,*) 'Pirozzoli-Ceci beta factor = ', glund1
       if (self%masterproc) then
-        write(*,*) 'Urbin-Knight beta factor = ', ((1._rkind+(xrecyc/l0)*0.27_rkind**1.2_rkind/self%&
-        &Reynolds**0.2_rkind)**(5._rkind/6._rkind))**0.1_rkind
+        write(*,*) 'Urbin-Knight beta factor = ', ((1._rkind+(xrecyc/l0)*0.27_rkind**1.2_rkind/&
+        &self%Reynolds**0.2_rkind)**(5._rkind/6._rkind))**0.1_rkind
       endif
-!
+
       do j=1-ng,ny+ng
         yplus_inflow(j) = y(j)/deltavvec(1)
         eta_inflow(j) = y(j)/deltavec (1)
         yplus_recyc(j) = y(j)/deltavvec(ig_recyc)
         eta_recyc(j) = y(j)/deltavec (ig_recyc)
+        eta_recyc_blend(j) = y(j)*((deltavec(1)/deltavec(ig_recyc))**bexprecyc_base+0.5_rkind*&
+        &(1._rkind+tanh(log(abs(eta_recyc(j))/my_eta0)/my_deltablend))*((deltavec(1)/deltavec(ig_recyc))-&
+        &(deltavec(1)/deltavec(ig_recyc))**bexprecyc_base))
+
       enddo
+      alfa_blend = 4._rkind
+      beta_blend = .2_rkind
+      c_blend = 1._rkind-2._rkind*beta_blend
       do j=1,ny
         call locateval(yplus_recyc(1:ny),ny,yplus_inflow(j),map_j_inn(j))
         call locateval(eta_recyc(1:ny),ny,eta_inflow(j),map_j_out(j))
-        weta_inflow(j) = 0.5_rkind*(1._rkind+tanh((4._rkind*(eta_inflow(j)-0.2_rkind))/(0.2_rkind+et&
-        &a_inflow(j)*0.6_rkind))/tanh(4._rkind))
+        call locateval(eta_recyc_blend(1:ny),ny,eta_inflow(j),map_j_out_blend(j))
+        weta_inflow(j) = 0.5_rkind*(1._rkind+tanh((alfa_blend*(eta_inflow(j)-beta_blend))/&
+        &(beta_blend+eta_inflow(j)*c_blend))/tanh(alfa_blend))
       enddo
     endassociate
   endsubroutine recyc_prepare
-!
+
   subroutine alloc(self)
     class(equation_singleideal_object), intent(inout) :: self
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, nv &
-    &=> self%nv, nv_aux => self%nv_aux, nv_stat => self%nv_stat, nv_stat_3d => self%nv_stat_3d, enable_st&
-    &at_3d => self%enable_stat_3d)
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & nv => self%nv, nv_aux => self%nv_aux, nv_stat => self%nv_stat, nv_stat_3d => self%nv_stat_3d,&
+    & enable_stat_3d => self%enable_stat_3d)
       allocate(self%w_aux(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng, nv_aux))
       allocate(self%w_stat(nv_stat, 1:nx, 1:ny))
       allocate(self%fluid_mask(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))
@@ -757,7 +835,7 @@ contains
       self%ep_ord_change = 0
     endassociate
   endsubroutine alloc
-!
+
   subroutine read_stats(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer, dimension(3) :: sizes
@@ -784,7 +862,7 @@ contains
         starts(2) = 0 + ncoords(2)*subsizes(2)
         starts(3) = 0
         ntotxy = nx*ny
-!
+
         call mpi_type_create_subarray(3,sizes,subsizes,starts,mpi_order_fortran,mpi_prec,filetype,iermpi)
         call mpi_type_commit(filetype,iermpi)
         call mpi_file_open(mp_cartx,'stat.bin',mpi_mode_rdonly,mpi_info_null,mpi_io_file,iermpi)
@@ -797,7 +875,7 @@ contains
             offset = offset+size_real*ntotxy
           enddo
         enddo
-!
+
         call mpi_file_close(mpi_io_file,iermpi)
         call mpi_type_free(filetype,iermpi)
       endif
@@ -811,33 +889,33 @@ contains
       endif
       call mpi_barrier(mpi_comm_world, iermpi)
     endassociate
-!
+
   endsubroutine read_stats
-!
+
   subroutine read_stats_serial(self)
     class(equation_singleideal_object), intent(inout) :: self
     character(4) :: chx,chy
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat => self%nv_stat&
-    &, w_stat => self%w_stat, ncoords => self%field%ncoords, mp_cartz => self%field%mp_cartz, iermpi => s&
-    &elf%mpi_err)
-!
+    &, w_stat => self%w_stat, ncoords => self%field%ncoords, mp_cartz => self%field%mp_cartz,&
+    & iermpi => self%mpi_err)
+
       if (ncoords(3)==0) then
-!
+
         if (self%masterproc) write(*,*) 'Reading stat0_XXX_XXX.bin'
         1004 format(I4.4)
         write(chx,1004) ncoords(1)
         write(chy,1004) ncoords(2)
-!
+
         open (11,file='stat0_'//chx//'_'//chy//'.bin',form='unformatted')
         read(11) w_stat(1:nv_stat,1:nx,1:ny)
         close(11)
-!
+
       endif
       call mpi_bcast(w_stat,nv_stat*nx*ny,mpi_prec,0,mp_cartz,iermpi)
     endassociate
-!
+
   endsubroutine read_stats_serial
-!
+
   subroutine read_stats_3d(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer, dimension(3) :: sizes
@@ -850,11 +928,11 @@ contains
     integer :: size_real
     integer (kind=mpi_offset_kind) :: offset
     character(len=256) :: oldname, newname
-!
+
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat_3d => self%nv_s&
-    &tat_3d, w_stat_3d => self%w_stat_3d, mp_cart => self%field%mp_cart, ncoords => self%field%ncoords, n&
-    &blocks => self%field%nblocks, iermpi => self%mpi_err)
-!
+    &tat_3d, w_stat_3d => self%w_stat_3d, mp_cart => self%field%mp_cart, ncoords => self%field%ncoords,&
+    & nblocks => self%field%nblocks, iermpi => self%mpi_err)
+
       sizes(1) = nblocks(1)*nx
       sizes(2) = nblocks(2)*ny
       sizes(3) = nblocks(3)*nz
@@ -865,7 +943,7 @@ contains
       starts(2) = 0 + ncoords(2)*subsizes(2)
       starts(3) = 0 + ncoords(3)*subsizes(3)
       ntot3d = nx*ny*nz
-!
+
       call mpi_type_create_subarray(3,sizes,subsizes,starts,mpi_order_fortran,mpi_prec,filetype,iermpi)
       call mpi_type_commit(filetype,iermpi)
       call mpi_file_open(mp_cart,'stat3d.bin',mpi_mode_rdonly,mpi_info_null,mpi_io_file,iermpi)
@@ -878,7 +956,7 @@ contains
           offset = offset+size_real*ntot3d
         enddo
       enddo
-!
+
       call mpi_file_close(mpi_io_file,iermpi)
       call mpi_type_free(filetype,iermpi)
       if (self%masterproc) then
@@ -889,9 +967,9 @@ contains
       endif
       call mpi_barrier(mpi_comm_world, iermpi)
     endassociate
-!
+
   endsubroutine read_stats_3d
-!
+
   subroutine write_stats(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer, dimension(3) :: sizes
@@ -904,8 +982,8 @@ contains
     integer :: size_real
     integer (kind=mpi_offset_kind) :: offset
     associate(nx => self%field%nx, ny => self%field%ny, nv_stat => self%nv_stat, w_stat => self%w_st&
-    &at, mp_cartx => self%field%mp_cartx, ncoords => self%field%ncoords, nblocks => self%field%nblocks, i&
-    &ermpi => self%mpi_err)
+    &at, mp_cartx => self%field%mp_cartx, ncoords => self%field%ncoords, nblocks => self%field%nblocks,&
+    & iermpi => self%mpi_err)
       if (ncoords(3)==0) then
         sizes(1) = nblocks(1)*nx
         sizes(2) = nblocks(2)*ny
@@ -917,7 +995,7 @@ contains
         starts(2) = 0 + ncoords(2)*subsizes(2)
         starts(3) = 0
         ntotxy = nx*ny
-!
+
         call mpi_type_create_subarray(3,sizes,subsizes,starts,mpi_order_fortran,mpi_prec,filetype,iermpi)
         call mpi_type_commit(filetype,iermpi)
         call mpi_file_open(mp_cartx,'stat.bin',mpi_mode_create+mpi_mode_wronly,mpi_info_null,mpi_io_file,iermpi)
@@ -930,35 +1008,35 @@ contains
             offset = offset+size_real*ntotxy
           enddo
         enddo
-!
+
         call mpi_file_close(mpi_io_file,iermpi)
         call mpi_type_free(filetype,iermpi)
       endif
     endassociate
   endsubroutine write_stats
-!
+
   subroutine write_stats_serial(self)
     class(equation_singleideal_object), intent(inout) :: self
     character(4) :: chx,chy
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat => self%nv_stat&
     &, w_stat => self%w_stat, ncoords => self%field%ncoords, mp_cartz => self%field%mp_cartz)
-!
+
       if (ncoords(3)==0) then
-!
+
         if (self%masterproc) write(*,*) 'Writing stat1_XXX_XXX.bin'
         1004 format(I4.4)
         write(chx,1004) ncoords(1)
         write(chy,1004) ncoords(2)
-!
+
         open (11,file='stat1_'//chx//'_'//chy//'.bin',form='unformatted')
         write(11) w_stat(1:nv_stat,1:nx,1:ny)
         close(11)
-!
+
       endif
     endassociate
-!
+
   endsubroutine write_stats_serial
-!
+
   subroutine write_stats_3d(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer, dimension(3) :: sizes
@@ -971,9 +1049,9 @@ contains
     integer :: size_real
     integer (kind=mpi_offset_kind) :: offset
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat_3d => self%nv_s&
-    &tat_3d, w_stat_3d => self%w_stat_3d, mp_cart => self%field%mp_cart, ncoords => self%field%ncoords, n&
-    &blocks => self%field%nblocks, iermpi => self%mpi_err)
-!
+    &tat_3d, w_stat_3d => self%w_stat_3d, mp_cart => self%field%mp_cart, ncoords => self%field%ncoords,&
+    & nblocks => self%field%nblocks, iermpi => self%mpi_err)
+
       sizes(1) = nblocks(1)*nx
       sizes(2) = nblocks(2)*ny
       sizes(3) = nblocks(3)*nz
@@ -984,7 +1062,7 @@ contains
       starts(2) = 0 + ncoords(2)*subsizes(2)
       starts(3) = 0 + ncoords(3)*subsizes(3)
       ntot3d = nx*ny*nz
-!
+
       call mpi_type_create_subarray(3,sizes,subsizes,starts,mpi_order_fortran,mpi_prec,filetype,iermpi)
       call mpi_type_commit(filetype,iermpi)
       call mpi_file_open(mp_cart,'stat3d.bin',mpi_mode_create+mpi_mode_wronly,mpi_info_null,mpi_io_file,iermpi)
@@ -997,10 +1075,10 @@ contains
           offset = offset+size_real*ntot3d
         enddo
       enddo
-!
+
       call mpi_file_close(mpi_io_file,iermpi)
       call mpi_type_free(filetype,iermpi)
-!
+
     endassociate
   endsubroutine write_stats_3d
   subroutine write_stats_3d_serial(self)
@@ -1008,17 +1086,17 @@ contains
     character(4) :: chx,chy,chz
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat_3d => self%nv_s&
     &tat_3d, w_stat_3d => self%w_stat_3d, ncoords => self%field%ncoords)
-!
+
       if (self%masterproc) write(*,*) 'Writing stat3d1_XXX_XXX_XXX.bin'
       1004 format(I4.4)
       write(chx,1004) ncoords(1)
       write(chy,1004) ncoords(2)
       write(chz,1004) ncoords(3)
-!
+
       open (11,file='stat3d1_'//chx//'_'//chy//'_'//chz//'.bin',form='unformatted')
       write(11) w_stat_3d(1:nv_stat_3d,1:nx,1:ny,1:nz)
       close(11)
-!
+
     endassociate
   endsubroutine write_stats_3d_serial
   subroutine read_stats_3d_serial(self)
@@ -1026,17 +1104,17 @@ contains
     character(4) :: chx,chy,chz
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat_3d => self%nv_s&
     &tat_3d, w_stat_3d => self%w_stat_3d, ncoords => self%field%ncoords)
-!
+
       if (self%masterproc) write(*,*) 'Reading stat3d0_XXX_XXX_XXX.bin'
       1004 format(I4.4)
       write(chx,1004) ncoords(1)
       write(chy,1004) ncoords(2)
       write(chz,1004) ncoords(3)
-!
+
       open (11,file='stat3d0_'//chx//'_'//chy//'_'//chz//'.bin',form='unformatted')
       read(11) w_stat_3d(1:nv_stat_3d,1:nx,1:ny,1:nz)
       close(11)
-!
+
     endassociate
   endsubroutine read_stats_3d_serial
   subroutine compute_stats(self)
@@ -1047,16 +1125,16 @@ contains
     real(rkind), dimension(3,3) :: sig
     integer :: i,j,l,k,npt,lmax
     associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, nv_stat => self%nv_stat&
-    &, ng => self%grid%ng, nv_aux => self%nv_aux, w_stat => self%w_stat, nzmax => self%grid%nzmax, w => s&
-    &elf%field%w, visc_model => self%visc_model, powerlaw_vtexp => self%powerlaw_vtexp, mu0 => self%mu0, &
-    &T_ref_dim => self%T_ref_dim, itav => self%itav, mp_cartz => self%field%mp_cartz, sutherland_S => sel&
-    &f%sutherland_S, mpi_err => self%mpi_err, cv_coeff => self%cv_coeff, w_aux => self%w_aux, dcsidx => s&
-    &elf%field%dcsidx, detady => self%field%detady, dzitdz => self%field%dzitdz, indx_cp_l => self%indx_c&
-    &p_l, indx_cp_r => self%indx_cp_r, cp_coeff => self%cp_coeff, calorically_perfect => self%calorically&
-    &_perfect, rgas0 => self%rgas0, t0 => self%t0)
-!
+    &, ng => self%grid%ng, nv_aux => self%nv_aux, w_stat => self%w_stat, nzmax => self%grid%nzmax,&
+    & w => self%field%w, visc_model => self%visc_model, powerlaw_vtexp => self%powerlaw_vtexp,&
+    & mu0 => self%mu0, T_ref_dim => self%T_ref_dim, itav => self%itav, mp_cartz => self%field%mp_cartz,&
+    & sutherland_S => self%sutherland_S, mpi_err => self%mpi_err, cv_coeff => self%cv_coeff,&
+    & w_aux => self%w_aux, dcsidx => self%field%dcsidx, detady => self%field%detady, dzitdz => self%field&
+    &%dzitdz, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cp_coeff => self%cp_coeff,&
+    & calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
+
       lmax = self%visc_order/2
-!
+
       w_stat_z = 0._rkind
       do k=1,nz
         do j=1,ny
@@ -1104,8 +1182,8 @@ contains
             vv = rhov*ri
             ww = rhow*ri
             qq = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
-!
-!
+
+
             tt = w_aux(i,j,k,6)
             pp = rho*rgas0*tt
             mu = w_aux(i,j,k,7)
@@ -1207,51 +1285,41 @@ contains
           enddo
         enddo
       enddo
-!
+
       npt = nv_stat*nx*ny
       call mpi_allreduce(MPI_IN_PLACE,w_stat_z,npt,mpi_prec,mpi_sum,mp_cartz,mpi_err)
       w_stat_z = w_stat_z/nzmax
-!
+
       w_stat = w_stat*itav + w_stat_z
       w_stat = w_stat/(itav+1)
     endassociate
   endsubroutine compute_stats
-!
+
   subroutine compute_stats_3d(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer :: i,j,k
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, itav => self%itav, w_st&
-    &at_3d => self%w_stat_3d, w => self%field%w, w_aux => self%w_aux)
-!
+    real(rkind) :: pp
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, itav => self%itav,&
+    & w_stat_3d => self%w_stat_3d, w => self%field%w, w_aux => self%w_aux)
+
       do k=1,nz
         do j=1,ny
           do i=1,nx
-            w_stat_3d(1,i,j,k) = w_stat_3d(1,i,j,k) *itav + w(1,i,j,k)
-            w_stat_3d(2,i,j,k) = w_stat_3d(2,i,j,k) *itav + w(2,i,j,k)
-            w_stat_3d(3,i,j,k) = w_stat_3d(3,i,j,k) *itav + w(3,i,j,k)
-            w_stat_3d(4,i,j,k) = w_stat_3d(4,i,j,k) *itav + w(4,i,j,k)
-            w_stat_3d(5,i,j,k) = w_stat_3d(5,i,j,k) *itav + w(1,i,j,k)*w_aux(i,j,k,6)
-            w_stat_3d(6,i,j,k) = w_stat_3d(6,i,j,k) *itav + w(1,i,j,k)**2
-            w_stat_3d(7,i,j,k) = w_stat_3d(7,i,j,k) *itav + w(2,i,j,k)**2/w(1,i,j,k)
-            w_stat_3d(8,i,j,k) = w_stat_3d(8,i,j,k) *itav + w(3,i,j,k)**2/w(1,i,j,k)
-            w_stat_3d(9,i,j,k) = w_stat_3d(9,i,j,k) *itav + w(4,i,j,k)**2/w(1,i,j,k)
-            w_stat_3d(10,i,j,k) = w_stat_3d(10,i,j,k)*itav + w(2,i,j,k)*w(3,i,j,k)/w(1,i,j,k)
-            w_stat_3d(11,i,j,k) = w_stat_3d(11,i,j,k)*itav + w(2,i,j,k)*w(4,i,j,k)/w(1,i,j,k)
-            w_stat_3d(12,i,j,k) = w_stat_3d(12,i,j,k)*itav + w(3,i,j,k)*w(4,i,j,k)/w(1,i,j,k)
-            w_stat_3d(13,i,j,k) = w_stat_3d(13,i,j,k)*itav + w(1,i,j,k)*w_aux(i,j,k,6)**2
-            w_stat_3d(14,i,j,k) = w_stat_3d(14,i,j,k)*itav + (w(1,i,j,k)*w_aux(i,j,k,6))**2
+            pp = w(1,i,j,k)*w_aux(i,j,k,6)*self%rgas0
+            w_stat_3d(1,i,j,k) = w_stat_3d(1,i,j,k) *itav + pp
+            w_stat_3d(2,i,j,k) = w_stat_3d(2,i,j,k) *itav + pp*pp
           enddo
         enddo
       enddo
       w_stat_3d = w_stat_3d/(itav+1)
-!
+
     end associate
   end subroutine compute_stats_3d
-!
+
   subroutine read_field_info(self)
     class(equation_singleideal_object), intent(inout) :: self
     character(len=256) :: oldname, newname
-!
+
     if (self%io_type_r==1) self%field_info_cfg = parse_cfg("field_info0.dat")
     if (self%io_type_r==2) self%field_info_cfg = parse_cfg("field_info0.dat")
     call self%field_info_cfg%get("field_info","icyc0", self%icyc0)
@@ -1261,6 +1329,7 @@ contains
     call self%field_info_cfg%get("field_info","time_from_last_write", self%time_from_last_write)
     call self%field_info_cfg%get("field_info","time_from_last_stat", self%time_from_last_stat)
     call self%field_info_cfg%get("field_info","time_from_last_slice", self%time_from_last_slice)
+    call self%field_info_cfg%get("field_info","time_from_last_probe", self%time_from_last_probe)
     call self%field_info_cfg%get("field_info","istore", self%istore)
     call mpi_barrier(mpi_comm_world, self%mpi_err)
     if (self%io_type_r==2) then
@@ -1273,7 +1342,7 @@ contains
       call mpi_barrier(mpi_comm_world, self%mpi_err)
     endif
   endsubroutine read_field_info
-!
+
   subroutine write_field_info(self)
     class(equation_singleideal_object), intent(inout) :: self
     if(self%masterproc) then
@@ -1284,12 +1353,13 @@ contains
       call self%field_info_cfg%set("field_info","time_from_last_write", self%time_from_last_write)
       call self%field_info_cfg%set("field_info","time_from_last_stat", self%time_from_last_stat)
       call self%field_info_cfg%set("field_info","time_from_last_slice", self%time_from_last_slice)
+      call self%field_info_cfg%set("field_info","time_from_last_probe", self%time_from_last_probe)
       call self%field_info_cfg%set("field_info","istore", self%istore)
       if (self%io_type_w==1) call self%field_info_cfg%write("field_info1.dat")
       if (self%io_type_w==2) call self%field_info_cfg%write("field_info0.dat")
     endif
   endsubroutine write_field_info
-!
+
   function get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
     real(rkind), intent(in) :: tt, t0
     integer, intent(in) :: indx_cp_l, indx_cp_r,calorically_perfect
@@ -1297,11 +1367,11 @@ contains
     real(rkind) :: get_e_from_temperature
     real(rkind) :: ee
     integer :: l
-!
+
+    ee = cv_coeff(indx_cp_r+1)
     if (calorically_perfect==1) then
-      ee = cv_coeff(0)* tt
+      ee = ee+cv_coeff(0)*(tt/t0-1._rkind)
     else
-      ee = cv_coeff(indx_cp_r+1)
       do l=indx_cp_l, indx_cp_r
         if (l==-1) then
           ee = ee+cv_coeff(l)*log(tt/t0)
@@ -1309,21 +1379,22 @@ contains
           ee = ee+cv_coeff(l)/(l+1._rkind)*((tt/t0)**(l+1)-1._rkind)
         endif
       enddo
-      ee = ee*t0
     endif
+    ee = ee*t0
     get_e_from_temperature = ee
   endfunction get_e_from_temperature
-!
+
   subroutine set_fluid_prop(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer :: l, num_coeff_cp
     real(rkind) :: cp_tref, cv_tref, hstar_over_rgas_tref_dim, bcoeff
     real(rkind), allocatable, dimension(:) :: cp_temp
-    associate(Prandtl => self%Prandtl, gam => self%gam, visc_model => self%visc_model, sutherland_S &
-    &=> self%sutherland_S, calorically_perfect => self%calorically_perfect, powerlaw_vtexp => self%powerl&
-    &aw_vtexp, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, T_ref_dim => self%T_ref_dim, gm &
-    &=> self%gm, gm1 => self%gm1, rfac => self%rfac, rgas0 => self%rgas0, cfg => self%cfg,t0 => self%t0)
-!
+    associate(Prandtl => self%Prandtl, gam => self%gam, visc_model => self%visc_model,&
+    & sutherland_S => self%sutherland_S, calorically_perfect => self%calorically_perfect,&
+    & powerlaw_vtexp => self%powerlaw_vtexp, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r,&
+    & T_ref_dim => self%T_ref_dim, gm => self%gm, gm1 => self%gm1, rfac => self%rfac, rgas0 => self%rgas0&
+    &, cfg => self%cfg,t0 => self%t0)
+
       call cfg%get("flow","T_ref",T_ref_dim)
       call cfg%get("fluid","Prandtl",Prandtl)
       call cfg%get("fluid","gam",gam)
@@ -1345,13 +1416,10 @@ contains
       allocate(self%cv_coeff(indx_cp_l:indx_cp_r+1))
       self%cp_coeff = 0._rkind
       self%cv_coeff = 0._rkind
-      bcoeff = 1._rkind
       if (calorically_perfect==0) then
         call cfg%get("fluid","cp_coeff",cp_temp)
         num_coeff_cp = size(cp_temp)
-        if (num_coeff_cp==(indx_cp_r-indx_cp_l+1)) then
-          self%cp_coeff(indx_cp_l:indx_cp_r) = cp_temp(1:num_coeff_cp)
-        elseif (num_coeff_cp==(indx_cp_r-indx_cp_l+2)) then
+        if (num_coeff_cp==(indx_cp_r-indx_cp_l+2)) then
           self%cp_coeff(indx_cp_l:indx_cp_r+1) = cp_temp(1:num_coeff_cp)
           hstar_over_rgas_tref_dim = self%cp_coeff(indx_cp_r+1)
           do l = indx_cp_l, indx_cp_r
@@ -1386,54 +1454,56 @@ contains
       if (calorically_perfect==1) then
         self%cv_coeff(0) = gm
         self%cp_coeff(0) = gm*gam
+        bcoeff = self%cv_coeff(0)+1._rkind
       endif
       self%cp_coeff(indx_cp_r+1) = bcoeff
       self%cv_coeff(indx_cp_r+1) = (bcoeff-1._rkind)
-!
+
       self%cv_coeff = self%cv_coeff*rgas0
       self%cp_coeff = self%cp_coeff*rgas0
     endassociate
-!
+
   endsubroutine set_fluid_prop
-!
+
   subroutine set_flow_params(self)
     class(equation_singleideal_object), intent(inout) :: self
     real(rkind) :: gm1h
     real(rkind) :: c0, e0, etot0, k0
     allocate(self%winf(self%nv))
     allocate(self%winf_past_shock(self%nv))
-    associate(Mach => self%Mach, Reynolds => self%Reynolds, theta_wall => self%theta_wall, t0 => sel&
-    &f%t0, rho0 => self%rho0, l0 => self%l0, p0 => self%p0, u0 => self%u0, mu0 => self%mu0, powerlaw_vtex&
-    &p => self%powerlaw_vtexp, T_ref_dim => self%T_ref_dim, rgas0 => self%rgas0, rfac => self%rfac, gm1 =&
-    &> self%gm1, gam => self%gam, T_recovery => self%T_recovery, T_wall => self%T_wall, winf => self%winf&
-    &, flow_params_cfg => self%flow_params_cfg, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r,&
-    & Prandtl => self%Prandtl, cv_coeff => self%cv_coeff, calorically_perfect => self%calorically_perfect&
-    &, cfg => self%cfg, winf_past_shock => self%winf_past_shock, cp_coeff => self%cp_coeff)
+    associate(Mach => self%Mach, Reynolds => self%Reynolds, theta_wall => self%theta_wall,&
+    & t0 => self%t0, rho0 => self%rho0, l0 => self%l0, p0 => self%p0, u0 => self%u0, mu0 => self%mu0,&
+    & powerlaw_vtexp => self%powerlaw_vtexp, T_ref_dim => self%T_ref_dim, rgas0 => self%rgas0,&
+    & rfac => self%rfac, gm1 => self%gm1, gam => self%gam, T_recovery => self%T_recovery,&
+    & T_wall => self%T_wall, winf => self%winf, flow_params_cfg => self%flow_params_cfg,&
+    & indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, Prandtl => self%Prandtl,&
+    & cv_coeff => self%cv_coeff, calorically_perfect => self%calorically_perfect, aoa => self%aoa,&
+    & cfg => self%cfg, winf_past_shock => self%winf_past_shock, cp_coeff => self%cp_coeff)
       call cfg%get("flow","Reynolds",Reynolds)
       call cfg%get("flow","Mach",Mach)
       call cfg%get("flow","theta_wall",theta_wall)
       if (self%bctags(4)==7) call self%set_oblique_shock()
-!
+
       gm1h = 0.5_rkind*gm1
       T_recovery = t0 * (1._rkind+gm1h*rfac*Mach**2)
       T_wall = theta_wall * (T_recovery-t0) + t0
-!
+
       select case(self%flow_init)
       case(0)
         call self%set_chan_prop()
       case(1)
         call self%set_bl_prop()
       end select
-!
+
       p0 = rho0*rgas0*t0
       c0 = sqrt(gam*rgas0*t0)
       u0 = Mach*c0
       e0 = get_e_from_temperature(t0, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
       etot0 = e0+0.5_rkind*u0**2
-!
+
       winf(1) = rho0
-      winf(2) = rho0*u0
-      winf(3) = 0._rkind
+      winf(2) = rho0*u0*cos(aoa*pi/180._rkind)
+      winf(3) = rho0*u0*sin(aoa*pi/180._rkind)
       winf(4) = 0._rkind
       winf(5) = rho0*etot0
       if (abs(u0)<tol_iter) then
@@ -1464,26 +1534,27 @@ contains
         call flow_params_cfg%set("flow_params","Reynolds", Reynolds)
         call flow_params_cfg%set("flow_params","Mach", Mach)
         call flow_params_cfg%set("flow_params","Prandtl", Prandtl)
-!
+
         call flow_params_cfg%write("flow_params.dat")
       endif
-!
+
     endassociate
-!
+
   endsubroutine set_flow_params
-!
+
   subroutine set_bl_prop(self)
     class(equation_singleideal_object), intent(inout) :: self
     real(rkind) :: Re_out, s2tinf, Trat
-    real(rkind), allocatable, dimension(:) :: uvec, rhovec, tvec, viscvec, yl0
-    real(rkind) :: cf, thrat
-    integer :: l, i, m
+    real(rkind), allocatable, dimension(:) :: uvec, rhovec, tvec, viscvec, yl0, yvec
+    real(rkind) :: cf,thrat,retheta,redelta,th,ch,mtau,deltav,spr
+    integer :: l,i,m,imode,icompute
     logical :: visc_exp
-!
-    associate(nymax => self%grid%nymax, Reynolds_friction => self%Reynolds_friction, Reynolds => sel&
-    &f%Reynolds, l0 => self%l0, Mach => self%Mach, powerlaw_vtexp => self%powerlaw_vtexp, gam => self%gam&
-    &, rfac => self%rfac, yg => self%grid%yg)
-      allocate(uvec(nymax),tvec(nymax),rhovec(nymax),viscvec(nymax),yl0(nymax))
+
+    associate(nymax => self%grid%nymax, Reynolds_friction => self%Reynolds_friction,&
+    & Reynolds => self%Reynolds, l0 => self%l0, Mach => self%Mach, powerlaw_vtexp => self%powerlaw_vtexp,&
+    & gam => self%gam, rfac => self%rfac, yg => self%grid%yg, theta_wall => self%theta_wall,&
+    & Prandtl => self%Prandtl)
+      allocate(uvec(nymax),tvec(nymax),rhovec(nymax),viscvec(nymax),yl0(nymax),yvec(nymax))
       visc_exp = .false.
       if (self%visc_model == VISC_POWER) visc_exp = .true.
       if (self%bl_case) then
@@ -1493,15 +1564,20 @@ contains
           Reynolds_friction = Reynolds
           Trat = self%T_wall/self%T_recovery
           yl0 = yg(1:nymax)/l0
-          call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac,n&
-          &ymax,yl0(1:nymax),uvec,rhovec,tvec,viscvec,Re_out,cf,thrat)
-          Reynolds = Re_out
+          imode = 0
+          icompute = 0
+          yvec = yg(1:nymax)
+          spr = 0.8_rkind
+          call hasan_meanprofile(nymax,l0,Mach,theta_wall,Reynolds_friction,retheta,redelta,Prandtl,&
+          &spr,rfac,gam,powerlaw_vtexp,visc_exp,s2tinf,yvec,uvec,tvec,rhovec,viscvec,th,cf,ch,mtau,deltav,&
+          &imode,icompute)
+          Reynolds = redelta
         endif
         if (self%masterproc) write(*,*) 'Reynolds based on free-stream properties: ', Reynolds
       endif
     endassociate
   endsubroutine set_bl_prop
-!
+
   subroutine set_chan_prop(self)
     class(equation_singleideal_object), intent(inout) :: self
     real(rkind) :: s2tinf, Re_out
@@ -1510,12 +1586,12 @@ contains
     real(rkind) :: gamloc,gamlocold,gamlocgm1
     logical :: visc_exp
     integer :: l, max_iter
-    associate(T_wall => self%T_wall, t0 => self%t0, theta_wall => self%theta_wall, T_bulk_target => &
-    &self%T_bulk_target, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cp_coeff => self%cp_co&
-    &eff, calorically_perfect => self%calorically_perfect, Mach => self%Mach, gam => self%gam, rfac => se&
-    &lf%rfac, Reynolds => self%Reynolds, Reynolds_friction => self%Reynolds_friction, powerlaw_vtexp => s&
-    &elf%powerlaw_vtexp, gm1 => self%gm1, rgas0 => self%rgas0, yg => self%grid%yg, nymax => self%grid%nym&
-    &ax, yn => self%grid%yn)
+    associate(T_wall => self%T_wall, t0 => self%t0, theta_wall => self%theta_wall,&
+    & T_bulk_target => self%T_bulk_target, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r,&
+    & cp_coeff => self%cp_coeff, calorically_perfect => self%calorically_perfect, Mach => self%Mach,&
+    & gam => self%gam, rfac => self%rfac, Reynolds => self%Reynolds, Reynolds_friction => self%Reynolds_f&
+    &riction, powerlaw_vtexp => self%powerlaw_vtexp, gm1 => self%gm1, rgas0 => self%rgas0,&
+    & yg => self%grid%yg, nymax => self%grid%nymax, yn => self%grid%yn)
       self%T_wall = self%t0
       if (theta_wall>=-1._rkind) then
         thtmp = theta_wall
@@ -1552,12 +1628,12 @@ contains
       if (self%visc_model == VISC_POWER) visc_exp = .true.
       s2tinf = self%sutherland_S/self%T_ref_dim
       Reynolds_friction = Reynolds
-      call get_reynolds_cha(Reynolds_friction,rmb,tw_over_tr,s2tinf,powerlaw_vtexp,visc_exp,gam,rfac&
-      &, nymax/2,yn(1:nymax/2+1),Re_out)
+      call get_reynolds_cha(Reynolds_friction,rmb,tw_over_tr,s2tinf,powerlaw_vtexp,visc_exp,gam,&
+      &rfac, nymax/2,yn(1:nymax/2+1),Re_out)
       Reynolds = Re_out
       if (self%masterproc) write(*,*) 'Re bulk (viscosity evaluated at Twall) = ', Reynolds
     endassociate
-!
+
   endsubroutine set_chan_prop
   subroutine set_oblique_shock(self)
     class(equation_singleideal_object), intent(inout) :: self
@@ -1567,13 +1643,13 @@ contains
     real(rkind) :: rho_past_shock, e_past_shock, etot_past_shock, xshock_top
     real(rkind) :: xx, tanhf
     integer :: ig_shock
-!
-    associate(Mach => self%Mach, u0 => self%u0, rho0 => self%rho0, gam => self%gam, gm => self%gm, g&
-    &m1 => self%gm1, nymax => self%grid%nymax, yg => self%grid%yg, winf => self%winf, indx_cp_l => self%i&
-    &ndx_cp_l, indx_cp_r => self%indx_cp_r, xshock_imp => self%xshock_imp, shock_angle => self%shock_angl&
-    &e, winf_past_shock => self%winf_past_shock, nxmax => self%grid%nxmax, tanhfacs => self%tanhfacs, cfg&
-    & => self%cfg, rgas0 => self%rgas0, calorically_perfect => self%calorically_perfect, t0 => self%t0, l&
-    &0 => self%l0)
+
+    associate(Mach => self%Mach, u0 => self%u0, rho0 => self%rho0, gam => self%gam, gm => self%gm,&
+    & gm1 => self%gm1, nymax => self%grid%nymax, yg => self%grid%yg, winf => self%winf,&
+    & indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, xshock_imp => self%xshock_imp,&
+    & shock_angle => self%shock_angle, winf_past_shock => self%winf_past_shock, nxmax => self%grid%nxmax,&
+    & tanhfacs => self%tanhfacs, cfg => self%cfg, rgas0 => self%rgas0, calorically_perfect => self%calori&
+    &cally_perfect, t0 => self%t0, l0 => self%l0)
       call cfg%get("flow","xshock_imp",xshock_imp)
       xshock_imp = xshock_imp*l0
       call cfg%get("flow","shock_angle",shock_angle)
@@ -1621,9 +1697,9 @@ contains
         close(18)
       endif
     endassociate
-!
+
   endsubroutine set_oblique_shock
-!
+
   subroutine initial_conditions(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer :: l
@@ -1770,24 +1846,24 @@ contains
   end subroutine get_reynolds_cha
   subroutine init_bl_lam(self)
     class(equation_singleideal_object), intent(inout) :: self
-!
+
     integer :: i,j,k,n,nst,ii
     integer :: ne
     real(rkind) :: etad, deta, Tinf_dim, Twall_dim, etaedge, xbl
     real(rkind) :: xx, yy, etast, wl, wr, ust, vst, tst, rst
     real(rkind) :: rho,uu,vv,ww,rhouu,rhovv,rhoww,ee,tt
     real(rkind), allocatable, dimension(:) :: ubl,tbl,vbl,eta
-!
+
     allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
-!
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, x =&
-    &> self%field%x, y => self%field%y, z => self%field%z, Reynolds => self%Reynolds, xg => self%grid%xg,&
-    & nxmax => self%grid%nxmax, rho0 => self%rho0, u0 => self%u0, p0 => self%p0, gm => self%gm, wmean => &
-    &self%wmean, w => self%field%w, Mach => self%Mach, gam => self%gam, rfac => self%rfac, Prandtl => sel&
-    &f%Prandtl, w_aux => self%w_aux, deltavec => self%deltavec ,deltavvec => self%deltavvec, cfvec => sel&
-    &f%cfvec, t0 => self%t0, T_ref_dim => self%T_ref_dim, T_wall => self%T_wall, l0 => self%l0, indx_cp_l&
-    & => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, calorically_perfect => s&
-    &elf%calorically_perfect, rgas0 => self%rgas0)
+
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & x => self%field%x, y => self%field%y, z => self%field%z, Reynolds => self%Reynolds,&
+    & xg => self%grid%xg, nxmax => self%grid%nxmax, rho0 => self%rho0, u0 => self%u0, p0 => self%p0,&
+    & gm => self%gm, wmean => self%wmean, w => self%field%w, Mach => self%Mach, gam => self%gam,&
+    & rfac => self%rfac, Prandtl => self%Prandtl, w_aux => self%w_aux, deltavec => self%deltavec ,&
+    &deltavvec => self%deltavvec, cfvec => self%cfvec, t0 => self%t0, T_ref_dim => self%T_ref_dim,&
+    & T_wall => self%T_wall, l0 => self%l0, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r,&
+    & cv_coeff => self%cv_coeff, calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0)
       etad = 20._rkind
       deta = 0.02_rkind
       ne = nint(etad/deta)
@@ -1843,12 +1919,177 @@ contains
           enddo
         enddo
       enddo
-!
+
     endassociate
   endsubroutine init_bl_lam
   subroutine init_bl(self)
     class(equation_singleideal_object), intent(inout) :: self
-!
+
+    real(rkind), dimension(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1) :: thvec, retauvec
+    real(rkind), dimension(self%field%ny) :: yvec, uvec, rhovec, tvec, viscvec
+    real(rkind), dimension(3) :: rr
+    real(rkind) :: spr
+    real(rkind) :: cf,ch,mtau,deltav
+    real(rkind) :: retheta,retau,redelta,retauold,delta,th,retheta_inflow,deltaold
+    real(rkind) :: vi,vi_j,vi_jm
+    real(rkind) :: rho,uu,vv,ww,rhouu,rhovv,rhoww,ee,tt
+    real(rkind) :: u0_02
+    real(rkind) :: s2tinf,vtexp
+    integer :: i,j,k,ii,imode,icompute
+    logical :: visc_exp
+    logical :: file_exists
+
+    allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
+    allocate(self%deltavec(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1))
+    allocate(self%deltavvec(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1))
+    allocate(self%cfvec(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1))
+
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & y => self%field%y, z => self%field%z, Reynolds_friction => self%Reynolds_friction,&
+    & xg => self%grid%xg, nxmax => self%grid%nxmax, rho0 => self%rho0, u0 => self%u0, p0 => self%p0,&
+    & gm => self%gm, l0 => self%l0, wmean => self%wmean, w => self%field%w, Mach => self%Mach,&
+    & gam => self%gam, rfac => self%rfac, Prandtl => self%Prandtl, w_aux => self%w_aux,&
+    & deltavec => self%deltavec ,deltavvec => self%deltavvec, cfvec => self%cfvec, indx_cp_l => self%indx&
+    &_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, calorically_perfect => self%calorical&
+    &ly_perfect, rgas0 => self%rgas0, t0 => self%t0, jbl_inflow => self%jbl_inflow, theta_wall => self%th&
+    &eta_wall)
+
+      call locateval(y(1:ny),ny,l0,jbl_inflow)
+
+      spr = 0.8_rkind
+      yvec = y(1:ny)
+
+      s2tinf = self%sutherland_S/self%T_ref_dim
+      vtexp = self%powerlaw_vtexp
+      visc_exp = .false.
+      if (self%visc_model == VISC_POWER) visc_exp = .true.
+      inquire(file='blvec.bin',exist=file_exists)
+      if (file_exists) then
+        open(183,file='blvec.bin',form='unformatted')
+        read(183) cfvec,thvec,deltavec,deltavvec
+        close(183)
+      else
+        imode = 0
+        icompute = 0
+        call hasan_meanprofile(ny,l0,Mach,theta_wall,Reynolds_friction,retheta,redelta,Prandtl,spr,&
+        &rfac,gam,vtexp,visc_exp,s2tinf,yvec,uvec,tvec,rhovec,viscvec,th,cf,ch,mtau,deltav,imode,icompute)
+        retheta_inflow = retheta
+        deltavec(1) = l0
+        deltavvec(1) = deltav
+        cfvec(1) = cf
+        thvec(1) = th
+        retauvec(1) = Reynolds_friction
+
+        retheta = retheta_inflow
+        do i=1,ng
+          thvec(1-i) = thvec(2-i)-0.5_rkind*abs((xg(1-i)-xg(2-i)))*cfvec(2-i)
+          retheta = retheta/thvec(2-i)*thvec(1-i)
+          delta = deltavec(2-i)/thvec(2-i)*thvec(1-i)
+          do
+            deltaold = delta
+            imode = 1
+            icompute = 0
+            call hasan_meanprofile(ny,delta,Mach,theta_wall,retau,retheta,redelta,Prandtl,spr,rfac,&
+            &gam,vtexp,visc_exp,s2tinf,yvec,uvec,tvec,rhovec,viscvec,th,cf,ch,mtau,deltav,imode,icompute)
+            delta = deltavec(2-i)*retau/retauvec(2-i)*sqrt(cfvec(2-i)/cf)
+            if (abs(delta-deltaold)<0.000000001_rkind) exit
+          enddo
+          deltavec (1-i) = delta
+          cfvec (1-i) = cf
+          deltavvec(1-i) = deltav
+          retauvec (1-i) = retau
+        enddo
+
+        if (self%masterproc) open(182,file='cfstart.dat')
+        if (self%masterproc) write(182,100) xg(1),deltavec(1),deltavvec(1),cfvec(1),thvec(1)
+        retheta = retheta_inflow
+        do i=2,nxmax+ng+1
+          thvec(i) = thvec(i-1)+0.5_rkind*abs((xg(i)-xg(i-1)))*cfvec(i-1)
+          retheta = retheta/thvec(i-1)*thvec(i)
+          delta = deltavec(i-1)/thvec(i-1)*thvec(i)
+          do
+            deltaold = delta
+            imode = 1
+            icompute = 0
+            call hasan_meanprofile(ny,delta,Mach,theta_wall,retau,retheta,redelta,Prandtl,spr,rfac,&
+            &gam,vtexp,visc_exp,s2tinf,yvec,uvec,tvec,rhovec,viscvec,th,cf,ch,mtau,deltav,imode,icompute)
+            delta = deltavec(i-1)*retau/retauvec(i-1)*sqrt(cfvec(i-1)/cf)
+            if (abs(delta-deltaold)<0.000000001_rkind) exit
+          enddo
+          deltavec(i) = delta
+          cfvec (i) = cf
+          deltavvec(i) = deltav
+          retauvec (i) = retau
+          if (self%masterproc) write(182,100) xg(i),delta,deltav,cf,th
+          100 format(20ES20.10)
+        enddo
+
+        if (self%masterproc) close(182)
+        if (self%masterproc) then
+          open(183,file='blvec.bin',form='unformatted')
+          write(183) cfvec,thvec,deltavec,deltavvec
+          close(183)
+        endif
+      endif
+      wmean = 0._rkind
+      do i=1-ng,nx+ng+1
+        ii = self%field%ncoords(1)*nx+i
+        delta = deltavec(ii)
+        deltav = deltavvec(ii)
+        retau = delta/deltav
+        imode = 0
+        icompute = 1
+        call hasan_meanprofile(ny,delta,Mach,theta_wall,retau,retheta,redelta,Prandtl,spr,rfac,gam,&
+        &vtexp,visc_exp,s2tinf,yvec,uvec,tvec,rhovec,viscvec,th,cf,ch,mtau,deltav,imode,icompute)
+        do j=1,ny
+          wmean(i,j,1) = rhovec(j)*self%rho0
+          wmean(i,j,2) = rhovec(j)*uvec(j)*self%u0*self%rho0
+        enddo
+      enddo
+      do i=1-ng,nx+ng
+        ii = self%field%ncoords(1)*nx+i
+        do j=2,ny
+          vi_j = -(wmean(i+1,j,2)-wmean(i,j,2))/(xg(ii+1)-xg(ii))
+          vi_jm = -(wmean(i+1,j-1,2)-wmean(i,j-1,2))/(xg(ii+1)-xg(ii))
+          vi = 0.5_rkind*(vi_j+vi_jm)
+          wmean(i,j,3) = wmean(i,j-1,3)+vi*(y(j)-y(j-1))
+        enddo
+      enddo
+
+      u0_02 = 0.02_rkind*u0
+      if (self%rand_type==0) u0_02 = 0._rkind
+      do k=1,nz
+        do j=1,ny
+          do i=1,nx
+            rho = wmean(i,j,1)
+            call get_crandom_f(rr)
+            rr = rr-0.5_rkind
+            uu = wmean(i,j,2)/rho+u0_02*rr(1)
+            vv = wmean(i,j,3)/rho+u0_02*rr(2)
+            ww = wmean(i,j,4)/rho+u0_02*rr(3)
+
+            rhouu = rho*uu
+            rhovv = rho*vv
+            rhoww = rho*ww
+            w(1,i,j,k) = rho
+            w(2,i,j,k) = rhouu
+            w(3,i,j,k) = rhovv
+            w(4,i,j,k) = rhoww
+            tt = p0/rgas0/rho
+            w_aux(i,j,k,6) = tt
+            ee = get_e_from_temperature(tt, t0, indx_cp_l, indx_cp_r, cv_coeff, calorically_perfect)
+            w(5,i,j,k) = rho*ee + 0.5_rkind*(rhouu**2+rhovv**2+rhoww**2)/rho
+          enddo
+        enddo
+      enddo
+
+      call self%add_synthetic_perturbations()
+
+    endassociate
+  endsubroutine init_bl
+  subroutine init_bl_old(self)
+    class(equation_singleideal_object), intent(inout) :: self
+
     real(rkind), dimension(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1) :: thvec
     real(rkind), dimension(self%field%ny) :: uvec, rhovec, tvec, viscvec, yl0
     real(rkind), dimension(3) :: rr
@@ -1862,29 +2103,29 @@ contains
     integer :: i,j,k,ii,jj,jjj,m
     logical :: visc_exp
     logical :: file_exists
-!
+
     allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
     allocate(self%deltavec(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1))
     allocate(self%deltavvec(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1))
     allocate(self%cfvec(1-self%grid%ng:self%grid%nxmax+self%grid%ng+1))
-!
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, y =&
-    &> self%field%y, z => self%field%z, Reynolds_friction => self%Reynolds_friction, xg => self%grid%xg, &
-    &nxmax => self%grid%nxmax, rho0 => self%rho0, u0 => self%u0, p0 => self%p0, gm => self%gm, l0 => self&
-    &%l0, wmean => self%wmean, w => self%field%w, Mach => self%Mach, gam => self%gam, rfac => self%rfac, &
-    &Prandtl => self%Prandtl, w_aux => self%w_aux, deltavec => self%deltavec ,deltavvec => self%deltavvec&
-    &, cfvec => self%cfvec, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv&
-    &_coeff, calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0, jbl_inf&
-    &low => self%jbl_inflow)
-!
+
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & y => self%field%y, z => self%field%z, Reynolds_friction => self%Reynolds_friction,&
+    & xg => self%grid%xg, nxmax => self%grid%nxmax, rho0 => self%rho0, u0 => self%u0, p0 => self%p0,&
+    & gm => self%gm, l0 => self%l0, wmean => self%wmean, w => self%field%w, Mach => self%Mach,&
+    & gam => self%gam, rfac => self%rfac, Prandtl => self%Prandtl, w_aux => self%w_aux,&
+    & deltavec => self%deltavec ,deltavvec => self%deltavvec, cfvec => self%cfvec, indx_cp_l => self%indx&
+    &_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, calorically_perfect => self%calorical&
+    &ly_perfect, rgas0 => self%rgas0, t0 => self%t0, jbl_inflow => self%jbl_inflow)
+
       call locateval(y(1:ny),ny,l0,jbl_inflow)
-!
+
       Trat = self%T_wall/self%T_recovery
-!
+
       deltavec(1) = l0
       deltavvec(1) = l0/Reynolds_friction
       yl0 = y(1:ny)/l0
-!
+
       s2tinf = self%sutherland_S/self%T_ref_dim
       vtexp = self%powerlaw_vtexp
       visc_exp = .false.
@@ -1895,17 +2136,17 @@ contains
         read(183) cfvec,thvec,deltavec,deltavvec
         close(183)
       else
-        call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny)&
-        &,uvec,rhovec,tvec,viscvec,redelta,cf,thrat)
+        call meanvelocity_bl(Reynolds_friction,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,&
+        &yl0(1:ny),uvec,rhovec,tvec,viscvec,redelta,cf,thrat)
         cfvec(1) = cf
         thvec(1) = thrat*deltavec(1)
         retauold = Reynolds_friction
-!
+
         do i=1,ng
           retau = retauold
           do
-            call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,rh&
-            &ovec,tvec,viscvec,redelta,cf,thrat)
+            call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
+            &rhovec,tvec,viscvec,redelta,cf,thrat)
             th = thvec(2-i)-0.25_rkind*abs((xg(1-i)-xg(2-i)))*(cf+cfvec(2-i))
             delta = th/thrat
             deltav = deltavvec(2-i)*sqrt(cfvec(2-i)/cf)
@@ -1918,15 +2159,15 @@ contains
           deltavec (1-i) = delta
           deltavvec(1-i) = deltav
         enddo
-!
+
         retauold = Reynolds_friction
-!
+
         if (self%masterproc) open(182,file='cfstart.dat')
         do i=2,nxmax+ng+1
           retau = retauold
           do
-            call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,rh&
-            &ovec,tvec,viscvec,redelta,cf,thrat)
+            call meanvelocity_bl(retau,Mach,Trat,s2tinf,vtexp,visc_exp,gam,rfac,ny,yl0(1:ny),uvec,&
+            &rhovec,tvec,viscvec,redelta,cf,thrat)
             th = thvec(i-1)+0.25_rkind*(xg(i)-xg(i-1))*(cf+cfvec(i-1))
             delta = th/thrat
             deltav = deltavvec(i-1)*sqrt(cfvec(i-1)/cf)
@@ -1976,7 +2217,7 @@ contains
           wmean(i,j,3) = wmean(i,j-1,3)+vi*(y(j)-y(j-1))
         enddo
       enddo
-!
+
       u0_02 = 0.02_rkind*u0
       if (self%rand_type==0) u0_02 = 0._rkind
       do k=1,nz
@@ -1988,7 +2229,7 @@ contains
             uu = wmean(i,j,2)/rho+u0_02*rr(1)
             vv = wmean(i,j,3)/rho+u0_02*rr(2)
             ww = wmean(i,j,4)/rho+u0_02*rr(3)
-!
+
             rhouu = rho*uu
             rhovv = rho*vv
             rhoww = rho*ww
@@ -2003,12 +2244,12 @@ contains
           enddo
         enddo
       enddo
-!
+
       call self%add_synthetic_perturbations()
-!
+
     endassociate
-  endsubroutine init_bl
-!
+  endsubroutine init_bl_old
+
   subroutine add_synthetic_perturbations(self)
     class(equation_singleideal_object), intent(inout) :: self
     real(rkind), dimension(:,:), allocatable :: synth_params
@@ -2018,9 +2259,9 @@ contains
     real(rkind) :: delta, u0_03
     real(rkind), dimension(3) :: rr3
     integer :: i,j,k,l,n_streaks,ii
-!
+
     allocate(synth_params(5,7))
-!
+
     synth_params(:,1) = [ 12._rkind, 0.3_rkind, 0.45_rkind, 0.6_rkind, 0.5_rkind]
     synth_params(:,2) = [ 1.2_rkind, 0.3_rkind, 0.2_rkind, 0.08_rkind, 0.04_rkind]
     synth_params(:,3) = [-0.25_rkind, -0.06_rkind, -0.05_rkind, -0.04_rkind, -0.03_rkind]
@@ -2028,26 +2269,26 @@ contains
     synth_params(:,5) = [ 10.0_rkind, 0.9_rkind, 0.9_rkind, 0.9_rkind, 0.9_rkind]
     synth_params(:,6) = [120.0_rkind, 0.333_rkind, 0.25_rkind, 0.2_rkind, 0.166_rkind]
     synth_params(:,7) = [ 0.0_rkind, 1._rkind, 1._rkind, 1._rkind, 1._rkind]
-!
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, del&
-    &tavec => self%deltavec, deltavvec => self%deltavvec, wmean => self%wmean, cfvec => self%cfvec, rho0 &
-    &=> self%rho0, u0 => self%u0, lz => self%grid%domain_size(3), w => self%field%w, l0 => self%l0, x => &
-    &self%field%x, y => self%field%y, z => self%field%z, p0 => self%p0, gm => self%gm, w_aux => self%w_au&
-    &x, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, calorically_&
-    &perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
-!
+
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & deltavec => self%deltavec, deltavvec => self%deltavvec, wmean => self%wmean, cfvec => self%cfvec,&
+    & rho0 => self%rho0, u0 => self%u0, lz => self%grid%domain_size(3), w => self%field%w, l0 => self%l0,&
+    & x => self%field%x, y => self%field%y, z => self%field%z, p0 => self%p0, gm => self%gm,&
+    & w_aux => self%w_aux, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_&
+    &coeff, calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0)
+
       rho_wall = wmean(1,1,1)
       tau_wall = cfvec(1)*rho0*u0**2*0.5_rkind
       u_tau = sqrt(tau_wall/rho_wall)
-!
+
       synth_params(1,1) = synth_params(1,1) * deltavvec(1)
       synth_params(1,4) = synth_params(1,4) * u_tau / deltavvec(1)
       synth_params(1,5) = synth_params(1,5) * u_tau
-!
+
       lz_plus = lz/deltavvec(1)
       n_streaks = nint(lz_plus / synth_params(1,6))
       synth_params(1,6) = lz / n_streaks
-!
+
       do l=2,5
         synth_params(l,1) = synth_params(l,1) * deltavec(1)
         synth_params(l,4) = synth_params(l,4) * u0 / deltavec(1)
@@ -2057,7 +2298,7 @@ contains
         synth_params(l,7) = synth_params(l,7) * 2._rkind*pi *rr
       enddo
       call mpi_bcast(synth_params(2:5,7),4,mpi_prec,0,self%field%mp_cart,self%mpi_err)
-!
+
       u0_03 = 0.03_rkind*u0
       if (self%rand_type==0) u0_03 = 0._rkind
       do k=1,nz
@@ -2068,7 +2309,7 @@ contains
             up = 0._rkind
             vp = 0._rkind
             wp = 0._rkind
-            do l=1,5
+            do l=2,5
               arg_sin = synth_params(l,4)*x(i)/synth_params(l,5)
               arg_cos = 2._rkind*pi*z(k)/synth_params(l,6) + synth_params(l,7)
               ys = y(j)/synth_params(l,1)
@@ -2076,7 +2317,7 @@ contains
               vfy = ys**2 * exp(-(ys**2))
               up = up+synth_params(l,2) * ufy * sin(arg_sin) * cos(arg_cos)
               vp = vp+synth_params(l,3) * vfy * sin(arg_sin) * cos(arg_cos)
-!
+
               dup_dx = synth_params(l,2) * ufy * synth_params(l,4)/synth_params(l,5) * cos(arg_sin)
               dvfy_dy = 2._rkind*ys/synth_params(l,1)*exp(-(ys**2))*(1._rkind-ys**2)
               dvp_dy = synth_params(l,3) * dvfy_dy * sin(arg_sin)
@@ -2105,7 +2346,7 @@ contains
           enddo
         enddo
       enddo
-!
+
     endassociate
   endsubroutine add_synthetic_perturbations
   function velmusker(yplus,retau)
@@ -2117,9 +2358,9 @@ contains
     eta = min(1._rkind,eta)
     yp = eta*retau
     pi_wake = 0.434_rkind
-    velmusker = 5.424_rkind*atan((2*yp-8.15_rkind)/16.7_rkind)+ log10((yp+10.6_rkind)**9.6_rkind/(yp&
-    &**2-8.15_rkind*yp+86)**2)-3.51132976630723_rkind +2.44_rkind*(pi_wake*(6*eta**2-4*eta**3)+(eta**2*(1&
-    &-eta)))
+    velmusker = 5.424_rkind*atan((2*yp-8.15_rkind)/16.7_rkind)+ log10((yp+10.6_rkind)**9.6_rkind/&
+    &(yp**2-8.15_rkind*yp+86)**2)-3.51132976630723_rkind +2.44_rkind*(pi_wake*(6*eta**2-4*eta**3)+(eta**&
+    &2*(1-eta)))
   end function velmusker
   function velpiros_channel(yplus,retau)
     real(rkind), intent(in) :: yplus,retau
@@ -2209,7 +2450,7 @@ contains
       r0 = z3
     end if
     do
-!
+
       f(0) = s0
       if ( iflag.eq.0) t(0) = r0
       if ( iflag.eq.1) g(0) = r0
@@ -2356,7 +2597,7 @@ contains
     real(rkind), dimension(ny) :: viscosity
     real(rkind), dimension(ny) :: temperature
     real(rkind), dimension(ny) :: uu,uci,uc
-    itransf = 0
+    itransf = 1
     gm1h = 0.5_rkind*(gam-1._rkind)
     tr = 1._rkind+gm1h*rfac*rm**2
     tw = trat*tr
@@ -2512,15 +2753,176 @@ contains
     enddo
     return
   end subroutine meanvelocity_bl
+  subroutine hasan_meanprofile(n,d99,mach,theta,retau,retheta,redelta,pr,spr,rfac,gam,vtexp,&
+  &visc_exp,s2tinf,ye,ue,te,rhoe,mue,th,cf,ch,mtau,deltav,imode,icompute)
+    implicit none
+
+    integer, parameter :: rkind = REAL64
+    integer, intent(in) :: n,imode,icompute
+    real(rkind), intent(in) :: d99,mach,theta,pr,spr,rfac,gam,s2tinf,vtexp
+    real(rkind), intent(inout) :: retau,retheta
+    real(rkind), intent(inout) :: cf,ch,th,mtau,deltav,redelta
+    real(rkind), dimension(n+1), intent(in) :: ye
+    real(rkind), dimension(n+1), intent(out) :: ue,te,rhoe,mue
+    logical, intent(in) :: visc_exp
+
+    integer, parameter :: ny = 10000
+    integer, parameter :: nyext = 2*ny
+    integer :: j,niter,nitermax,l
+    real(rkind) :: pi
+    real(rkind) :: gm1h
+    real(rkind) :: rethetaold,retauold
+    real(rkind) :: tr,tw,picole,apl,vkc,z1
+    real(rkind) :: absdiff,tol
+    real(rkind) :: uinf,uinf_star,uinf_plus,ufac
+    real(rkind) :: dy,dudy
+    real(rkind) :: thint,thint_j,thint_jm
+    real(rkind) :: uint,uint_j,uint_jm,uint_inn_j,uint_inn_jm,uint_out_j,uint_out_jm
+    real(rkind), dimension(ny+1) :: y,u,t,rho,mu
+    real(rkind), dimension(ny+1) :: ypl,upl
+    real(rkind), dimension(ny+1) :: yst,d,mut,wake
+    real(rkind), dimension(nyext+1) :: yext,uext,text,rhoext,muext
+    integer :: jj,jjj,m
+    real(rkind) :: yy
+    pi = 4._rkind*atan(1._rkind)
+    gm1h = 0.5_rkind*(gam-1._rkind)
+    tr = 1._rkind+gm1h*rfac*mach**2
+    tw = 1._rkind+theta*(tr-1._rkind)
+    apl = 17._rkind
+    vkc = 0.41_rkind
+    nitermax = 10000
+    tol = 0.00001_rkind
+    dy = d99/ny
+    do j=1,ny+1
+      y(j) = (j-1)*dy
+    enddo
+    do j=1,nyext+1
+      yext(j) = (j-1)*dy
+    enddo
+    ufac = 0.99_rkind
+    do j=1,ny+1
+      u(j) = y(j)/d99
+      u(j) = min(1._rkind,u(j))
+    enddo
+    uinf = u(ny+1)/ufac
+    u = u/uinf
+    niter = 0
+    if (imode==0) then
+      retheta = 1000._rkind
+    else
+      retau = 200._rkind
+    endif
+    mtau = 0.1_rkind
+    absdiff = huge(1._rkind)
+    do while (absdiff > tol)
+      niter = niter+1
+      if (niter>nitermax) exit
+      if (imode==0) then
+        rethetaold = retheta
+      else
+        retauold = retau
+      endif
+      do j=1,ny+1
+        t(j) = tw+(tr-tw)*(spr*u(j)+(1._rkind-spr)*u(j)**2)+(1._rkind-tr)*u(j)**2
+        rho(j) = 1._rkind/t(j)
+        if (visc_exp) then
+          mu(j) = t(j)**vtexp
+        else
+          mu(j) = t(j)**1.5_rkind*(1._rkind+s2tinf)/(t(j)+s2tinf)
+        endif
+        ypl(j) = (y(j)/d99)*retau
+        yst(j) = ypl(j)*sqrt(rho(j)/rho(1))*mu(1)/mu(j)
+        d(j) = (1._rkind-exp(-yst(j)/(apl+19.3_rkind*mtau)))**2
+        mut(j) = mu(j)/mu(1)*vkc*yst(j)*d(j)
+        z1 = retheta/425._rkind-1._rkind
+        picole = 0.69_rkind*(1._rkind-exp(-0.243_rkind*sqrt(z1)-0.15_rkind*z1))
+        wake(j) = picole/vkc*pi*sin(pi*(y(j)/d99))
+      enddo
+      upl = 0._rkind
+      do j=2,ny+1
+        uint_inn_j = 1._rkind/(mu(j)/mu(1)+mut(j))
+        uint_inn_jm = 1._rkind/(mu(j-1)/mu(1)+mut(j-1))
+        uint_out_j = sqrt(rho(1)/rho(j))/retau*wake(j)
+        uint_out_jm = sqrt(rho(1)/rho(j-1))/retau*wake(j-1)
+        uint_j = uint_inn_j +uint_out_j
+        uint_jm = uint_inn_jm+uint_out_jm
+        uint = 0.5_rkind*(uint_j+uint_jm)
+        upl(j) = upl(j-1)+uint*(ypl(j)-ypl(j-1))
+      enddo
+      uinf_plus = upl(ny+1)/ufac
+      u = upl/uinf_plus
+      th = 0._rkind
+      do j=2,ny+1
+        thint_j = rho(j)*u(j)*(1._rkind-u(j))
+        thint_jm = rho(j-1)*u(j-1)*(1._rkind-u(j-1))
+        thint = 0.5_rkind*(thint_j+thint_jm)
+        th = th+thint*(y(j)-y(j-1))
+      enddo
+      cf = 2._rkind/uinf_plus**2*rho(1)
+      ch = 0.5_rkind*cf*spr/pr
+      mtau = mach*sqrt(0.5_rkind*cf)
+      if (imode==0) then
+        retheta = retau*th/d99*mu(1)/rho(1)*uinf_plus
+        absdiff = abs(retheta-rethetaold)
+      else
+        retau = retheta*d99/th/mu(1)*rho(1)/uinf_plus
+        absdiff = abs(retau-retauold)
+      endif
+      redelta = retheta*d99/th
+    enddo
+    deltav = d99/retau
+    if (niter>nitermax) write(*,*) 'Maximum number of iterations in Hasan!',absdiff
+    do j=1,ny+1
+      uext(j) = u(j)
+      text(j) = t(j)
+    enddo
+    dudy = (uext(ny+1)-uext(ny))/(yext(ny+1)-yext(ny))
+    do j=ny+2,nyext+1
+      uext(j) = uext(ny+1)+dudy*(yext(j)-yext(ny+1))
+      uext(j) = min(uext(j),1._rkind)
+      text(j) = tw+(tr-tw)*(spr*uext(j)+(1._rkind-spr)*uext(j)**2)+(1._rkind-tr)*uext(j)**2
+    enddo
+    do j=1,nyext+1
+      rhoext(j) = 1._rkind/text(j)
+      if (visc_exp) then
+        muext(j) = text(j)**vtexp
+      else
+        muext(j) = text(j)**1.5_rkind*(1._rkind+s2tinf)/(text(j)+s2tinf)
+      endif
+    enddo
+    ue = 1._rkind
+    rhoe = 1._rkind
+    te = 1._rkind
+    mue = 1._rkind
+    if (icompute/=0) then
+      ue(1) = uext(1)
+      rhoe(1) = rhoext(1)
+      te(1) = text(1)
+      mue(1) = muext(1)
+      do j=2,n
+        yy = ye(j)
+        if (yy<yext(nyext+1)) then
+          call locateval(yext,nyext+1,yy,jj)
+          m = 2
+          jjj = min(max(jj-(m-1)/2,1),nyext+1+1-m)
+          call pol_int(yext(jjj),uext(jjj),m,yy,ue(j))
+          call pol_int(yext(jjj),rhoext(jjj),m,yy,rhoe(j))
+          call pol_int(yext(jjj),text(jjj),m,yy,te(j))
+          call pol_int(yext(jjj),muext(jjj),m,yy,mue(j))
+        endif
+      enddo
+    endif
+    return
+  endsubroutine hasan_meanprofile
   subroutine init_wind_tunnel(self)
     class(equation_singleideal_object), intent(inout) :: self
-!
+
     integer :: i,j,k,l
     allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
-!
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, nv &
-    &=> self%nv, wmean => self%wmean, w => self%field%w, winf => self%winf)
-!
+
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & nv => self%nv, wmean => self%wmean, w => self%field%w, winf => self%winf)
+
       wmean = 0._rkind
       do j=1,ny
         do i=1-ng,nx+ng+1
@@ -2530,7 +2932,7 @@ contains
           wmean(i,j,4) = winf(4)
         enddo
       enddo
-!
+
       do k=1,nz
         do j=1,ny
           do i=1,nx
@@ -2540,25 +2942,25 @@ contains
           enddo
         enddo
       enddo
-!
+
     endassociate
   endsubroutine init_wind_tunnel
-!
+
   subroutine init_cv(self)
     class(equation_singleideal_object), intent(inout) :: self
-!
+
     integer :: i,j,k
     real(rkind) :: rmv,xx,yy,rr2,gm1h,gm1i,exparg,uvtx,vvtx
     real(rkind) :: rho,pp,tt,uu,vv,ww,rhouu,rhovv,rhoww,ee
     allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
-!
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, nv &
-    &=> self%nv, wmean => self%wmean, w => self%field%w, winf => self%winf, w_aux => self%w_aux, Mach => &
-    &self%Mach, rho0 => self%rho0, u0 => self%u0, gam => self%gam, y => self%field%y, z => self%field%z, &
-    &x => self%field%x, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coe&
-    &ff, calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0, t0 => self%t0, l0 => self%&
-    &l0, p0 => self%p0)
-!
+
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & nv => self%nv, wmean => self%wmean, w => self%field%w, winf => self%winf, w_aux => self%w_aux,&
+    & Mach => self%Mach, rho0 => self%rho0, u0 => self%u0, gam => self%gam, y => self%field%y,&
+    & z => self%field%z, x => self%field%x, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r,&
+    & cv_coeff => self%cv_coeff, calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0,&
+    & t0 => self%t0, l0 => self%l0, p0 => self%p0)
+
       wmean = 0._rkind
       do j=1,ny
         do i=1-ng,nx+ng+1
@@ -2568,7 +2970,7 @@ contains
           wmean(i,j,4) = winf(4)
         enddo
       enddo
-!
+
       rmv = 0.1_rkind
       gm1h = 0.5_rkind*(gam-1._rkind)
       gm1i = 1._rkind/(gam-1._rkind)
@@ -2602,10 +3004,10 @@ contains
           enddo
         enddo
       enddo
-!
+
     endassociate
   endsubroutine init_cv
-!
+
   subroutine init_channel(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer :: i, j, k
@@ -2615,20 +3017,21 @@ contains
     real(rkind) :: rhouu, rhovv, rhoww
     real(rkind) :: tt, ee
     integer :: nroll
-!
+
     allocate(self%wmean(1-self%grid%ng:self%field%nx+self%grid%ng+1, 1:self%field%ny, 4))
-!
-    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng, y =&
-    &> self%field%y, z => self%field%z, rho0 => self%rho0, u0 => self%u0, p0 => self%p0, gm => self%gm, t&
-    &0 => self%t0, wmean => self%wmean, w => self%field%w, w_aux => self%w_aux, l0 => self%l0, indx_cp_l &
-    &=> self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff, volchan => self%volchan, &
-    &nxmax => self%grid%nxmax, nzmax => self%grid%nzmax, yn => self%grid%yn, lz => self%grid%domain_size(&
-    &3), calorically_perfect => self%calorically_perfect, rgas0 => self%rgas0)
-!
+
+    associate(nx => self%field%nx, ny => self%field%ny, nz => self%field%nz, ng => self%grid%ng,&
+    & y => self%field%y, z => self%field%z, rho0 => self%rho0, u0 => self%u0, p0 => self%p0,&
+    & gm => self%gm, t0 => self%t0, wmean => self%wmean, w => self%field%w, w_aux => self%w_aux,&
+    & l0 => self%l0, indx_cp_l => self%indx_cp_l, indx_cp_r => self%indx_cp_r, cv_coeff => self%cv_coeff,&
+    & volchan => self%volchan, nxmax => self%grid%nxmax, nzmax => self%grid%nzmax, yn => self%grid%yn,&
+    & lz => self%grid%domain_size(3), calorically_perfect => self%calorically_perfect,&
+    & rgas0 => self%rgas0)
+
       volchan = yn(ny+1)-yn(1)
       volchan = volchan*nxmax
       volchan = volchan*nzmax
-!
+
       wmean = 0._rkind
       do j=1,ny
         do i=1-ng,nx+ng+1
@@ -2638,24 +3041,24 @@ contains
           wmean(i,j,4) = 0._rkind
         enddo
       enddo
-!
+
       u0_02 = 0.02_rkind*u0
       if (self%rand_type==0) u0_02 = 0._rkind
       u0_05 = 0.05_rkind*u0
       nroll = int(lz/yn(ny+1))
-!
+
       do k=1,nz
         do j=1,ny
           do i=1,nx
-!
+
             rho = wmean(i,j,1)
             uu = wmean(i,j,2)/rho
             vv = wmean(i,j,3)/rho
             ww = wmean(i,j,4)/rho
-!
+
             call get_crandom_f(rr)
             rr = rr-0.5_rkind
-!
+
             ufluc = u0_02*rr(1)
             vfluc = u0_02*rr(2)
             wfluc = u0_02*rr(3)
@@ -2678,14 +3081,14 @@ contains
           enddo
         enddo
       enddo
-!
+
     endassociate
   endsubroutine init_channel
-!
+
   subroutine bc_preproc(self)
     class(equation_singleideal_object), intent(inout) :: self
     integer :: ilat, offset
-!
+
     self%force_zero_flux = [0,0,0,0,0,0]
     self%eul_imin = 1
     self%eul_imax = self%field%nx
@@ -2727,7 +3130,7 @@ contains
       endselect
     enddo
   endsubroutine bc_preproc
-!
+
   function get_gamloc(tt,t0,indx_cp_l,indx_cp_r,cp_coeff,calorically_perfect,rgas0)
     real(rkind) :: get_gamloc
     integer :: indx_cp_l,indx_cp_r,calorically_perfect
@@ -2735,7 +3138,7 @@ contains
     real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff
     real(rkind) :: cploc, gamloc
     integer :: l
-!
+
     if (calorically_perfect==1) then
       cploc = cp_coeff(0)
     else
@@ -2746,12 +3149,12 @@ contains
     endif
     gamloc = cploc/(cploc-rgas0)
     get_gamloc = gamloc
-!
+
   endfunction get_gamloc
-!
+
   subroutine runge_kutta_initialize(self)
     class(equation_singleideal_object), intent(inout) :: self
-!
+
     select case(self%rk_type)
     case(RK_WRAY)
       self%nrk = 3
@@ -2770,21 +3173,20 @@ contains
       self%brk(:) = [0._rkind, 0.25_rkind, 2._rkind /3._rkind]
       self%crk(:) = [1._rkind, 0.25_rkind, 2._rkind /3._rkind]
     endselect
-!
+
   endsubroutine runge_kutta_initialize
-!
+
   subroutine read_input(self, filename)
     class(equation_singleideal_object), intent(inout) :: self
     character(*) , intent(in) :: filename
-!
+
     self%cfg=parse_cfg(filename)
-!
+
   endsubroutine read_input
-!
-!
-!
-!
-!
+
+
+
+
+
 endmodule streams_equation_singleideal_object
-!
 

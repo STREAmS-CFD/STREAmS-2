@@ -17,8 +17,8 @@ void get_crandom(double *a)
 {                                                                               
     int i;
     i = rand();
-    //printf("rand int %d :",i);
+    // printf("rand int %d :",i);
     *a = rescale * (double)i/RAND_MAX;
-    //printf("rescale %lf :",rescale);
-    //printf("rand float %lf :",*a);
+    // printf("rescale %lf :",rescale);
+    // printf("rand float %lf :",*a);
 };       

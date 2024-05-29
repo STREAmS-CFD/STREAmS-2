@@ -1,22 +1,22 @@
 !< STREAmS, grid class definition.
 module streams_grid_object
-!
+
   use streams_parameters
   use mpi
-!
+
   implicit none
   private
   public :: grid_object
   public :: GRID_FROMFILE, GRID_UNIFORM, GRID_CHA, GRID_BL, GRID_SBLI
-!
+
   integer(ikind), parameter :: GRID_FROMFILE = 1_ikind
   integer(ikind), parameter :: GRID_UNIFORM = 2_ikind
   integer(ikind), parameter :: GRID_CHA = 3_ikind
   integer(ikind), parameter :: GRID_BL = 4_ikind
   integer(ikind), parameter :: GRID_SBLI = 5_ikind
-!
+
   type :: grid_object
-!   < Grid class definition.
+    !< Grid class definition.
     integer :: myrank, nprocs, mpi_err
     logical :: masterproc
     real(rkind), dimension(3) :: domain_size
@@ -33,7 +33,7 @@ module streams_grid_object
     real(rkind), dimension(0:4) :: metrics_cd2
     integer :: metrics_order
   contains
-!   public methods
+    !public methods
     procedure, pass(self) :: alloc
     procedure, pass(self) :: compute_metrics
     procedure, pass(self) :: generate_grid_uniform_x
@@ -48,24 +48,24 @@ module streams_grid_object
     procedure, pass(self) :: read_grid
     procedure, pass(self) :: write_grid
   endtype grid_object
-! 
+  !
 contains
-! 
-! public methods
+  !
+  !public methods
   subroutine compute_metrics(self)
-!   < Compute metrics of a block.
+    !< Compute metrics of a block.
     class(grid_object), intent(inout) :: self !< The grid.
     integer :: mm, i, j, k, l
-!   
+    !
     call self%get_deriv_coeffs(self%metrics_cd1, self%metrics_cd2, self%metrics_order, self%metrics_order)
-!   
+    !
     mm = self%metrics_order/2
-!
-    associate(xg => self%xg, yg => self%yg, zg => self%zg, dxg => self%dxg, dyg => self%dyg, dzg => &
-    &self%dzg, d2xg => self%d2xg, d2yg => self%d2yg, d2zg => self%d2zg, nxmax => self%nxmax, nymax => sel&
-    &f%nymax, nzmax => self%nzmax, c => self%metrics_cd1, cc => self%metrics_cd2, masterproc => self%mast&
-    &erproc)
-!     
+
+    associate(xg => self%xg, yg => self%yg, zg => self%zg, dxg => self%dxg, dyg => self%dyg,&
+    & dzg => self%dzg, d2xg => self%d2xg, d2yg => self%d2yg, d2zg => self%d2zg, nxmax => self%nxmax,&
+    & nymax => self%nymax, nzmax => self%nzmax, c => self%metrics_cd1, cc => self%metrics_cd2,&
+    & masterproc => self%masterproc)
+      !
       dxg = 0._rkind
       do i=1,nxmax
         do l=1,mm
@@ -76,7 +76,7 @@ contains
           d2xg(i) = d2xg(i)+cc(l)*(xg(i+l)+xg(i-l))
         enddo
       enddo
-!     
+      !
       dyg = 0._rkind
       do j=1,nymax
         do l=1,mm
@@ -87,7 +87,7 @@ contains
           d2yg(j) = d2yg(j)+cc(l)*(yg(j+l)+yg(j-l))
         enddo
       enddo
-!     
+      !
       dzg = 0._rkind
       do k=1,nzmax
         do l=1,mm
@@ -98,7 +98,7 @@ contains
           d2zg(k) = d2zg(k)+cc(l)*(zg(k+l)+zg(k-l))
         enddo
       enddo
-!     
+      !
       if(masterproc) then
         open(18,file='dxg.dat')
         do i=1,nxmax
@@ -116,20 +116,20 @@ contains
         enddo
         close(18)
       endif
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine compute_metrics
-! 
+  !
   subroutine get_deriv_coeffs(self, coeff_deriv1, coeff_deriv2, order1, order2)
     class(grid_object) :: self
     real(rkind), dimension(4) :: coeff_deriv1
     real(rkind), dimension(0:4) :: coeff_deriv2
     integer :: order1, order2
-!   
+    !
     coeff_deriv1 = 0._rkind
     coeff_deriv2 = 0._rkind
-!   
+    !
     select case (order1/2)
     case (1)
       coeff_deriv1(1) = 0.5_rkind
@@ -146,7 +146,7 @@ contains
       coeff_deriv1(3) = 4._rkind/105._rkind
       coeff_deriv1(4) = -1._rkind/280._rkind
     end select
-!   
+    !
     select case (order2/2)
     case (1)
       coeff_deriv2(0) = -2._rkind
@@ -167,11 +167,11 @@ contains
       coeff_deriv2(3) = 8._rkind/315._rkind
       coeff_deriv2(4) = -1._rkind/560._rkind
     endselect
-!   
+    !
   endsubroutine get_deriv_coeffs
-! 
-  subroutine initialize(self, periodic, nxmax, nymax, nzmax, ng, grid_type, domain_size_x, domain_si&
-  &ze_y, domain_size_z, l0, grid_vars, metrics_order, rebuild_ghost, ystaggering)
+  !
+  subroutine initialize(self, periodic, nxmax, nymax, nzmax, ng, grid_type, domain_size_x,&
+  & domain_size_y, domain_size_z, l0, grid_vars, metrics_order, rebuild_ghost, ystaggering)
     class(grid_object) :: self
     integer :: nxmax, nymax, nzmax, ng, grid_type
     real(rkind) :: domain_size_x, domain_size_y, domain_size_z, l0
@@ -181,9 +181,9 @@ contains
     logical :: write_grid
     logical, dimension(3) :: periodic
     real(rkind), dimension(:), allocatable :: grid_vars
-!   
+    !
     call get_mpi_basic_info(self%nprocs, self%myrank, self%masterproc, self%mpi_err)
-!   
+    !
     self%nxmax = nxmax
     self%nymax = nymax
     self%nzmax = nzmax
@@ -191,15 +191,15 @@ contains
     self%grid_type = grid_type
     self%metrics_order = metrics_order
     self%is_xyz_periodic = periodic
-!   
+    !
     self%domain_size = [domain_size_x,domain_size_y,domain_size_z]
-!   
+    !
     call self%alloc()
-!   
+    !
     write_grid = .true.
-!   
+    !
     self%is_y_staggered = ystaggering
-!   
+    !
     if (self%grid_type == GRID_FROMFILE) then
       call self%read_grid(rebuild_ghost)
       nxmax_tot = self%nxmax ; if (self%is_xyz_periodic(1)) nxmax_tot = nxmax_tot + 1
@@ -225,38 +225,38 @@ contains
         else
           self%domain_size(2) = self%yg(nymax_tot)-self%yg(1)
         endif
-!     case(GRID_SBLI)
-!       call self%generate_grid_bl(grid_vars(1), grid_vars(2), nint(grid_vars(3)), grid_vars(4), grid_vars(5))
-!       !call self%generate_grid_uni_extension(nint(grid_vars(3)), grid_vars(4), nint(grid_vars(6)))
-!       self%domain_size(2) = self%yg(nymax_tot)-self%yg(1)
+      !case(GRID_SBLI)
+        !call self%generate_grid_bl(grid_vars(1), grid_vars(2), nint(grid_vars(3)), grid_vars(4), grid_vars(5))
+        !!call self%generate_grid_uni_extension(nint(grid_vars(3)), grid_vars(4), nint(grid_vars(6)))
+        !self%domain_size(2) = self%yg(nymax_tot)-self%yg(1)
       end select
     endif
-!   
+    !
     if (self%masterproc.and.write_grid) call self%write_grid()
-!   
+    !
     self%xg = self%xg*l0
     self%yg = self%yg*l0
     self%zg = self%zg*l0
     self%yn = self%yn*l0
     self%domain_size = self%domain_size*l0
-!   
+    !
     call self%compute_metrics()
-!   
+    !
   endsubroutine initialize
-! 
+  !
   subroutine generate_grid_bl(self, jbgrid, dyptarget, nymaxwr, rlywr, retau)
     class(grid_object), intent(inout) :: self
     real(rkind), intent(in) :: jbgrid,dyptarget,rlywr,retau
     integer(ikind), intent(in) :: nymaxwr
     real(rkind) :: ynf,rj,alfc
-!   real(rkind) :: alfb,ceta
+    !real(rkind) :: alfb,ceta
     integer :: j
-!   
+    !
     associate(nymax=>self%nymax, ng => self%ng, yg => self%yg, yn => self%yn, domain_size => self%domain_size)
-!     
-!     alfb = 1.25_rkind
-!     ceta = 0.8_rkind
-!     alfc = alfb*ceta
+      !
+      !alfb = 1.25_rkind
+      !ceta = 0.8_rkind
+      !alfc = alfb*ceta
       alfc = 4._rkind/3._rkind*(retau*rlywr)**0.75_rkind/nymaxwr
       do j=1,nymaxwr+ng
         rj = real(j-1,rkind)
@@ -267,15 +267,15 @@ contains
       do j=1,nymaxwr+ng
         yg(j) = yg(j)/ynf*rlywr
       enddo
-!     
+      !
       do j=1,ng
         yg(1-j) = -yg(1+j)
       enddo
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine generate_grid_bl
-! 
+  !
   subroutine generate_grid_geoprogression(self, nymaxwr, rlywr, nsmooy)
     class(grid_object), intent(inout) :: self !< The grid.
     real(rkind), intent(in) :: rlywr
@@ -283,13 +283,13 @@ contains
     real(rkind) :: dy1, rlygp, rgp, rgpold
     integer :: nygp, j, l
     real(rkind), dimension(self%nymax+self%ng) :: tmpyg
-!   
+    !
     associate(nymax=>self%nymax, ng => self%ng, yg => self%yg, yn => self%yn, rly => self%domain_siz&
     &e(2), domain_size => self%domain_size)
-!     
-!     dy1 = yg(nymaxwr+1)-yg(nymaxwr)
+      !
+      !dy1 = yg(nymaxwr+1)-yg(nymaxwr)
       dy1 = yg(nymaxwr)-yg(nymaxwr-1)
-!     
+      !
       rlygp = rly-rlywr
       nygp = nymax-nymaxwr
       rgp = 1.01_rkind
@@ -298,14 +298,14 @@ contains
         rgp = 1._rkind-(1._rkind-rgp)/dy1*rlygp
         rgp = rgp**(1._rkind/nygp)
         if (abs(rgp-rgpold) < tol_iter) exit
-!       write(*,*) 'Geometric progression factor rgp =', rgp
+        !write(*,*) 'Geometric progression factor rgp =', rgp
       enddo
       if (self%masterproc) write(*,*) 'Geometric progression factor rgp =', rgp
-!     
+      !
       do j=1,nygp+ng
         yg(nymaxwr+j) = yg(nymaxwr+j-1) + dy1*rgp**(j-1._rkind)
       enddo
-!     
+      !
       do l=1,nsmooy
         tmpyg = yg(1:nymax+ng)
         do j=2,nymax+ng-1
@@ -313,15 +313,15 @@ contains
           yg(j) = yg(j)/6._rkind
         enddo
       enddo
-!     
+      !
       do j=1,ng
         yg(1-j) = -yg(1+j)
       enddo
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine generate_grid_geoprogression
-! 
+  !
   subroutine generate_grid_uni_extension(self, nymaxwr, rlywr, nsmooy)
     class(grid_object), intent(inout) :: self !< The grid.
     real(rkind), intent(in) :: rlywr
@@ -329,19 +329,19 @@ contains
     real(rkind) :: dy1, rlygp
     integer :: nygp, j, l
     real(rkind), dimension(self%nymax+self%ng) :: tmpyg
-!   
+    !
     associate(nymax=>self%nymax, ng => self%ng, yg => self%yg, yn => self%yn, rly => self%domain_siz&
     &e(2), domain_size => self%domain_size)
-!     
+      !
       dy1 = yg(nymaxwr+1)-yg(nymaxwr)
-!     
+      !
       rlygp = rly-rlywr
       nygp = nymax-nymaxwr
-!     
+      !
       do j=1,nygp+ng
         yg(nymaxwr+j) = yg(nymaxwr+j-1) + dy1
       enddo
-!     
+      !
       do l=1,nsmooy
         tmpyg = yg(1:nymax+ng)
         do j=2,nymax+ng-1
@@ -349,31 +349,31 @@ contains
           yg(j) = yg(j)/6._rkind
         enddo
       enddo
-!     
+      !
       do j=1,ng
         yg(1-j) = -yg(1+j)
       enddo
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine generate_grid_uni_extension
-! 
+  !
   subroutine generate_grid_cha(self, jbgrid, dyptarget, nsmooy, retaucha)
     class(grid_object), intent(inout) :: self !< The grid.
     real(rkind), intent(in) :: jbgrid,dyptarget,retaucha
     integer, intent(in) :: nsmooy
     real(rkind) :: ynf,rj,fsm,fsl,alfc
     real(rkind), dimension(self%nymax/2+1) :: ynold
-!   real(rkind) :: alfb,ceta
+    !real(rkind) :: alfb,ceta
     integer :: j,l
-!   
-!   ny/2 = 4/3/alfc * Re_tau**(3./4.)
-!   
+    !
+    !ny/2 = 4/3/alfc * Re_tau**(3./4.)
+    !
     associate(nymax=>self%nymax, ng => self%ng, yg => self%yg, yn => self%yn, domain_size => self%domain_size)
-!     
-!     alfb = 1.25_rkind
-!     ceta = 0.8_rkind
-!     alfc = alfb*ceta
+      !
+      !alfb = 1.25_rkind
+      !ceta = 0.8_rkind
+      !alfc = alfb*ceta
       alfc = 4._rkind/3._rkind*retaucha**0.75_rkind*2._rkind/nymax
       do j=1,nymax/2+1
         rj = real(j-1,rkind)
@@ -384,7 +384,7 @@ contains
       do j=1,nymax/2+1
         yn(j) = yn(j)/ynf
       enddo
-!     
+      !
       do l=1,nsmooy
         ynold = yn(1:nymax/2+1)
         do j=2,nymax/2
@@ -394,14 +394,14 @@ contains
           yn(j) = yn(j)/6._rkind
         enddo
       enddo
-!     
+      !
       do j=1,nymax/2+1
         yn(j) = yn(j)-1._rkind
       enddo
       do j=1,nymax/2
         yn(nymax+2-j) = -yn(j)
       enddo
-!     
+      !
       do j=1,nymax
         yg(j) = 0.5_rkind*(yn(j)+yn(j+1))
       enddo
@@ -409,35 +409,35 @@ contains
         yg(nymax+j) = 2._rkind-yg(nymax+1-j)
         yg(1-j) = -2._rkind-yg(j)
       enddo
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine generate_grid_cha
-! 
+  !
   subroutine write_grid(self)
     class(grid_object), intent(in) :: self !< The grid.
     integer :: i,j,k
     associate(nxmax=>self%nxmax, nymax=>self%nymax, nzmax=>self%nzmax, ng => self%ng, xg => self%xg,&
     & yg => self%yg, zg => self%zg, yn => self%yn, is_y_staggered => self%is_y_staggered)
-!     
+      !
       open(18,file='x.dat')
       do i=1-ng,nxmax+ng+1
         write(18,*) xg(i)
       enddo
       close(18)
-!     
+      !
       open(18,file='y.dat')
       do j=1-ng,nymax+ng
         write(18,*) yg(j)
       enddo
       close(18)
-!     
+      !
       open(18,file='z.dat')
       do k=1-ng,nzmax+ng
         write(18,*) zg(k)
       enddo
       close(18)
-!     
+      !
       if (is_y_staggered) then
         open(18,file='yn.dat')
         do j=1,nymax+1
@@ -445,95 +445,95 @@ contains
         enddo
         close(18)
       endif
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine write_grid
-! 
+  !
   subroutine generate_grid_uniform_x(self)
     class(grid_object), intent(inout) :: self !< The grid.
     real(rkind) :: dx
     integer :: i
-!   
-    associate(nxmax=>self%nxmax, ng => self%ng, xg => self%xg, domain_size => self%domain_size, is_x&
-    &yz_periodic => self%is_xyz_periodic)
-!     
+    !
+    associate(nxmax=>self%nxmax, ng => self%ng, xg => self%xg, domain_size => self%domain_size,&
+    & is_xyz_periodic => self%is_xyz_periodic)
+      !
       dx = domain_size(1)/(nxmax-1)
       if (is_xyz_periodic(1)) dx = domain_size(1)/nxmax
-!     
+      !
       do i=1-ng,nxmax+ng+1
         xg(i) = (i-1)*dx
       enddo
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine generate_grid_uniform_x
-! 
+  !
   subroutine generate_grid_uniform_y(self)
     class(grid_object), intent(inout) :: self !< The grid.
     real(rkind) :: dy
     integer :: j
-!   
-    associate(nymax=>self%nymax, ng => self%ng, yg => self%yg, domain_size => self%domain_size, is_x&
-    &yz_periodic => self%is_xyz_periodic)
-!     
+    !
+    associate(nymax=>self%nymax, ng => self%ng, yg => self%yg, domain_size => self%domain_size,&
+    & is_xyz_periodic => self%is_xyz_periodic)
+      !
       dy = domain_size(2)/(nymax-1)
       if (is_xyz_periodic(2)) dy = domain_size(2)/nymax
-!
+
       do j=1-ng,nymax+ng
         yg(j) = (j-1)*dy
       enddo
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine generate_grid_uniform_y
-! 
+  !
   subroutine generate_grid_uniform_z(self)
     class(grid_object), intent(inout) :: self !< The grid.
     real(rkind) :: dz
     integer :: k
-!
-    associate(nzmax=>self%nzmax, ng => self%ng, zg => self%zg, domain_size => self%domain_size, is_x&
-    &yz_periodic => self%is_xyz_periodic)
-!     
+
+    associate(nzmax=>self%nzmax, ng => self%ng, zg => self%zg, domain_size => self%domain_size,&
+    & is_xyz_periodic => self%is_xyz_periodic)
+      !
       dz = domain_size(3)/(nzmax-1)
       if (is_xyz_periodic(3)) dz = domain_size(3)/nzmax
-!     
+      !
       do k=1-ng,nzmax+ng
         zg(k) = (k-1)*dz
       enddo
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine generate_grid_uniform_z
-! 
+  !
   subroutine alloc(self)
     class(grid_object), intent(inout) :: self !< The grid.
-!   
+    !
     associate(nxmax=>self%nxmax, nymax=>self%nymax, nzmax=>self%nzmax, ng => self%ng)
-!     
+      !
       allocate(self%xg(1-ng:nxmax+ng+1), self%yg(1-ng:nymax+ng), self%zg(1-ng:nzmax+ng))
       allocate(self%dxg(1:nxmax), self%dyg(1:nymax), self%dzg(1:nzmax))
       allocate(self%d2xg(1:nxmax), self%d2yg(1:nymax), self%d2zg(1:nzmax))
       allocate(self%yn(1:nymax+1))
-!     
+      !
     endassociate
-!   
+    !
   endsubroutine alloc
-! 
+  !
   subroutine read_grid(self, rebuild_ghost)
     class(grid_object), intent(inout) :: self !< The grid.
     logical, optional, intent(in) :: rebuild_ghost
     logical :: rebuild_ghost_
     integer :: i,j,k
     integer :: i1,i2,j1,j2,k1,k2
-!   
+    !
     associate(nxmax=>self%nxmax, nymax=>self%nymax, nzmax=>self%nzmax, ng => self%ng, xg => self%xg,&
     & yg => self%yg, zg => self%zg, is_y_staggered => self%is_y_staggered, yn=>self%yn)
-!     
+      !
       rebuild_ghost_ = .false.
       if(present(rebuild_ghost)) rebuild_ghost_ = rebuild_ghost
-!     
+      !
       i1 = 1-ng
       i2 = nxmax+ng+1
       j1 = 1-ng
@@ -548,7 +548,7 @@ contains
         k1 = 1
         k2 = nzmax
       endif
-!     
+      !
       open(10,file='x.dat')
       do i=i1,i2
         read(10,*) xg(i)
@@ -564,7 +564,7 @@ contains
         read(10,*) zg(k)
       enddo
       close(10)
-!     
+      !
       if (is_y_staggered) then
         open(10,file='yn.dat')
         do j=1,nymax+1
@@ -572,7 +572,7 @@ contains
         enddo
         close(10)
       endif
-!     
+      !
       if (rebuild_ghost_) then
         do i=1,ng
           xg(1-i) = 2._rkind*xg(2-i)-xg(3-i)
@@ -588,10 +588,10 @@ contains
           zg(nzmax+k) = 2._rkind*zg(nzmax+k-1)-zg(nzmax+k-2)
         enddo
       endif
-!     
+      !
     endassociate
-!   
+    !
   end subroutine read_grid
-! 
+  !
 endmodule streams_grid_object
 

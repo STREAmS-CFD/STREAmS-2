@@ -1,12 +1,12 @@
 !< STREAmS, general parameters.
 module streams_parameters
-!
+
   use, intrinsic :: iso_fortran_env
   use, intrinsic :: ieee_arithmetic
   use mpi
   use iso_c_binding
   use tcp
-!
+
   implicit none
   private
   public :: ikind, ikind64, rkind, mpi_prec
@@ -21,13 +21,14 @@ module streams_parameters
   public :: invmat, detmat, fail_input_any
   public :: ieee_is_nan
   public :: error_unit
-! 
-! INSITU
+  public :: mpi_cart_shift_general
+  !
+  !INSITU
   public :: insitu_start, insitu_end
   public :: REAL64
   public :: INT64
   public :: byte_size
-!
+
   integer, parameter :: ikind = INT32
   integer, parameter :: ikind64 = INT64
 #ifdef SINGLE_PRECISION
@@ -43,9 +44,9 @@ module streams_parameters
   real(rkind), parameter :: tol_iter_nr = 0.000000000001_rkind
   integer, parameter :: c_rkind = C_DOUBLE
 #endif
-!
+
   real(rkind) :: pi = acos(-1._rkind)
-!
+
   interface
     function rename_wrapper(filein, fileout) bind(C, name="rename")
       import :: c_char, c_int
@@ -53,7 +54,7 @@ module streams_parameters
       character(kind=c_char) :: filein(*), fileout(*)
     endfunction rename_wrapper
   endinterface
-!
+
   interface byte_size
     module procedure byte_size_int32, &
 #ifdef SINGLE_PRECISION
@@ -62,14 +63,14 @@ module streams_parameters
     byte_size_real64
 #endif
   endinterface
-!
+
 contains
-!
+
   subroutine mpi_initialize()
     integer :: mpi_err
     call mpi_init(mpi_err)
   endsubroutine
-!
+
   subroutine get_mpi_basic_info(nprocs, myrank, masterproc, mpi_err)
     integer :: nprocs, myrank, mpi_err
     logical :: masterproc
@@ -78,7 +79,7 @@ contains
     masterproc = .false.
     if (myrank == 0) masterproc = .true.
   endsubroutine get_mpi_basic_info
-!
+
   function int2str(int_num)
     implicit none
     integer :: int_num
@@ -86,7 +87,7 @@ contains
     write(ret_value, "(I0)") int_num
     int2str = ret_value
   endfunction int2str
-!
+
   function int2str_o(int_num)
     use mpi
     implicit none
@@ -95,22 +96,22 @@ contains
     write(ret_value, "(I0)") int_num
     int2str_o = ret_value
   endfunction int2str_o
-!
+
   subroutine pol_int(x,y,n,xs,ys)
-!   
-!   Polynomial interpolation using Neville's algorithm
-!   Order of accuracy of the interpolation is n-1
-!   
+    !
+    !Polynomial interpolation using Neville's algorithm
+    !Order of accuracy of the interpolation is n-1
+    !
     integer, intent(in) :: n
     real(rkind), dimension(n), intent(in) :: x,y
     real(rkind), intent(in) :: xs
     real(rkind), intent(out) :: ys
-!   
+    !
     integer :: i,m
     real(rkind), dimension(n)  :: v,vold
-!   
+    !
     v = y
-!   
+    !
     do m=2,n ! Tableu columns
       vold = v
       do i=1,n+1-m
@@ -120,15 +121,15 @@ contains
     enddo
     ys = v(1)
   end subroutine pol_int
-! 
+  !
   subroutine locateval(xx,n,x,ii)
-!   
+    !
     integer, intent(in) :: n
     integer, intent(out) :: ii
     real(rkind), dimension(1:n), intent(in) :: xx
     real(rkind) :: x
     integer :: il,jm,juu
-!   
+    !
     il=0
     juu=n+1
     do while (juu-il.gt.1)
@@ -141,23 +142,23 @@ contains
     end do
     ii=il
   end subroutine locateval
-! 
+  !
   subroutine fail_input_any(msg)
     integer :: mpi_err
     character(len=*) :: msg
     write(error_unit,*) "Input Error! ", msg
     call mpi_abort(mpi_comm_world,15,mpi_err)
   endsubroutine fail_input_any
-! 
+  !
   subroutine invmat(mat,n)
-!   
+    !
     integer, intent(in) :: n
     real(rkind), dimension(n,n), intent(inout) :: mat
     integer :: i,j
     integer, dimension(n) :: indx
     real(rkind), dimension(n,n) :: y
     real(rkind) :: d
-!   
+    !
     y = 0._rkind
     do i=1,n
       y(i,i) = 1._rkind
@@ -167,9 +168,9 @@ contains
       call lubksb(mat,n,n,indx,y(1,j))
     enddo
     mat = y
-!   
+    !
   end subroutine invmat
-! 
+  !
   SUBROUTINE LUDCMP(A,N,NP,INDX,D)
   integer, parameter :: NMAX = 100
   real(rkind), parameter :: TINY = 1.0D-20
@@ -180,7 +181,7 @@ contains
   real(rkind), dimension(NMAX) :: VV
   integer :: I,J,K,IMAX
   real(rkind) :: SUM,DUM,AAMAX
-! 
+  !
   D=1._rkind
   DO 12 I=1,N
   AAMAX=0._rkind
@@ -238,7 +239,7 @@ contains
   IF(A(N,N).EQ.0._rkind)A(N,N)=TINY
   RETURN
   END
-! 
+  !
   SUBROUTINE LUBKSB(A,N,NP,INDX,B)
   integer, intent(in) :: N,NP
   integer, dimension(N), intent(in) :: INDX
@@ -271,31 +272,31 @@ contains
   14    CONTINUE
   RETURN
   END
-! 
+  !
   subroutine detmat(mat,n,det)
-!   
+    !
     integer, intent(in) :: n
     real(rkind), dimension(n,n), intent(inout) :: mat
     real(rkind), intent(out) :: det
     integer :: j
     integer, dimension(n) :: indx
     real(rkind) :: d
-!   
+    !
     call ludcmp(mat,n,n,indx,d)
     do j=1,n
       d = d*mat(j,j)
     enddo
     det = d
-!   
+    !
   end subroutine detmat
-! 
+  !
   subroutine insitu_start(fcoproc,vtkpipeline,masterproc)
     character(len=*), intent(in) :: vtkpipeline
     logical, intent(in) :: masterproc
     logical, intent(inout) :: fcoproc
-!   
+    !
     inquire(file=vtkpipeline, exist=fcoproc)
-!
+
     if (fcoproc) then
       if (masterproc) print*, 'Connecting to Catalyst...'
       if (masterproc) print*, 'Adding '//vtkpipeline
@@ -303,37 +304,66 @@ contains
     else
       if (masterproc) print*, 'WARNING: ', vtkpipeline, ' is missing'
     endif
-!   
+    !
   end subroutine insitu_start
-!
+
   subroutine insitu_end(fcoproc)
     logical, intent(in) :: fcoproc
-!   
+    !
     if (fcoproc) CALL coprocessorfinalize() ! Finalize Catalyst
-!   
+    !
   end subroutine insitu_end
-!
+
   elemental function byte_size_int32(x) result(bytes)
   integer, intent(in) :: x
   integer(ikind64)    :: bytes
-!
+
   bytes = storage_size(x) / 8
 endfunction byte_size_int32
 #ifdef SINGLE_PRECISION
 elemental function byte_size_real32(x) result(bytes)
 real(rkind), intent(in) :: x
 integer(ikind64)        :: bytes
-!
+
 bytes = storage_size(x) / 8
 endfunction byte_size_real32
 #else
 elemental function byte_size_real64(x) result(bytes)
 real(rkind), intent(in) :: x
 integer(ikind64)        :: bytes
-!
+
 bytes = storage_size(x) / 8
 endfunction byte_size_real64
 #endif
+
+subroutine mpi_cart_shift_general(mp_cart, shifts, rank_source, rank_dest)
+integer, intent(in) :: mp_cart, rank_source
+integer, intent(out) :: rank_dest
+integer, dimension(3), intent(in) :: shifts
+integer, dimension(3) :: ncoords_source, ncoords_dest, dims, coords
+logical, dimension(3) :: pbc
+integer :: ierr, i
+
+!get communicator features
+call mpi_cart_get(mp_cart, 3, dims, pbc, coords, ierr)
+!print*,'Periodicity active on directions: ',pbc
+!get coordinates of rank_source
+call mpi_cart_coords(mp_cart, rank_source, 3, ncoords_source, ierr)
+!print*,'coords/my_coords should be equal: ',coords, ncoords_source
+
+ncoords_dest(1:3) = ncoords_source(1:3) + shifts(1:3)
+do i=1,3
+if (pbc(i)) then
+  if (ncoords_dest(i)==-1) ncoords_dest(i) = dims(i)-1
+  if (ncoords_dest(i)==dims(i)) ncoords_dest(i) = 0
+endif
+enddo
+if(any(ncoords_dest(1:3)==-1) .or. any(ncoords_dest(1:3)==dims(1:3))) then
+rank_dest = mpi_proc_null
+else
+call mpi_cart_rank(mp_cart,ncoords_dest,rank_dest,ierr)
+endif
+endsubroutine mpi_cart_shift_general
 !
 endmodule streams_parameters
 

@@ -1,11 +1,11 @@
 module streams_kernels_gpu
-!
+
   use streams_parameters, only : rkind, ikind, real64
   use cudafor
   implicit none
-!
+
 contains
-!
+
   subroutine zero_flux_cuf(nx, ny, nz, nv, fl_gpu)
     integer :: nx, ny, nz, nv
     real(rkind), dimension(1:,1:,1:,1:), intent(inout), device :: fl_gpu
@@ -22,7 +22,7 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine zero_flux_cuf
-!
+
   subroutine init_flux_cuf(nx, ny, nz, nv, fl_gpu, fln_gpu, rhodt)
     integer :: nx, ny, nz, nv
     real(rkind) :: rhodt
@@ -41,16 +41,17 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine init_flux_cuf
-!
-  attributes(global) launch_bounds(256) subroutine euler_x_fluxes_hybrid_kernel(nv, nv_aux, nx, ny, &
-  &nz, ng, eul_imin, eul_imax, lmax_base, nkeep, rgas0, w_aux_gpu, coeff_deriv1_gpu, dcsidx_gpu, fhat_g&
-  &pu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold, weno_size&
-  &, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t0&
-  &)
-!
+
+
+  attributes(global) launch_bounds(256) subroutine euler_x_fluxes_hybrid_kernel(nv, nv_aux, nx, ny,&
+  & nz, ng, istart_face, iend_face, lmax_base, nkeep, rgas0, w_aux_gpu, coeff_deriv1_gpu, dcsidx_gpu,&
+  & fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold,&
+  & weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,&
+  &rho0,u0,t0)
+
     implicit none
     integer, value :: nv, nx, ny, nz, ng, nv_aux
-    integer, value :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+    integer, value :: istart_face, iend_face, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
     integer, value :: weno_scheme, weno_size, weno_version
     integer, dimension(0:nx,0:ny,0:nz,1:3) :: ep_ord_change_gpu
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv_aux) :: w_aux_gpu
@@ -82,20 +83,20 @@ contains
     real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
     integer :: n,n2
     real(rkind) :: t_sumdenrho, t_sumdenee, t2_sumdenrho, t2_sumdenee
-!
-!
-    i = blockdim%x * (blockidx%x - 1) + threadidx%x + eul_imin - 2
+
+
+    i = blockdim%x * (blockidx%x - 1) + threadidx%x + istart_face - 1
     j = blockdim%y * (blockidx%y - 1) + threadidx%y
-    if (j > ny .or. i > eul_imax) return
+    if (j > ny .or. i > iend_face) return
     do k=1,nz
-!
+
       ishk = 0
       do ii=i-weno_scheme+1,i+weno_scheme
         if (w_aux_gpu(ii,j,k,8) > sensor_threshold) ishk = 1
       enddo
-!
+
       if (ishk == 0) then
-!
+
         ft1 = 0._rkind
         ft2 = 0._rkind
         ft3 = 0._rkind
@@ -114,7 +115,7 @@ contains
             uvs5_p = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i-m,j,k,1)
               uui = w_aux_gpu(i-m,j,k,2)
               vvi = w_aux_gpu(i-m,j,k,3)
@@ -123,7 +124,7 @@ contains
               tti = w_aux_gpu(i-m,j,k,6)
               ppi = tti*rhoi*rgas0
               eei = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
-!
+
               rhoip = w_aux_gpu(i-m+l,j,k,1)
               uuip = w_aux_gpu(i-m+l,j,k,2)
               vvip = w_aux_gpu(i-m+l,j,k,3)
@@ -132,11 +133,11 @@ contains
               ttip = w_aux_gpu(i-m+l,j,k,6)
               ppip = ttip*rhoip*rgas0
               eeip = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
-!
+
               rhom = rhoi+rhoip
               eem = eei + eeip
-!
-!
+
+
               if(nkeep == 0) then
                 drhof = 1._rkind
                 deef = 1._rkind
@@ -162,7 +163,7 @@ contains
                 drhof = sumnumrho/sumdenrho
                 deef = sumnumee /sumdenee
               endif
-!
+
               uv_part = (uui+uuip) * rhom * drhof
               uvs1 = uvs1 + uv_part * (2._rkind)
               uvs2 = uvs2 + uv_part * (uui+uuip)
@@ -189,7 +190,7 @@ contains
             uvs5 = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i-m,j,k,1)
               uui = w_aux_gpu(i-m,j,k,2)
               vvi = w_aux_gpu(i-m,j,k,3)
@@ -197,7 +198,7 @@ contains
               enti = w_aux_gpu(i-m,j,k,5)
               tti = w_aux_gpu(i-m,j,k,6)
               ppi = tti*rhoi*rgas0
-!
+
               rhoip = w_aux_gpu(i-m+l,j,k,1)
               uuip = w_aux_gpu(i-m+l,j,k,2)
               vvip = w_aux_gpu(i-m+l,j,k,3)
@@ -205,7 +206,7 @@ contains
               entip = w_aux_gpu(i-m+l,j,k,5)
               ttip = w_aux_gpu(i-m+l,j,k,6)
               ppip = ttip*rhoip*rgas0
-!
+
               rhom = rhoi+rhoip
               uv_part = (uui+uuip) * rhom
               uvs1 = uvs1 + uv_part * (2._rkind)
@@ -223,13 +224,13 @@ contains
             ft6 = ft6 + coeff_deriv1_gpu(l,lmax)*uvs6
           enddo
         endif
-!
+
         fh1 = 0.25_rkind*ft1
         fh2 = 0.25_rkind*ft2
         fh3 = 0.25_rkind*ft3
         fh4 = 0.25_rkind*ft4
         fh5 = 0.25_rkind*ft5
-!
+
         if ((i==0 .and. force_zero_flux_min == 1).or.(i==nx .and. force_zero_flux_max == 1)) then
           fh1 = 0._rkind
           fh2 = 0._rkind
@@ -238,18 +239,18 @@ contains
           fh5 = 0._rkind
         endif
         fh2 = fh2 + 0.5_rkind*ft6
-!
+
         fhat_gpu(i,j,k,1) = fh1
         fhat_gpu(i,j,k,2) = fh2
         fhat_gpu(i,j,k,3) = fh3
         fhat_gpu(i,j,k,4) = fh4
         fhat_gpu(i,j,k,5) = fh5
       else
-        call compute_roe_average(nx, ny, nz, ng, i, i+1, j, j, k, k, w_aux_gpu, rgas0, b1, b2, b3, c&
-        &, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, calorically_perfect, tol_iter_nr,t0)
-!
+        call compute_roe_average(nx, ny, nz, ng, i, i+1, j, j, k, k, w_aux_gpu, rgas0, b1, b2, b3,&
+        & c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, calorically_perfect, tol_iter_nr,t0)
+
         call eigenvectors_x(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
-!
+
         do m=1,5
           evmax(m) = -1._rkind
         enddo
@@ -261,13 +262,13 @@ contains
           c = sqrt (gamloc*rgas0*tt)
           evmax(1) = max(abs(uu-c),evmax(1))
           evmax(2) = max(abs(uu ),evmax(2))
-          evmax(3) = max(abs(uu+c),evmax(3))
+          evmax(3) = evmax(2)
           evmax(4) = evmax(2)
-          evmax(5) = evmax(2)
+          evmax(5) = max(abs(uu+c),evmax(5))
         enddo
         do l=1,weno_size
           ll = i + l - weno_scheme
-!
+
           rho = w_aux_gpu(ll,j,k,1)
           uu = w_aux_gpu(ll,j,k,2)
           vv = w_aux_gpu(ll,j,k,3)
@@ -283,7 +284,7 @@ contains
           do m=1,5
             wc = 0._rkind
             gc = 0._rkind
-!
+
             wc = wc + el(1,m) * rho
             gc = gc + el(1,m) * fi(1)
             wc = wc + el(2,m) * rho*uu
@@ -294,7 +295,7 @@ contains
             gc = gc + el(4,m) * fi(4)
             wc = wc + el(5,m) * (rho*h-pp)
             gc = gc + el(5,m) * fi(5)
-!
+
             c = 0.5_rkind * (gc + evmax(m) * wc)
             gp(m,l) = c
             gm(m,l) = gc - c
@@ -308,21 +309,21 @@ contains
             fhat_gpu(i,j,k,m) = fhat_gpu(i,j,k,m) + er(mm,m) * fi(mm)
           enddo
         enddo
-!
+
       endif
     enddo
-!
+
   endsubroutine euler_x_fluxes_hybrid_kernel
-!
-  attributes(global) launch_bounds(256) subroutine euler_x_fluxes_hybrid_rusanov_kernel(nv, nv_aux, &
-  &nx, ny, nz, ng, eul_imin, eul_imax, lmax_base, nkeep, rgas0, w_aux_gpu, coeff_deriv1_gpu, dcsidx_gpu&
-  &, fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold, w&
-  &eno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rh&
-  &o0,u0,t0)
-!
+
+  attributes(global) launch_bounds(256) subroutine euler_x_fluxes_hybrid_rusanov_kernel(nv, nv_aux,&
+  & nx, ny, nz, ng, istart_face, iend_face, lmax_base, nkeep, rgas0, w_aux_gpu, coeff_deriv1_gpu,&
+  & dcsidx_gpu, fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version,&
+  & sensor_threshold, weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu,&
+  & calorically_perfect, tol_iter_nr,rho0,u0,t0)
+
     implicit none
     integer, value :: nv, nx, ny, nz, ng, nv_aux
-    integer, value :: eul_imin, eul_imax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
+    integer, value :: istart_face, iend_face, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
     integer, value :: weno_scheme, weno_size, weno_version
     integer, dimension(0:nx,0:ny,0:nz,1:3) :: ep_ord_change_gpu
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv_aux) :: w_aux_gpu
@@ -354,19 +355,19 @@ contains
     real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
     integer :: n,n2
     real(rkind) :: t_sumdenrho, t_sumdenee, t2_sumdenrho, t2_sumdenee
-!
-    i = blockdim%x * (blockidx%x - 1) + threadidx%x + eul_imin - 2
+
+    i = blockdim%x * (blockidx%x - 1) + threadidx%x + istart_face - 1
     j = blockdim%y * (blockidx%y - 1) + threadidx%y
-    if (j > ny .or. i > eul_imax) return
+    if (j > ny .or. i > iend_face) return
     do k=1,nz
-!
+
       ishk = 0
       do ii=i-weno_scheme+1,i+weno_scheme
         if (w_aux_gpu(ii,j,k,8) > sensor_threshold) ishk = 1
       enddo
-!
+
       if (ishk == 0) then
-!
+
         ft1 = 0._rkind
         ft2 = 0._rkind
         ft3 = 0._rkind
@@ -385,7 +386,7 @@ contains
             uvs5_p = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i-m,j,k,1)
               uui = w_aux_gpu(i-m,j,k,2)
               vvi = w_aux_gpu(i-m,j,k,3)
@@ -394,7 +395,7 @@ contains
               tti = w_aux_gpu(i-m,j,k,6)
               ppi = tti*rhoi*rgas0
               eei = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
-!
+
               rhoip = w_aux_gpu(i-m+l,j,k,1)
               uuip = w_aux_gpu(i-m+l,j,k,2)
               vvip = w_aux_gpu(i-m+l,j,k,3)
@@ -403,10 +404,10 @@ contains
               ttip = w_aux_gpu(i-m+l,j,k,6)
               ppip = ttip*rhoip*rgas0
               eeip = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
-!
+
               rhom = rhoi+rhoip
               eem = eei + eeip
-!
+
               if(nkeep == 0) then
                 drhof = 1._rkind
                 deef = 1._rkind
@@ -432,7 +433,7 @@ contains
                 drhof = sumnumrho/sumdenrho
                 deef = sumnumee /sumdenee
               endif
-!
+
               uv_part = (uui+uuip) * rhom * drhof
               uvs1 = uvs1 + uv_part * (2._rkind)
               uvs2 = uvs2 + uv_part * (uui+uuip)
@@ -459,7 +460,7 @@ contains
             uvs5 = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i-m,j,k,1)
               uui = w_aux_gpu(i-m,j,k,2)
               vvi = w_aux_gpu(i-m,j,k,3)
@@ -467,7 +468,7 @@ contains
               enti = w_aux_gpu(i-m,j,k,5)
               tti = w_aux_gpu(i-m,j,k,6)
               ppi = tti*rhoi*rgas0
-!
+
               rhoip = w_aux_gpu(i-m+l,j,k,1)
               uuip = w_aux_gpu(i-m+l,j,k,2)
               vvip = w_aux_gpu(i-m+l,j,k,3)
@@ -475,7 +476,7 @@ contains
               entip = w_aux_gpu(i-m+l,j,k,5)
               ttip = w_aux_gpu(i-m+l,j,k,6)
               ppip = ttip*rhoip*rgas0
-!
+
               rhom = rhoi+rhoip
               uv_part = (uui+uuip) * rhom
               uvs1 = uvs1 + uv_part * (2._rkind)
@@ -493,13 +494,13 @@ contains
             ft6 = ft6 + coeff_deriv1_gpu(l,lmax)*uvs6
           enddo
         endif
-!
+
         fh1 = 0.25_rkind*ft1
         fh2 = 0.25_rkind*ft2
         fh3 = 0.25_rkind*ft3
         fh4 = 0.25_rkind*ft4
         fh5 = 0.25_rkind*ft5
-!
+
         if ((i==0 .and. force_zero_flux_min == 1).or.(i==nx .and. force_zero_flux_max == 1)) then
           fh1 = 0._rkind
           fh2 = 0._rkind
@@ -508,7 +509,7 @@ contains
           fh5 = 0._rkind
         endif
         fh2 = fh2 + 0.5_rkind*ft6
-!
+
         fhat_gpu(i,j,k,1) = fh1
         fhat_gpu(i,j,k,2) = fh2
         fhat_gpu(i,j,k,3) = fh3
@@ -527,7 +528,7 @@ contains
         enddo
         do l=1,weno_size
           ll = i + l - weno_scheme
-!
+
           rho = w_aux_gpu(ll,j,k,1)
           uu = w_aux_gpu(ll,j,k,2)
           vv = w_aux_gpu(ll,j,k,3)
@@ -535,7 +536,7 @@ contains
           h = w_aux_gpu(ll,j,k,5)
           rhou = rho*uu
           pp = rho*w_aux_gpu(ll,j,k,6)*rgas0
-!
+
           rhoevm = rho*evmax
           evm = rhou
           c = 0.5_rkind * (evm + rhoevm)
@@ -559,16 +560,16 @@ contains
           gm(5,l) = evm - c
         enddo
         wenorec_ord = max(weno_scheme+ep_ord_change_gpu(i,j,k,1),1)
-        call wenorec_1d(nv,gp,gm,fi,weno_scheme,wenorec_ord,weno_version,rho0,u0)
+        call wenorec_1d_rusanov(nv,gp,gm,fi,weno_scheme,wenorec_ord,weno_version,rho0,u0)
         do m=1,5
           fhat_gpu(i,j,k,m) = fi(m)
         enddo
-!
+
       endif
     enddo
-!
+
   endsubroutine euler_x_fluxes_hybrid_rusanov_kernel
-!
+
   subroutine euler_x_update_cuf(nx, ny, nz, ng, nv, eul_imin, eul_imax, fhat_gpu,fl_gpu,dcsidx_gpu,stream_id)
     integer :: nx,ny,nz,ng,nv,eul_imin,eul_imax
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv), intent(in), device :: fhat_gpu
@@ -576,7 +577,7 @@ contains
     real(rkind), dimension(1:nx), intent(in), device :: dcsidx_gpu
     integer(kind=cuda_stream_kind) :: stream_id
     integer :: i,j,k,m,iv,iercuda
-!
+
     !$cuf kernel do(3) <<<*,*,stream=stream_id>>>
     do k=1,nz
       do j=1,ny
@@ -588,7 +589,7 @@ contains
       enddo
     enddo
   endsubroutine euler_x_update_cuf
-!
+
   subroutine euler_y_update_cuf(nx, ny, nz, ng, nv, eul_jmin, eul_jmax, fhat_gpu,fl_gpu,detady_gpu,stream_id)
     integer :: nx,ny,nz,ng,nv,eul_jmin,eul_jmax
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv), intent(in), device :: fhat_gpu
@@ -596,7 +597,7 @@ contains
     real(rkind), dimension(1:ny), intent(in), device :: detady_gpu
     integer(kind=cuda_stream_kind) :: stream_id
     integer :: i,j,k,m,iv,iercuda
-!
+
     !$cuf kernel do(3) <<<*,*,stream=stream_id>>>
     do k=1,nz
       do j=eul_jmin,eul_jmax
@@ -608,7 +609,7 @@ contains
       enddo
     enddo
   endsubroutine euler_y_update_cuf
-!
+
   subroutine euler_z_update_cuf(nx, ny, nz, ng, nv, eul_kmin, eul_kmax, fhat_gpu,fl_gpu,dzitdz_gpu,stream_id)
     integer :: nx,ny,nz,ng,nv,eul_kmin,eul_kmax
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv), intent(in), device :: fhat_gpu
@@ -616,7 +617,7 @@ contains
     real(rkind), dimension(1:nz), intent(in), device :: dzitdz_gpu
     integer(kind=cuda_stream_kind) :: stream_id
     integer :: i,j,k,m,iv,iercuda
-!
+
     !$cuf kernel do(3) <<<*,*,stream=stream_id>>>
     do k=eul_kmin,eul_kmax
       do j=1,ny
@@ -628,12 +629,13 @@ contains
       enddo
     enddo
   endsubroutine euler_z_update_cuf
-!
+
+
   attributes(global) launch_bounds(256) subroutine euler_z_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng,&
-  & eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu, fhat_&
-  &gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold, weno_siz&
-  &e, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t&
-  &0)
+  & eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gpu,&
+  & fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold,&
+  & weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,&
+  &rho0,u0,t0)
     implicit none
     integer, value :: nv, nx, ny, nz, ng, nv_aux
     integer, value :: eul_kmin, eul_kmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
@@ -669,17 +671,17 @@ contains
     real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
     integer :: n,n2
     real(rkind) :: t_sumdenrho, t_sumdenee, t2_sumdenrho, t2_sumdenee
-!
+
     i = blockdim%x * (blockidx%x - 1) + threadidx%x
     j = blockdim%y * (blockidx%y - 1) + threadidx%y
     if(i > nx .or. j > ny) return
-!
+
     do k=eul_kmin-1,eul_kmax
       ishk = 0
       do kk=k-weno_scheme+1,k+weno_scheme
         if (w_aux_gpu(i,j,kk,8) > sensor_threshold) ishk = 1
       enddo
-!
+
       if (ishk == 0) then
         ft1 = 0._rkind
         ft2 = 0._rkind
@@ -699,7 +701,7 @@ contains
             uvs5_p = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j,k-m,1)
               uui = w_aux_gpu(i,j,k-m,2)
               vvi = w_aux_gpu(i,j,k-m,3)
@@ -708,7 +710,7 @@ contains
               tti = w_aux_gpu(i,j,k-m,6)
               ppi = tti*rhoi*rgas0
               eei = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
-!
+
               rhoip = w_aux_gpu(i,j,k-m+l,1)
               uuip = w_aux_gpu(i,j,k-m+l,2)
               vvip = w_aux_gpu(i,j,k-m+l,3)
@@ -717,11 +719,11 @@ contains
               ttip = w_aux_gpu(i,j,k-m+l,6)
               ppip = ttip*rhoip*rgas0
               eeip = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
-!
+
               rhom = rhoi + rhoip
               eem = eei + eeip
-!
-!
+
+
               if(nkeep == 0) then
                 drhof = 1._rkind
                 deef = 1._rkind
@@ -747,7 +749,7 @@ contains
                 drhof = sumnumrho/sumdenrho
                 deef = sumnumee /sumdenee
               endif
-!
+
               uv_part = (wwi+wwip) * rhom * drhof
               uvs1 = uvs1 + uv_part * (2._rkind)
               uvs2 = uvs2 + uv_part * (uui+uuip)
@@ -774,7 +776,7 @@ contains
             uvs5 = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j,k-m,1)
               uui = w_aux_gpu(i,j,k-m,2)
               vvi = w_aux_gpu(i,j,k-m,3)
@@ -782,7 +784,7 @@ contains
               enti = w_aux_gpu(i,j,k-m,5)
               tti = w_aux_gpu(i,j,k-m,6)
               ppi = tti*rhoi*rgas0
-!
+
               rhoip = w_aux_gpu(i,j,k-m+l,1)
               uuip = w_aux_gpu(i,j,k-m+l,2)
               vvip = w_aux_gpu(i,j,k-m+l,3)
@@ -790,7 +792,7 @@ contains
               entip = w_aux_gpu(i,j,k-m+l,5)
               ttip = w_aux_gpu(i,j,k-m+l,6)
               ppip = ttip*rhoip*rgas0
-!
+
               rhom = rhoi+rhoip
               uv_part = (wwi+wwip) * rhom
               uvs1 = uvs1 + uv_part * (2._rkind)
@@ -821,18 +823,18 @@ contains
           fh5 = 0._rkind
         endif
         fh4 = fh4 + 0.5_rkind*ft6
-!
+
         fhat_gpu(i,j,k,1) = fh1
         fhat_gpu(i,j,k,2) = fh2
         fhat_gpu(i,j,k,3) = fh3
         fhat_gpu(i,j,k,4) = fh4
         fhat_gpu(i,j,k,5) = fh5
       else
-        call compute_roe_average(nx, ny, nz, ng, i, i, j, j, k, k+1, w_aux_gpu, rgas0, b1, b2, b3, c&
-        &, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, calorically_perfect, tol_iter_nr,t0)
-!
+        call compute_roe_average(nx, ny, nz, ng, i, i, j, j, k, k+1, w_aux_gpu, rgas0, b1, b2, b3,&
+        & c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, calorically_perfect, tol_iter_nr,t0)
+
         call eigenvectors_z(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
-!
+
         do m=1,5
           evmax(m) = -1._rkind
         enddo
@@ -844,13 +846,13 @@ contains
           c = sqrt (gamloc*rgas0*tt)
           evmax(1) = max(abs(ww-c),evmax(1))
           evmax(2) = max(abs(ww ),evmax(2))
-          evmax(3) = max(abs(ww+c),evmax(3))
+          evmax(3) = evmax(2)
           evmax(4) = evmax(2)
-          evmax(5) = evmax(2)
+          evmax(5) = max(abs(ww+c),evmax(5))
         enddo
         do l=1,weno_size
           ll = k + l - weno_scheme
-!
+
           rho = w_aux_gpu(i,j,ll,1)
           uu = w_aux_gpu(i,j,ll,2)
           vv = w_aux_gpu(i,j,ll,3)
@@ -866,7 +868,7 @@ contains
           do m=1,5
             wc = 0._rkind
             gc = 0._rkind
-!
+
             wc = wc + el(1,m) * rho
             gc = gc + el(1,m) * fk(1)
             wc = wc + el(2,m) * rho*uu
@@ -877,7 +879,7 @@ contains
             gc = gc + el(4,m) * fk(4)
             wc = wc + el(5,m) * (rho*h-pp)
             gc = gc + el(5,m) * fk(5)
-!
+
             c = 0.5_rkind * (gc + evmax(m) * wc)
             gp(m,l) = c
             gm(m,l) = gc - c
@@ -891,18 +893,18 @@ contains
             fhat_gpu(i,j,k,m) = fhat_gpu(i,j,k,m) + er(mm,m) * fk(mm)
           enddo
         enddo
-!
+
       endif
     enddo
-!
-!
+
+
   endsubroutine euler_z_hybrid_kernel
-!
+
   attributes(global) launch_bounds(256) subroutine euler_z_hybrid_rusanov_kernel(nv, nv_aux, nx, ny,&
-  & nz, ng, eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dzitdz_gp&
-  &u, fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold, &
-  &weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,r&
-  &ho0,u0,t0)
+  & nz, ng, eul_kmin, eul_kmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu,&
+  & dzitdz_gpu, fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version,&
+  & sensor_threshold, weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu,&
+  & calorically_perfect, tol_iter_nr,rho0,u0,t0)
     implicit none
     integer, value :: nv, nx, ny, nz, ng, nv_aux
     integer, value :: eul_kmin, eul_kmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
@@ -938,17 +940,17 @@ contains
     real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
     integer :: n,n2
     real(rkind) :: t_sumdenrho, t_sumdenee, t2_sumdenrho, t2_sumdenee
-!
+
     i = blockdim%x * (blockidx%x - 1) + threadidx%x
     j = blockdim%y * (blockidx%y - 1) + threadidx%y
     if(i > nx .or. j > ny) return
-!
+
     do k=eul_kmin-1,eul_kmax
       ishk = 0
       do kk=k-weno_scheme+1,k+weno_scheme
         if (w_aux_gpu(i,j,kk,8) > sensor_threshold) ishk = 1
       enddo
-!
+
       if (ishk == 0) then
         ft1 = 0._rkind
         ft2 = 0._rkind
@@ -968,7 +970,7 @@ contains
             uvs5_p = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j,k-m,1)
               uui = w_aux_gpu(i,j,k-m,2)
               vvi = w_aux_gpu(i,j,k-m,3)
@@ -977,7 +979,7 @@ contains
               tti = w_aux_gpu(i,j,k-m,6)
               ppi = tti*rhoi*rgas0
               eei = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
-!
+
               rhoip = w_aux_gpu(i,j,k-m+l,1)
               uuip = w_aux_gpu(i,j,k-m+l,2)
               vvip = w_aux_gpu(i,j,k-m+l,3)
@@ -986,10 +988,10 @@ contains
               ttip = w_aux_gpu(i,j,k-m+l,6)
               ppip = ttip*rhoip*rgas0
               eeip = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
-!
+
               rhom = rhoi + rhoip
               eem = eei + eeip
-!
+
               if(nkeep == 0) then
                 drhof = 1._rkind
                 deef = 1._rkind
@@ -1015,7 +1017,7 @@ contains
                 drhof = sumnumrho/sumdenrho
                 deef = sumnumee /sumdenee
               endif
-!
+
               uv_part = (wwi+wwip) * rhom * drhof
               uvs1 = uvs1 + uv_part * (2._rkind)
               uvs2 = uvs2 + uv_part * (uui+uuip)
@@ -1042,7 +1044,7 @@ contains
             uvs5 = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j,k-m,1)
               uui = w_aux_gpu(i,j,k-m,2)
               vvi = w_aux_gpu(i,j,k-m,3)
@@ -1050,7 +1052,7 @@ contains
               enti = w_aux_gpu(i,j,k-m,5)
               tti = w_aux_gpu(i,j,k-m,6)
               ppi = tti*rhoi*rgas0
-!
+
               rhoip = w_aux_gpu(i,j,k-m+l,1)
               uuip = w_aux_gpu(i,j,k-m+l,2)
               vvip = w_aux_gpu(i,j,k-m+l,3)
@@ -1058,7 +1060,7 @@ contains
               entip = w_aux_gpu(i,j,k-m+l,5)
               ttip = w_aux_gpu(i,j,k-m+l,6)
               ppip = ttip*rhoip*rgas0
-!
+
               rhom = rhoi+rhoip
               uv_part = (wwi+wwip) * rhom
               uvs1 = uvs1 + uv_part * (2._rkind)
@@ -1089,7 +1091,7 @@ contains
           fh5 = 0._rkind
         endif
         fh4 = fh4 + 0.5_rkind*ft6
-!
+
         fhat_gpu(i,j,k,1) = fh1
         fhat_gpu(i,j,k,2) = fh2
         fhat_gpu(i,j,k,3) = fh3
@@ -1108,7 +1110,7 @@ contains
         enddo
         do l=1,weno_size
           ll = k + l - weno_scheme
-!
+
           rho = w_aux_gpu(i,j,ll,1)
           uu = w_aux_gpu(i,j,ll,2)
           vv = w_aux_gpu(i,j,ll,3)
@@ -1116,7 +1118,7 @@ contains
           h = w_aux_gpu(i,j,ll,5)
           rhow = rho*ww
           pp = rho*w_aux_gpu(i,j,ll,6)*rgas0
-!
+
           rhoevm = rho*evmax
           evm = rhow
           c = 0.5_rkind * (evm + rhoevm)
@@ -1140,21 +1142,22 @@ contains
           gm(5,l) = evm-c
         enddo
         wenorec_ord = max(weno_scheme+ep_ord_change_gpu(i,j,k,3),1)
-        call wenorec_1d(nv,gp,gm,fk,weno_scheme,wenorec_ord,weno_version,rho0,u0)
+        call wenorec_1d_rusanov(nv,gp,gm,fk,weno_scheme,wenorec_ord,weno_version,rho0,u0)
         do m=1,5
           fhat_gpu(i,j,k,m) = fk(m)
         enddo
-!
+
       endif
     enddo
-!
+
   endsubroutine euler_z_hybrid_rusanov_kernel
-!
+
+
   attributes(global) launch_bounds(256) subroutine euler_y_hybrid_kernel(nv, nv_aux, nx, ny, nz, ng,&
-  & eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu, fhat_&
-  &gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold, weno_siz&
-  &e, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,rho0,u0,t&
-  &0)
+  & eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gpu,&
+  & fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold,&
+  & weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,&
+  &rho0,u0,t0)
     implicit none
     integer, value :: nv, nx, ny, nz, ng, nv_aux
     integer, value :: eul_jmin, eul_jmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
@@ -1190,18 +1193,18 @@ contains
     real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
     integer :: n,n2
     real(rkind) :: t_sumdenrho, t_sumdenee, t2_sumdenrho, t2_sumdenee
-!
+
     i = blockdim%x * (blockidx%x - 1) + threadidx%x
     k = blockdim%y * (blockidx%y - 1) + threadidx%y
     if (i > nx .or. k > nz) return
-!
+
     do j=eul_jmin-1,eul_jmax
-!
+
       ishk = 0
       do jj=j-weno_scheme+1,j+weno_scheme
         if (w_aux_gpu(i,jj,k,8) > sensor_threshold) ishk = 1
       enddo
-!
+
       if (ishk == 0) then
         ft1 = 0._rkind
         ft2 = 0._rkind
@@ -1221,7 +1224,7 @@ contains
             uvs5_p = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j-m,k,1)
               uui = w_aux_gpu(i,j-m,k,2)
               vvi = w_aux_gpu(i,j-m,k,3)
@@ -1230,7 +1233,7 @@ contains
               tti = w_aux_gpu(i,j-m,k,6)
               ppi = tti*rhoi*rgas0
               eei = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
-!
+
               rhoip = w_aux_gpu(i,j-m+l,k,1)
               uuip = w_aux_gpu(i,j-m+l,k,2)
               vvip = w_aux_gpu(i,j-m+l,k,3)
@@ -1239,11 +1242,11 @@ contains
               ttip = w_aux_gpu(i,j-m+l,k,6)
               ppip = ttip*rhoip*rgas0
               eeip = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
-!
+
               rhom = rhoi + rhoip
               eem = eei + eeip
-!
-!
+
+
               if(nkeep == 0) then
                 drhof = 1._rkind
                 deef = 1._rkind
@@ -1269,7 +1272,7 @@ contains
                 drhof = sumnumrho/sumdenrho
                 deef = sumnumee /sumdenee
               endif
-!
+
               uv_part = (vvi+vvip) * rhom * drhof
               uvs1 = uvs1 + uv_part * (2._rkind)
               uvs2 = uvs2 + uv_part * (uui+uuip)
@@ -1296,7 +1299,7 @@ contains
             uvs5 = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j-m,k,1)
               uui = w_aux_gpu(i,j-m,k,2)
               vvi = w_aux_gpu(i,j-m,k,3)
@@ -1304,7 +1307,7 @@ contains
               enti = w_aux_gpu(i,j-m,k,5)
               tti = w_aux_gpu(i,j-m,k,6)
               ppi = tti*rhoi*rgas0
-!
+
               rhoip = w_aux_gpu(i,j-m+l,k,1)
               uuip = w_aux_gpu(i,j-m+l,k,2)
               vvip = w_aux_gpu(i,j-m+l,k,3)
@@ -1312,7 +1315,7 @@ contains
               entip = w_aux_gpu(i,j-m+l,k,5)
               ttip = w_aux_gpu(i,j-m+l,k,6)
               ppip = ttip*rhoip*rgas0
-!
+
               rhom = rhoi + rhoip
               uv_part = (vvi+vvip) * rhom
               uvs1 = uvs1 + uv_part * (2._rkind)
@@ -1342,20 +1345,20 @@ contains
           fh4 = 0._rkind
           fh5 = 0._rkind
         endif
-!
+
         fh3 = fh3 + 0.5_rkind*ft6
-!
+
         fhat_gpu(i,j,k,1) = fh1
         fhat_gpu(i,j,k,2) = fh2
         fhat_gpu(i,j,k,3) = fh3
         fhat_gpu(i,j,k,4) = fh4
         fhat_gpu(i,j,k,5) = fh5
       else
-        call compute_roe_average(nx, ny, nz, ng, i, i, j, j+1, k, k, w_aux_gpu, rgas0, b1, b2, b3, c&
-        &, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, calorically_perfect, tol_iter_nr,t0)
-!
+        call compute_roe_average(nx, ny, nz, ng, i, i, j, j+1, k, k, w_aux_gpu, rgas0, b1, b2, b3,&
+        & c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r, calorically_perfect, tol_iter_nr,t0)
+
         call eigenvectors_y(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
-!
+
         do m=1,5
           evmax(m) = -1._rkind
         enddo
@@ -1367,13 +1370,13 @@ contains
           c = sqrt (gamloc*rgas0*tt)
           evmax(1) = max(abs(vv-c),evmax(1))
           evmax(2) = max(abs(vv ),evmax(2))
-          evmax(3) = max(abs(vv+c),evmax(3))
+          evmax(3) = evmax(2)
           evmax(4) = evmax(2)
-          evmax(5) = evmax(2)
+          evmax(5) = max(abs(vv+c),evmax(5))
         enddo
         do l=1,weno_size
           ll = j + l - weno_scheme
-!
+
           rho = w_aux_gpu(i,ll,k,1)
           uu = w_aux_gpu(i,ll,k,2)
           vv = w_aux_gpu(i,ll,k,3)
@@ -1389,7 +1392,7 @@ contains
           do m=1,5
             wc = 0._rkind
             gc = 0._rkind
-!
+
             wc = wc + el(1,m) * rho
             gc = gc + el(1,m) * fj(1)
             wc = wc + el(2,m) * rho*uu
@@ -1400,7 +1403,7 @@ contains
             gc = gc + el(4,m) * fj(4)
             wc = wc + el(5,m) * (rho*h-pp)
             gc = gc + el(5,m) * fj(5)
-!
+
             c = 0.5_rkind * (gc + evmax(m) * wc)
             gp(m,l) = c
             gm(m,l) = gc - c
@@ -1414,18 +1417,18 @@ contains
             fhat_gpu(i,j,k,m) = fhat_gpu(i,j,k,m) + er(mm,m) * fj(mm)
           enddo
         enddo
-!
+
       endif
     enddo
-!
-!
+
+
   endsubroutine euler_y_hybrid_kernel
-!
+
   attributes(global) launch_bounds(256) subroutine euler_y_hybrid_rusanov_kernel(nv, nv_aux, nx, ny,&
-  & nz, ng, eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, detady_gp&
-  &u, fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version, sensor_threshold, &
-  &weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu, calorically_perfect, tol_iter_nr,r&
-  &ho0,u0,t0)
+  & nz, ng, eul_jmin, eul_jmax, lmax_base, nkeep, rgas0, w_aux_gpu, fl_gpu, coeff_deriv1_gpu,&
+  & detady_gpu, fhat_gpu, force_zero_flux_min, force_zero_flux_max, weno_scheme, weno_version,&
+  & sensor_threshold, weno_size, cp_coeff_gpu, indx_cp_l, indx_cp_r, ep_ord_change_gpu,&
+  & calorically_perfect, tol_iter_nr,rho0,u0,t0)
     implicit none
     integer, value :: nv, nx, ny, nz, ng, nv_aux
     integer, value :: eul_jmin, eul_jmax, lmax_base, nkeep, indx_cp_l, indx_cp_r, calorically_perfect
@@ -1461,18 +1464,18 @@ contains
     real(rkind) :: sumnumrho,sumnumee,sumdenrho,sumdenee
     integer :: n,n2
     real(rkind) :: t_sumdenrho, t_sumdenee, t2_sumdenrho, t2_sumdenee
-!
+
     i = blockdim%x * (blockidx%x - 1) + threadidx%x
     k = blockdim%y * (blockidx%y - 1) + threadidx%y
     if (i > nx .or. k > nz) return
-!
+
     do j=eul_jmin-1,eul_jmax
-!
+
       ishk = 0
       do jj=j-weno_scheme+1,j+weno_scheme
         if (w_aux_gpu(i,jj,k,8) > sensor_threshold) ishk = 1
       enddo
-!
+
       if (ishk == 0) then
         ft1 = 0._rkind
         ft2 = 0._rkind
@@ -1492,7 +1495,7 @@ contains
             uvs5_p = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j-m,k,1)
               uui = w_aux_gpu(i,j-m,k,2)
               vvi = w_aux_gpu(i,j-m,k,3)
@@ -1501,7 +1504,7 @@ contains
               tti = w_aux_gpu(i,j-m,k,6)
               ppi = tti*rhoi*rgas0
               eei = enti-ppi/rhoi-0.5_rkind*(uui*uui+vvi*vvi+wwi*wwi)
-!
+
               rhoip = w_aux_gpu(i,j-m+l,k,1)
               uuip = w_aux_gpu(i,j-m+l,k,2)
               vvip = w_aux_gpu(i,j-m+l,k,3)
@@ -1510,10 +1513,10 @@ contains
               ttip = w_aux_gpu(i,j-m+l,k,6)
               ppip = ttip*rhoip*rgas0
               eeip = entip-ppip/rhoip-0.5_rkind*(uuip*uuip+vvip*vvip+wwip*wwip)
-!
+
               rhom = rhoi + rhoip
               eem = eei + eeip
-!
+
               if(nkeep == 0) then
                 drhof = 1._rkind
                 deef = 1._rkind
@@ -1539,7 +1542,7 @@ contains
                 drhof = sumnumrho/sumdenrho
                 deef = sumnumee /sumdenee
               endif
-!
+
               uv_part = (vvi+vvip) * rhom * drhof
               uvs1 = uvs1 + uv_part * (2._rkind)
               uvs2 = uvs2 + uv_part * (uui+uuip)
@@ -1566,7 +1569,7 @@ contains
             uvs5 = 0._rkind
             uvs6 = 0._rkind
             do m=0,l-1
-!
+
               rhoi = w_aux_gpu(i,j-m,k,1)
               uui = w_aux_gpu(i,j-m,k,2)
               vvi = w_aux_gpu(i,j-m,k,3)
@@ -1574,7 +1577,7 @@ contains
               enti = w_aux_gpu(i,j-m,k,5)
               tti = w_aux_gpu(i,j-m,k,6)
               ppi = tti*rhoi*rgas0
-!
+
               rhoip = w_aux_gpu(i,j-m+l,k,1)
               uuip = w_aux_gpu(i,j-m+l,k,2)
               vvip = w_aux_gpu(i,j-m+l,k,3)
@@ -1582,7 +1585,7 @@ contains
               entip = w_aux_gpu(i,j-m+l,k,5)
               ttip = w_aux_gpu(i,j-m+l,k,6)
               ppip = ttip*rhoip*rgas0
-!
+
               rhom = rhoi + rhoip
               uv_part = (vvi+vvip) * rhom
               uvs1 = uvs1 + uv_part * (2._rkind)
@@ -1612,9 +1615,9 @@ contains
           fh4 = 0._rkind
           fh5 = 0._rkind
         endif
-!
+
         fh3 = fh3 + 0.5_rkind*ft6
-!
+
         fhat_gpu(i,j,k,1) = fh1
         fhat_gpu(i,j,k,2) = fh2
         fhat_gpu(i,j,k,3) = fh3
@@ -1633,7 +1636,7 @@ contains
         enddo
         do l=1,weno_size
           ll = j + l - weno_scheme
-!
+
           rho = w_aux_gpu(i,ll,k,1)
           uu = w_aux_gpu(i,ll,k,2)
           vv = w_aux_gpu(i,ll,k,3)
@@ -1641,7 +1644,7 @@ contains
           h = w_aux_gpu(i,ll,k,5)
           rhov = rho*vv
           pp = rho*w_aux_gpu(i,ll,k,6)*rgas0
-!
+
           rhoevm = rho*evmax
           evm = rhov
           c = 0.5_rkind * (evm + rhoevm)
@@ -1665,23 +1668,23 @@ contains
           gm(5,l) = evm-c
         enddo
         wenorec_ord = max(weno_scheme+ep_ord_change_gpu(i,j,k,2),1)
-        call wenorec_1d(nv,gp,gm,fj,weno_scheme,wenorec_ord,weno_version,rho0,u0)
+        call wenorec_1d_rusanov(nv,gp,gm,fj,weno_scheme,wenorec_ord,weno_version,rho0,u0)
         do m=1,5
           fhat_gpu(i,j,k,m) = fj(m)
         enddo
-!
+
       endif
     enddo
-!
+
   endsubroutine euler_y_hybrid_rusanov_kernel
-!
-  attributes(device) subroutine wenorec_1d(nvar,vp,vm,vhat,iweno,wenorec_ord,weno_version,rho0,u0)
-!
+
+  attributes(device) subroutine wenorec_1d_rusanov(nvar,vp,vm,vhat,iweno,wenorec_ord,weno_version,rho0,u0)
+
     integer :: nvar, iweno, wenorec_ord, weno_version
-    real(rkind), dimension(nvar,8) :: vm,vp
-    real(rkind), dimension(nvar) :: vhat
+    real(rkind), dimension(5,8) :: vm,vp
+    real(rkind), dimension(5) :: vhat
     real(rkind) :: rho0, u0
-!
+
     real(rkind), dimension(-1:4) :: dwe
     real(rkind), dimension(-1:4) :: betap,betam
     real(rkind), dimension( 5) :: betascale
@@ -1694,13 +1697,13 @@ contains
     rho0_2u0_2 = rho0*rho0*u0_2
     rho0_2u0_4 = rho0_2u0_2*u0_2
     betascale(1) = 1._rkind/rho0_2u0_2
-    betascale(2) = betascale(1)
-    betascale(3) = betascale(1)
-    betascale(4) = 1._rkind/rho0_2u0_4
-    betascale(5) = betascale(4)
+    betascale(2) = 1._rkind/rho0_2u0_4
+    betascale(3) = betascale(2)
+    betascale(4) = betascale(2)
+    betascale(5) = betascale(2)/u0_2
     if (wenorec_ord==1) then
       i = iweno
-      do m=1,nvar
+      do m=1,5
         vminus = vp(m,i)
         vplus = vm(m,i+1)
         vhat(m) = vminus+vplus
@@ -1709,12 +1712,12 @@ contains
       i = iweno
       dwe(1) = 2._rkind/3._rkind
       dwe(0) = 1._rkind/3._rkind
-      do m=1,nvar
+      do m=1,5
         betap(0) = (vp(m,i )-vp(m,i-1))**2
         betap(1) = (vp(m,i+1)-vp(m,i ))**2
         betap(1) = betascale(m)*betap(1)
         betap(0) = betascale(m)*betap(0)
-!
+
         betam(0) = (vm(m,i+2)-vm(m,i+1))**2
         betam(1) = (vm(m,i+1)-vm(m,i ))**2
         betam(1) = betascale(m)*betam(1)
@@ -1748,7 +1751,7 @@ contains
       c3 =-7._rkind/6._rkind
       c4 =11._rkind/6._rkind
       if (weno_version==0) then
-        do m=1,nvar
+        do m=1,5
           betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
           betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*( vp(m,i-1)-vp(m,i+1) )**2
           betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
@@ -1773,14 +1776,14 @@ contains
             betap(l) = betap(l)/sump
             betam(l) = betam(l)/summ
           enddo
-          vminus = betap(2)*(c0*vp(m,i )+c1*vp(m,i+1)+c2*vp(m,i+2)) + betap(1)*(c2*vp(m,i-1)+c1*vp(m&
-          &,i )+c0*vp(m,i+1)) + betap(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i ))
+          vminus = betap(2)*(c0*vp(m,i )+c1*vp(m,i+1)+c2*vp(m,i+2)) + betap(1)*(c2*vp(m,i-1)+c1*&
+          &vp(m,i )+c0*vp(m,i+1)) + betap(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i ))
           vplus = betam(2)*(c0*vm(m,i+1)+c1*vm(m,i )+c2*vm(m,i-1)) + betam(1)*(c2*vm(m,i+2)+c1*vm(m,&
           &i+1)+c0*vm(m,i )) + betam(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
           vhat(m) = vminus+vplus
         enddo
       else
-        do m=1,nvar
+        do m=1,5
           betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
           betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*( vp(m,i-1)-vp(m,i+1) )**2
           betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
@@ -1812,13 +1815,13 @@ contains
             betap(l) = betap(l)/sump
             betam(l) = betam(l)/summ
           enddo
-          vminus = betap(2)*(c0*vp(m,i )+c1*vp(m,i+1)+c2*vp(m,i+2)) + betap(1)*(c2*vp(m,i-1)+c1*vp(m&
-          &,i )+c0*vp(m,i+1)) + betap(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i ))
+          vminus = betap(2)*(c0*vp(m,i )+c1*vp(m,i+1)+c2*vp(m,i+2)) + betap(1)*(c2*vp(m,i-1)+c1*&
+          &vp(m,i )+c0*vp(m,i+1)) + betap(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i ))
           vplus = betam(2)*(c0*vm(m,i+1)+c1*vm(m,i )+c2*vm(m,i-1)) + betam(1)*(c2*vm(m,i+2)+c1*vm(m,&
           &i+1)+c0*vm(m,i )) + betam(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
           vhat(m) = vminus+vplus
         enddo
-!
+
       endif
     elseif (wenorec_ord==4) then
       i = iweno
@@ -1829,27 +1832,27 @@ contains
       d1 = 1._rkind/36._rkind
       d2 = 13._rkind/12._rkind
       d3 = 781._rkind/720._rkind
-      do m=1,nvar
-        betap(3)= d1*(-11*vp(m, i)+18*vp(m,i+1)- 9*vp(m,i+2)+ 2*vp(m,i+3))**2+d2*( 2*vp(m, i)- 5*vp(&
-        &m,i+1)+ 4*vp(m,i+2)- vp(m,i+3))**2+ d3*( -vp(m, i)+ 3*vp(m,i+1)- 3*vp(m,i+2)+ vp(m,i+3))**2
-        betap(2)= d1*(- 2*vp(m,i-1)- 3*vp(m,i )+ 6*vp(m,i+1)- vp(m,i+2))**2+d2*( vp(m,i-1)- 2*vp(m,i&
-        & )+ vp(m,i+1) )**2+d3*( -vp(m,i-1)+ 3*vp(m,i )- 3*vp(m,i+1)+ vp(m,i+2))**2
-        betap(1)= d1*( vp(m,i-2)- 6*vp(m,i-1)+ 3*vp(m,i )+ 2*vp(m,i+1))**2+d2*( vp(m,i-1)- 2*vp(m,i &
-        &)+ vp(m,i+1))**2+ d3*( -vp(m,i-2)+ 3*vp(m,i-1)- 3*vp(m,i )+ vp(m,i+1))**2
-        betap(0)= d1*(- 2*vp(m,i-3)+ 9*vp(m,i-2)-18*vp(m,i-1)+11*vp(m,i ))**2+d2*(- vp(m,i-3)+ 4*vp(&
-        &m,i-2)- 5*vp(m,i-1)+ 2*vp(m,i ))**2+d3*( -vp(m,i-3)+ 3*vp(m,i-2)- 3*vp(m,i-1)+ vp(m,i ))**2
+      do m=1,5
+        betap(3)= d1*(-11*vp(m, i)+18*vp(m,i+1)- 9*vp(m,i+2)+ 2*vp(m,i+3))**2+d2*( 2*vp(m, i)- 5*&
+        &vp(m,i+1)+ 4*vp(m,i+2)- vp(m,i+3))**2+ d3*( -vp(m, i)+ 3*vp(m,i+1)- 3*vp(m,i+2)+ vp(m,i+3))**2
+        betap(2)= d1*(- 2*vp(m,i-1)- 3*vp(m,i )+ 6*vp(m,i+1)- vp(m,i+2))**2+d2*( vp(m,i-1)- 2*vp(m,&
+        &i )+ vp(m,i+1) )**2+d3*( -vp(m,i-1)+ 3*vp(m,i )- 3*vp(m,i+1)+ vp(m,i+2))**2
+        betap(1)= d1*( vp(m,i-2)- 6*vp(m,i-1)+ 3*vp(m,i )+ 2*vp(m,i+1))**2+d2*( vp(m,i-1)- 2*vp(m,&
+        &i )+ vp(m,i+1))**2+ d3*( -vp(m,i-2)+ 3*vp(m,i-1)- 3*vp(m,i )+ vp(m,i+1))**2
+        betap(0)= d1*(- 2*vp(m,i-3)+ 9*vp(m,i-2)-18*vp(m,i-1)+11*vp(m,i ))**2+d2*(- vp(m,i-3)+ 4*&
+        &vp(m,i-2)- 5*vp(m,i-1)+ 2*vp(m,i ))**2+d3*( -vp(m,i-3)+ 3*vp(m,i-2)- 3*vp(m,i-1)+ vp(m,i ))**2
         betap(3) = betascale(m)*betap(3)
         betap(2) = betascale(m)*betap(2)
         betap(1) = betascale(m)*betap(1)
         betap(0) = betascale(m)*betap(0)
-        betam(3)= d1*(-11*vm(m,i+1)+18*vm(m,i )- 9*vm(m,i-1)+ 2*vm(m,i-2))**2+d2*( 2*vm(m,i+1)- 5*vm&
-        &(m,i )+ 4*vm(m,i-1)- vm(m,i-2))**2+d3*( -vm(m,i+1)+ 3*vm(m,i )- 3*vm(m,i-1)+ vm(m,i-2))**2
-        betam(2)= d1*(- 2*vm(m,i+2)- 3*vm(m,i+1)+ 6*vm(m,i )- vm(m,i-1))**2+d2*( vm(m,i+2)- 2*vm(m,i&
-        &+1)+ vm(m,i ) )**2+d3*( -vm(m,i+2)+ 3*vm(m,i+1)- 3*vm(m,i )+ vm(m,i-1))**2
+        betam(3)= d1*(-11*vm(m,i+1)+18*vm(m,i )- 9*vm(m,i-1)+ 2*vm(m,i-2))**2+d2*( 2*vm(m,i+1)- 5*&
+        &vm(m,i )+ 4*vm(m,i-1)- vm(m,i-2))**2+d3*( -vm(m,i+1)+ 3*vm(m,i )- 3*vm(m,i-1)+ vm(m,i-2))**2
+        betam(2)= d1*(- 2*vm(m,i+2)- 3*vm(m,i+1)+ 6*vm(m,i )- vm(m,i-1))**2+d2*( vm(m,i+2)- 2*vm(m,&
+        &i+1)+ vm(m,i ) )**2+d3*( -vm(m,i+2)+ 3*vm(m,i+1)- 3*vm(m,i )+ vm(m,i-1))**2
         betam(1)= d1*( vm(m,i+3)- 6*vm(m,i+2)+ 3*vm(m,i+1)+ 2*vm(m,i ))**2+d2*( vm(m,i+2)- 2*vm(m,i+&
         &1)+ vm(m,i ))**2+d3*( -vm(m,i+3)+ 3*vm(m,i+2)- 3*vm(m,i+1)+ vm(m,i ))**2
-        betam(0)= d1*(- 2*vm(m,i+4)+ 9*vm(m,i+3)-18*vm(m,i+2)+11*vm(m,i+1))**2+d2*(- vm(m,i+4)+ 4*vm&
-        &(m,i+3)- 5*vm(m,i+2)+ 2*vm(m,i+1))**2+d3*( -vm(m,i+4)+ 3*vm(m,i+3)- 3*vm(m,i+2)+ vm(m,i+1))**2
+        betam(0)= d1*(- 2*vm(m,i+4)+ 9*vm(m,i+3)-18*vm(m,i+2)+11*vm(m,i+1))**2+d2*(- vm(m,i+4)+ 4*&
+        &vm(m,i+3)- 5*vm(m,i+2)+ 2*vm(m,i+1))**2+d3*( -vm(m,i+4)+ 3*vm(m,i+3)- 3*vm(m,i+2)+ vm(m,i+1))**2
         betam(3) = betascale(m)*betam(3)
         betam(2) = betascale(m)*betam(2)
         betam(1) = betascale(m)*betam(1)
@@ -1866,22 +1869,226 @@ contains
           betap(l) = betap(l)/sump
           betam(l) = betam(l)/summ
         enddo
-        vminus = betap(3)*( 6*vp(m,i )+26*vp(m,i+1)-10*vp(m,i+2)+ 2*vp(m,i+3))+betap(2)*(-2*vp(m,i-1&
-        &)+14*vp(m,i )+14*vp(m,i+1)- 2*vp(m,i+2))+betap(1)*( 2*vp(m,i-2)-10*vp(m,i-1)+26*vp(m,i )+ 6*vp(m,i+1&
-        &))+betap(0)*(-6*vp(m,i-3)+26*vp(m,i-2)-46*vp(m,i-1)+50*vp(m,i ))
-        vplus = betam(3)*( 6*vm(m,i+1)+26*vm(m,i )-10*vm(m,i-1)+ 2*vm(m,i-2))+betam(2)*(-2*vm(m,i+2)&
-        &+14*vm(m,i+1)+14*vm(m,i )- 2*vm(m,i-1))+betam(1)*( 2*vm(m,i+3)-10*vm(m,i+2)+26*vm(m,i+1)+ 6*vm(m,i )&
-        &)+betam(0)*(-6*vm(m,i+4)+26*vm(m,i+3)-46*vm(m,i+2)+50*vm(m,i+1))
+        vminus = betap(3)*( 6*vp(m,i )+26*vp(m,i+1)-10*vp(m,i+2)+ 2*vp(m,i+3))+betap(2)*(-2*vp(m,i-&
+        &1)+14*vp(m,i )+14*vp(m,i+1)- 2*vp(m,i+2))+betap(1)*( 2*vp(m,i-2)-10*vp(m,i-1)+26*vp(m,i )+ 6*vp(m,i+&
+        &1))+betap(0)*(-6*vp(m,i-3)+26*vp(m,i-2)-46*vp(m,i-1)+50*vp(m,i ))
+        vplus = betam(3)*( 6*vm(m,i+1)+26*vm(m,i )-10*vm(m,i-1)+ 2*vm(m,i-2))+betam(2)*(-2*vm(m,i+&
+        &2)+14*vm(m,i+1)+14*vm(m,i )- 2*vm(m,i-1))+betam(1)*( 2*vm(m,i+3)-10*vm(m,i+2)+26*vm(m,i+1)+ 6*vm(m,&
+        &i ))+betam(0)*(-6*vm(m,i+4)+26*vm(m,i+3)-46*vm(m,i+2)+50*vm(m,i+1))
         vhat(m) = (vminus+vplus)/24._rkind
       enddo
     endif
-!
+
+  endsubroutine wenorec_1d_rusanov
+
+  attributes(device) subroutine wenorec_1d(nvar,vp,vm,vhat,iweno,wenorec_ord,weno_version,rho0,u0)
+
+    integer :: nvar, iweno, wenorec_ord, weno_version
+    real(rkind), dimension(5,8) :: vm,vp
+    real(rkind), dimension(5) :: vhat
+    real(rkind) :: rho0, u0
+
+    real(rkind), dimension(-1:4) :: dwe
+    real(rkind), dimension(-1:4) :: betap,betam
+    real(rkind), dimension( 5) :: betascale
+    real(rkind) :: vminus, vplus
+    integer :: i,l,m
+    real(rkind) :: c0,c1,c2,c3,c4,d0,d1,d2,d3,summ,sump
+    real(rkind) :: tau5p,tau5m,eps40
+    real(rkind) :: u0_2, rho0_2u0_2, rho0_2u0_4
+    u0_2 = u0*u0
+    rho0_2u0_2 = rho0*rho0*u0_2
+    rho0_2u0_4 = rho0_2u0_2*u0_2
+    betascale(1) = 1._rkind/rho0_2u0_2
+    betascale(2) = betascale(1)
+    betascale(3) = 1._rkind/rho0_2u0_4
+    betascale(4) = betascale(3)
+    betascale(5) = betascale(1)
+    if (wenorec_ord==1) then
+      i = iweno
+      do m=1,5
+        vminus = vp(m,i)
+        vplus = vm(m,i+1)
+        vhat(m) = vminus+vplus
+      enddo
+    elseif (wenorec_ord==2) then
+      i = iweno
+      dwe(1) = 2._rkind/3._rkind
+      dwe(0) = 1._rkind/3._rkind
+      do m=1,5
+        betap(0) = (vp(m,i )-vp(m,i-1))**2
+        betap(1) = (vp(m,i+1)-vp(m,i ))**2
+        betap(1) = betascale(m)*betap(1)
+        betap(0) = betascale(m)*betap(0)
+
+        betam(0) = (vm(m,i+2)-vm(m,i+1))**2
+        betam(1) = (vm(m,i+1)-vm(m,i ))**2
+        betam(1) = betascale(m)*betam(1)
+        betam(0) = betascale(m)*betam(0)
+        sump = 0._rkind
+        summ = 0._rkind
+        do l=0,1
+          betap(l) = dwe(l)/(0.000001_rkind+betap(l))**2
+          betam(l) = dwe(l)/(0.000001_rkind+betam(l))**2
+          sump = sump + betap(l)
+          summ = summ + betam(l)
+        enddo
+        do l=0,1
+          betap(l) = betap(l)/sump
+          betam(l) = betam(l)/summ
+        enddo
+        vminus = betap(0) *(-vp(m,i-1)+3*vp(m,i )) + betap(1) *( vp(m,i )+ vp(m,i+1))
+        vplus = betam(0) *(-vm(m,i+2)+3*vm(m,i+1)) + betam(1) *( vm(m,i )+ vm(m,i+1))
+        vhat(m) = 0.5_rkind*(vminus+vplus)
+      enddo
+    elseif (wenorec_ord==3) then
+      i = iweno
+      dwe( 0) = 1._rkind/10._rkind
+      dwe( 1) = 6._rkind/10._rkind
+      dwe( 2) = 3._rkind/10._rkind
+      d0 = 13._rkind/12._rkind
+      d1 = 1._rkind/4._rkind
+      c0 = 1._rkind/3._rkind
+      c1 = 5._rkind/6._rkind
+      c2 =-1._rkind/6._rkind
+      c3 =-7._rkind/6._rkind
+      c4 =11._rkind/6._rkind
+      if (weno_version==0) then
+        do m=1,5
+          betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
+          betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*( vp(m,i-1)-vp(m,i+1) )**2
+          betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
+          betap(2) = betascale(m)*betap(2)
+          betap(1) = betascale(m)*betap(1)
+          betap(0) = betascale(m)*betap(0)
+          betam(2) = d0*(vm(m,i+1)-2._rkind*vm(m,i)+vm(m,i-1))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i)+vm(m,i-1))**2
+          betam(1) = d0*(vm(m,i+2)-2._rkind*vm(m,i+1)+vm(m,i))**2+d1*( vm(m,i+2)-vm(m,i) )**2
+          betam(0) = d0*(vm(m,i+1)-2._rkind*vm(m,i+2)+vm(m,i+3))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i+2)+vm(m,i+3))**2
+          betam(2) = betascale(m)*betam(2)
+          betam(1) = betascale(m)*betam(1)
+          betam(0) = betascale(m)*betam(0)
+          sump = 0._rkind
+          summ = 0._rkind
+          do l=0,2
+            betap(l) = dwe( l)/(0.000001_rkind+betap(l))**2
+            betam(l) = dwe( l)/(0.000001_rkind+betam(l))**2
+            sump = sump + betap(l)
+            summ = summ + betam(l)
+          enddo
+          do l=0,2
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
+          enddo
+          vminus = betap(2)*(c0*vp(m,i )+c1*vp(m,i+1)+c2*vp(m,i+2)) + betap(1)*(c2*vp(m,i-1)+c1*&
+          &vp(m,i )+c0*vp(m,i+1)) + betap(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i ))
+          vplus = betam(2)*(c0*vm(m,i+1)+c1*vm(m,i )+c2*vm(m,i-1)) + betam(1)*(c2*vm(m,i+2)+c1*vm(m,&
+          &i+1)+c0*vm(m,i )) + betam(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
+          vhat(m) = vminus+vplus
+        enddo
+      else
+        do m=1,5
+          betap(2) = d0*(vp(m,i)-2._rkind*vp(m,i+1)+vp(m,i+2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i+1)+vp(m,i+2))**2
+          betap(1) = d0*(vp(m,i-1)-2._rkind*vp(m,i)+vp(m,i+1))**2+d1*( vp(m,i-1)-vp(m,i+1) )**2
+          betap(0) = d0*(vp(m,i)-2._rkind*vp(m,i-1)+vp(m,i-2))**2+d1*(3._rkind*vp(m,i)-4._rkind*vp(m,i-1)+vp(m,i-2))**2
+          betap(2) = betascale(m)*betap(2)
+          betap(1) = betascale(m)*betap(1)
+          betap(0) = betascale(m)*betap(0)
+          betam(2) = d0*(vm(m,i+1)-2._rkind*vm(m,i)+vm(m,i-1))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i)+vm(m,i-1))**2
+          betam(1) = d0*(vm(m,i+2)-2._rkind*vm(m,i+1)+vm(m,i))**2+d1*( vm(m,i+2)-vm(m,i) )**2
+          betam(0) = d0*(vm(m,i+1)-2._rkind*vm(m,i+2)+vm(m,i+3))**2+d1*(3._rkind*vm(m,i+1)-4._rkind*vm(m,i+2)+vm(m,i+3))**2
+          betam(2) = betascale(m)*betam(2)
+          betam(1) = betascale(m)*betam(1)
+          betam(0) = betascale(m)*betam(0)
+          eps40 = 1.D-40
+          tau5p = abs(betap(0)-betap(2))+eps40
+          tau5m = abs(betam(0)-betam(2))+eps40
+          do l=0,2
+            betap(l) = (betap(l)+eps40)/(betap(l)+tau5p)
+            betam(l) = (betam(l)+eps40)/(betam(l)+tau5m)
+          enddo
+          sump = 0._rkind
+          summ = 0._rkind
+          do l=0,2
+            betap(l) = dwe(l)/betap(l)
+            betam(l) = dwe(l)/betam(l)
+            sump = sump + betap(l)
+            summ = summ + betam(l)
+          enddo
+          do l=0,2
+            betap(l) = betap(l)/sump
+            betam(l) = betam(l)/summ
+          enddo
+          vminus = betap(2)*(c0*vp(m,i )+c1*vp(m,i+1)+c2*vp(m,i+2)) + betap(1)*(c2*vp(m,i-1)+c1*&
+          &vp(m,i )+c0*vp(m,i+1)) + betap(0)*(c0*vp(m,i-2)+c3*vp(m,i-1)+c4*vp(m,i ))
+          vplus = betam(2)*(c0*vm(m,i+1)+c1*vm(m,i )+c2*vm(m,i-1)) + betam(1)*(c2*vm(m,i+2)+c1*vm(m,&
+          &i+1)+c0*vm(m,i )) + betam(0)*(c0*vm(m,i+3)+c3*vm(m,i+2)+c4*vm(m,i+1))
+          vhat(m) = vminus+vplus
+        enddo
+
+      endif
+    elseif (wenorec_ord==4) then
+      i = iweno
+      dwe( 0) = 1._rkind/35._rkind
+      dwe( 1) = 12._rkind/35._rkind
+      dwe( 2) = 18._rkind/35._rkind
+      dwe( 3) = 4._rkind/35._rkind
+      d1 = 1._rkind/36._rkind
+      d2 = 13._rkind/12._rkind
+      d3 = 781._rkind/720._rkind
+      do m=1,5
+        betap(3)= d1*(-11*vp(m, i)+18*vp(m,i+1)- 9*vp(m,i+2)+ 2*vp(m,i+3))**2+d2*( 2*vp(m, i)- 5*&
+        &vp(m,i+1)+ 4*vp(m,i+2)- vp(m,i+3))**2+ d3*( -vp(m, i)+ 3*vp(m,i+1)- 3*vp(m,i+2)+ vp(m,i+3))**2
+        betap(2)= d1*(- 2*vp(m,i-1)- 3*vp(m,i )+ 6*vp(m,i+1)- vp(m,i+2))**2+d2*( vp(m,i-1)- 2*vp(m,&
+        &i )+ vp(m,i+1) )**2+d3*( -vp(m,i-1)+ 3*vp(m,i )- 3*vp(m,i+1)+ vp(m,i+2))**2
+        betap(1)= d1*( vp(m,i-2)- 6*vp(m,i-1)+ 3*vp(m,i )+ 2*vp(m,i+1))**2+d2*( vp(m,i-1)- 2*vp(m,&
+        &i )+ vp(m,i+1))**2+ d3*( -vp(m,i-2)+ 3*vp(m,i-1)- 3*vp(m,i )+ vp(m,i+1))**2
+        betap(0)= d1*(- 2*vp(m,i-3)+ 9*vp(m,i-2)-18*vp(m,i-1)+11*vp(m,i ))**2+d2*(- vp(m,i-3)+ 4*&
+        &vp(m,i-2)- 5*vp(m,i-1)+ 2*vp(m,i ))**2+d3*( -vp(m,i-3)+ 3*vp(m,i-2)- 3*vp(m,i-1)+ vp(m,i ))**2
+        betap(3) = betascale(m)*betap(3)
+        betap(2) = betascale(m)*betap(2)
+        betap(1) = betascale(m)*betap(1)
+        betap(0) = betascale(m)*betap(0)
+        betam(3)= d1*(-11*vm(m,i+1)+18*vm(m,i )- 9*vm(m,i-1)+ 2*vm(m,i-2))**2+d2*( 2*vm(m,i+1)- 5*&
+        &vm(m,i )+ 4*vm(m,i-1)- vm(m,i-2))**2+d3*( -vm(m,i+1)+ 3*vm(m,i )- 3*vm(m,i-1)+ vm(m,i-2))**2
+        betam(2)= d1*(- 2*vm(m,i+2)- 3*vm(m,i+1)+ 6*vm(m,i )- vm(m,i-1))**2+d2*( vm(m,i+2)- 2*vm(m,&
+        &i+1)+ vm(m,i ) )**2+d3*( -vm(m,i+2)+ 3*vm(m,i+1)- 3*vm(m,i )+ vm(m,i-1))**2
+        betam(1)= d1*( vm(m,i+3)- 6*vm(m,i+2)+ 3*vm(m,i+1)+ 2*vm(m,i ))**2+d2*( vm(m,i+2)- 2*vm(m,i+&
+        &1)+ vm(m,i ))**2+d3*( -vm(m,i+3)+ 3*vm(m,i+2)- 3*vm(m,i+1)+ vm(m,i ))**2
+        betam(0)= d1*(- 2*vm(m,i+4)+ 9*vm(m,i+3)-18*vm(m,i+2)+11*vm(m,i+1))**2+d2*(- vm(m,i+4)+ 4*&
+        &vm(m,i+3)- 5*vm(m,i+2)+ 2*vm(m,i+1))**2+d3*( -vm(m,i+4)+ 3*vm(m,i+3)- 3*vm(m,i+2)+ vm(m,i+1))**2
+        betam(3) = betascale(m)*betam(3)
+        betam(2) = betascale(m)*betam(2)
+        betam(1) = betascale(m)*betam(1)
+        betam(0) = betascale(m)*betam(0)
+        sump = 0._rkind
+        summ = 0._rkind
+        do l=0,3
+          betap(l) = dwe( l)/(0.000001_rkind+betap(l))**2
+          betam(l) = dwe( l)/(0.000001_rkind+betam(l))**2
+          sump = sump + betap(l)
+          summ = summ + betam(l)
+        enddo
+        do l=0,3
+          betap(l) = betap(l)/sump
+          betam(l) = betam(l)/summ
+        enddo
+        vminus = betap(3)*( 6*vp(m,i )+26*vp(m,i+1)-10*vp(m,i+2)+ 2*vp(m,i+3))+betap(2)*(-2*vp(m,i-&
+        &1)+14*vp(m,i )+14*vp(m,i+1)- 2*vp(m,i+2))+betap(1)*( 2*vp(m,i-2)-10*vp(m,i-1)+26*vp(m,i )+ 6*vp(m,i+&
+        &1))+betap(0)*(-6*vp(m,i-3)+26*vp(m,i-2)-46*vp(m,i-1)+50*vp(m,i ))
+        vplus = betam(3)*( 6*vm(m,i+1)+26*vm(m,i )-10*vm(m,i-1)+ 2*vm(m,i-2))+betam(2)*(-2*vm(m,i+&
+        &2)+14*vm(m,i+1)+14*vm(m,i )- 2*vm(m,i-1))+betam(1)*( 2*vm(m,i+3)-10*vm(m,i+2)+26*vm(m,i+1)+ 6*vm(m,&
+        &i ))+betam(0)*(-6*vm(m,i+4)+26*vm(m,i+3)-46*vm(m,i+2)+50*vm(m,i+1))
+        vhat(m) = (vminus+vplus)/24._rkind
+      enddo
+    endif
+
   endsubroutine wenorec_1d
-!
+
+
   attributes(device) subroutine eigenvectors_x(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
     real(rkind), intent(in) :: b1, b2, b3, uu, vv, ww, c, ci, h
     real(rkind), dimension(:,:), intent(out) :: el, er
-!
+
     el(1,1) = 0.5_rkind * (b1 + uu * ci)
     el(2,1) = -0.5_rkind * (b2 * uu + ci)
     el(3,1) = -0.5_rkind * (b2 * vv )
@@ -1892,54 +2099,54 @@ contains
     el(3,2) = b2*vv
     el(4,2) = b2*ww
     el(5,2) = -b2
-    el(1,3) = 0.5_rkind * (b1 - uu * ci)
-    el(2,3) = -0.5_rkind * (b2 * uu - ci)
-    el(3,3) = -0.5_rkind * (b2 * vv )
-    el(4,3) = -0.5_rkind * (b2 * ww )
-    el(5,3) = 0.5_rkind * b2
-    el(1,4) = -vv
+    el(1,3) = -vv
+    el(2,3) = 0._rkind
+    el(3,3) = 1._rkind
+    el(4,3) = 0._rkind
+    el(5,3) = 0._rkind
+    el(1,4) = -ww
     el(2,4) = 0._rkind
-    el(3,4) = 1._rkind
-    el(4,4) = 0._rkind
+    el(3,4) = 0._rkind
+    el(4,4) = 1._rkind
     el(5,4) = 0._rkind
-    el(1,5) = -ww
-    el(2,5) = 0._rkind
-    el(3,5) = 0._rkind
-    el(4,5) = 1._rkind
-    el(5,5) = 0._rkind
-!
+    el(1,5) = 0.5_rkind * (b1 - uu * ci)
+    el(2,5) = -0.5_rkind * (b2 * uu - ci)
+    el(3,5) = -0.5_rkind * (b2 * vv )
+    el(4,5) = -0.5_rkind * (b2 * ww )
+    el(5,5) = 0.5_rkind * b2
+
     er(1,1) = 1._rkind
     er(2,1) = 1._rkind
-    er(3,1) = 1._rkind
+    er(3,1) = 0._rkind
     er(4,1) = 0._rkind
-    er(5,1) = 0._rkind
+    er(5,1) = 1._rkind
     er(1,2) = uu - c
     er(2,2) = uu
-    er(3,2) = uu + c
+    er(3,2) = 0._rkind
     er(4,2) = 0._rkind
-    er(5,2) = 0._rkind
+    er(5,2) = uu + c
     er(1,3) = vv
     er(2,3) = vv
-    er(3,3) = vv
-    er(4,3) = 1._rkind
-    er(5,3) = 0._rkind
+    er(3,3) = 1._rkind
+    er(4,3) = 0._rkind
+    er(5,3) = vv
     er(1,4) = ww
     er(2,4) = ww
-    er(3,4) = ww
-    er(4,4) = 0._rkind
-    er(5,4) = 1._rkind
+    er(3,4) = 0._rkind
+    er(4,4) = 1._rkind
+    er(5,4) = ww
     er(1,5) = h - uu * c
     er(2,5) = b3
-    er(3,5) = h + uu * c
-    er(4,5) = vv
-    er(5,5) = ww
-!
+    er(3,5) = vv
+    er(4,5) = ww
+    er(5,5) = h + uu * c
+
   endsubroutine eigenvectors_x
-!
+
   attributes(device) subroutine eigenvectors_y(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
     real(rkind), intent(in) :: b1, b2, b3, uu, vv, ww, c, ci, h
     real(rkind), dimension(:,:), intent(out) :: el, er
-!
+
     el(1,1) = 0.5_rkind * (b1 + vv * ci)
     el(2,1) = -0.5_rkind * (b2 * uu )
     el(3,1) = -0.5_rkind * (b2 * vv + ci)
@@ -1950,53 +2157,53 @@ contains
     el(3,2) = b2 * vv
     el(4,2) = b2 * ww
     el(5,2) = -b2
-    el(1,3) = 0.5_rkind * (b1 - vv * ci)
-    el(2,3) = -0.5_rkind * (b2 * uu )
-    el(3,3) = -0.5_rkind * (b2 * vv - ci)
-    el(4,3) = -0.5_rkind * (b2 * ww )
-    el(5,3) = 0.5_rkind * b2
+    el(1,3) = -uu
+    el(2,3) = 1._rkind
+    el(3,3) = 0._rkind
+    el(4,3) = 0._rkind
+    el(5,3) = 0._rkind
     el(1,4) = -ww
     el(2,4) = 0._rkind
     el(3,4) = 0._rkind
     el(4,4) = 1._rkind
     el(5,4) = 0._rkind
-    el(1,5) = uu
-    el(2,5) = -1._rkind
-    el(3,5) = 0._rkind
-    el(4,5) = 0._rkind
-    el(5,5) = 0._rkind
-!
+    el(1,5) = 0.5_rkind * (b1 - vv * ci)
+    el(2,5) = -0.5_rkind * (b2 * uu )
+    el(3,5) = -0.5_rkind * (b2 * vv - ci)
+    el(4,5) = -0.5_rkind * (b2 * ww )
+    el(5,5) = 0.5_rkind * b2
+
     er(1,1) = 1._rkind
     er(2,1) = 1._rkind
-    er(3,1) = 1._rkind
+    er(3,1) = 0._rkind
     er(4,1) = 0._rkind
-    er(5,1) = 0._rkind
+    er(5,1) = 1._rkind
     er(1,2) = uu
     er(2,2) = uu
-    er(3,2) = uu
+    er(3,2) = 1._rkind
     er(4,2) = 0._rkind
-    er(5,2) = -1._rkind
+    er(5,2) = uu
     er(1,3) = vv - c
     er(2,3) = vv
-    er(3,3) = vv + c
+    er(3,3) = 0._rkind
     er(4,3) = 0._rkind
-    er(5,3) = 0._rkind
+    er(5,3) = vv + c
     er(1,4) = ww
     er(2,4) = ww
-    er(3,4) = ww
+    er(3,4) = 0._rkind
     er(4,4) = 1._rkind
-    er(5,4) = 0._rkind
+    er(5,4) = ww
     er(1,5) = h - vv * c
     er(2,5) = b3
-    er(3,5) = h + vv * c
+    er(3,5) = uu
     er(4,5) = ww
-    er(5,5) = -uu
+    er(5,5) = h + vv * c
   endsubroutine eigenvectors_y
-!
+
   attributes(device) subroutine eigenvectors_z(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
     real(rkind), intent(in) :: b1, b2, b3, uu, vv, ww, c, ci, h
     real(rkind), dimension(:,:), intent(out) :: el, er
-!
+
     el(1,1) = 0.5_rkind * (b1 + ww * ci)
     el(2,1) = -0.5_rkind * (b2 * uu )
     el(3,1) = -0.5_rkind * (b2 * vv )
@@ -2007,53 +2214,52 @@ contains
     el(3,2) = b2 * vv
     el(4,2) = b2 * ww
     el(5,2) = -b2
-    el(1,3) = 0.5_rkind * (b1 - ww * ci)
-    el(2,3) = -0.5_rkind * (b2 * uu )
-    el(3,3) = -0.5_rkind * (b2 * vv )
-    el(4,3) = -0.5_rkind * (b2 * ww - ci)
-    el(5,3) = 0.5_rkind * b2
-    el(1,4) = -uu
-    el(2,4) = 1._rkind
-    el(3,4) = 0._rkind
+    el(1,3) = -uu
+    el(2,3) = 1._rkind
+    el(3,3) = 0._rkind
+    el(4,3) = 0._rkind
+    el(5,3) = 0._rkind
+    el(1,4) = -vv
+    el(2,4) = 0._rkind
+    el(3,4) = 1._rkind
     el(4,4) = 0._rkind
     el(5,4) = 0._rkind
-    el(1,5) = -vv
-    el(2,5) = 0._rkind
-    el(3,5) = 1._rkind
-    el(4,5) = 0._rkind
-    el(5,5) = 0._rkind
-!
+    el(1,5) = 0.5_rkind * (b1 - ww * ci)
+    el(2,5) = -0.5_rkind * (b2 * uu )
+    el(3,5) = -0.5_rkind * (b2 * vv )
+    el(4,5) = -0.5_rkind * (b2 * ww - ci)
+    el(5,5) = 0.5_rkind * b2
+
     er(1,1) = 1._rkind
     er(2,1) = 1._rkind
-    er(3,1) = 1._rkind
+    er(3,1) = 0._rkind
     er(4,1) = 0._rkind
-    er(5,1) = 0._rkind
+    er(5,1) = 1._rkind
     er(1,2) = uu
     er(2,2) = uu
-    er(3,2) = uu
-    er(4,2) = 1._rkind
-    er(5,2) = 0._rkind
+    er(3,2) = 1._rkind
+    er(4,2) = 0._rkind
+    er(5,2) = uu
     er(1,3) = vv
     er(2,3) = vv
-    er(3,3) = vv
-    er(4,3) = 0._rkind
-    er(5,3) = 1._rkind
+    er(3,3) = 0._rkind
+    er(4,3) = 1._rkind
+    er(5,3) = vv
     er(1,4) = ww - c
     er(2,4) = ww
-    er(3,4) = ww + c
+    er(3,4) = 0._rkind
     er(4,4) = 0._rkind
-    er(5,4) = 0._rkind
+    er(5,4) = ww + c
     er(1,5) = h - ww * c
     er(2,5) = b3
-    er(3,5) = h + ww * c
-    er(4,5) = uu
-    er(5,5) = vv
-!
+    er(3,5) = uu
+    er(4,5) = vv
+    er(5,5) = h + ww * c
   endsubroutine eigenvectors_z
-!
-  attributes(device) subroutine compute_roe_average(nx, ny, nz, ng, i, ip, j, jp, k, kp, w_aux_gpu, &
-  &rgas0, b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r,calorically_perfect,tol_&
-  &iter_nr,t0)
+
+  attributes(device) subroutine compute_roe_average(nx, ny, nz, ng, i, ip, j, jp, k, kp, w_aux_gpu,&
+  & rgas0, b1, b2, b3, c, ci, h, uu, vv, ww, cp_coeff_gpu, indx_cp_l, indx_cp_r,calorically_perfect,&
+  &tol_iter_nr,t0)
     integer :: ng,i,ip,j,jp,k,kp,indx_cp_l,indx_cp_r,calorically_perfect
     integer :: nx,ny,nz
     real(rkind), intent(in) :: rgas0, tol_iter_nr,t0
@@ -2062,12 +2268,8 @@ contains
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in) :: cp_coeff_gpu
     real(rkind) :: up, vp, wp, qqp, hp, r, rp1, cc, qq, gam, gm1
     integer :: ll,iter,max_iter
-    real(rkind) :: tt,gm1loc,hbar,ttp,told,num,den,gamloc,cploc,tpow,tpowp,p_rho,p_e,etot,rho,cp0,cv0
+    real(rkind) :: tt,gm1loc,hbar,ttp,told,num,den,gamloc,cploc,tpow,tpowp,p_rho,p_e,etot,rho
     max_iter = 50
-    cp0 = cp_coeff_gpu(0)
-    cv0 = cp_coeff_gpu(0)-rgas0
-    gam = cp0/cv0
-    gm1 = gam-1._rkind
     uu = w_aux_gpu(i,j,k,2)
     vv = w_aux_gpu(i,j,k,3)
     ww = w_aux_gpu(i,j,k,4)
@@ -2087,12 +2289,11 @@ contains
     ww = (r*wp +ww)*rp1
     h = (r*hp +h)*rp1
     qq = 0.5_rkind * (uu*uu +vv*vv + ww*ww)
+    hbar = h - qq - cp_coeff_gpu(indx_cp_r+1)*t0
     if (calorically_perfect==1) then
-      cc = gm1 * (h-qq )
-      tt = cc/gam/rgas0
-      gm1loc = gm1
+      tt = t0+hbar/cp_coeff_gpu(0)
+      gamloc = cp_coeff_gpu(0)/(cp_coeff_gpu(0)-rgas0)
     else
-      hbar = h - qq - cp_coeff_gpu(indx_cp_r+1)*t0
       tt = w_aux_gpu(i ,j ,k ,6)
       ttp = w_aux_gpu(ip,jp,kp,6)
       tt = (r*ttp +tt)*rp1
@@ -2122,9 +2323,9 @@ contains
         cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
       enddo
       gamloc = cploc/(cploc-rgas0)
-      gm1loc = gamloc-1._rkind
-      cc = gamloc*tt*rgas0
     endif
+    cc = gamloc*tt*rgas0
+    gm1loc = gamloc-1._rkind
     c = sqrt(cc)
     ci = 1._rkind/c
     p_rho = tt*rgas0
@@ -2133,9 +2334,9 @@ contains
     b3 = etot - rho * p_rho/p_e
     b2 = p_e/(rho*cc)
     b1 = p_rho/cc - b2*(etot - 2._rkind*qq)
-!
+
   endsubroutine compute_roe_average
-!
+
   subroutine force_rhs_2_cuf(nx, ny, nz, ng, fln_gpu, w_aux_gpu, bulk5g, fluid_mask_gpu)
     integer :: nx, ny, nz, ng
     real(rkind), dimension(5), intent(in) :: bulk5g
@@ -2161,7 +2362,7 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine force_rhs_2_cuf
-!
+
   subroutine force_rhs_1_cuf(nx, ny, nz, ng, yn_gpu, fln_gpu, w_gpu, w_aux_gpu, bulk5, fluid_mask_gpu)
     integer, intent(in) :: nx, ny, nz, ng
     real(rkind), dimension(1:), intent(in), device :: yn_gpu
@@ -2178,7 +2379,7 @@ contains
     bulk_3 = 0._rkind
     bulk_4 = 0._rkind
     bulk_5 = 0._rkind
-!
+
     !$cuf kernel do(3) <<<*,*>>> reduce(+:bulk_1,bulk_2,bulk_3,bulk_4,bulk_5)
     do k=1,nz
       do j=1,ny
@@ -2195,16 +2396,16 @@ contains
       enddo
     enddo
     !@cuf iercuda=cudadevicesynchronize()
-!
+
     bulk5(1) = bulk_1
     bulk5(2) = bulk_2
     bulk5(3) = bulk_3
     bulk5(4) = bulk_4
     bulk5(5) = bulk_5
   endsubroutine force_rhs_1_cuf
-!
-  subroutine force_var_1_cuf(nx, ny, nz, ng, yn_gpu, fln_gpu, w_gpu, w_aux_gpu, bulkt, fluid_mask_gp&
-  &u, cv_coeff_gpu, indx_cp_l, indx_cp_r, t0, calorically_perfect, tol_iter_nr)
+
+  subroutine force_var_1_cuf(nx, ny, nz, ng, yn_gpu, fln_gpu, w_gpu, w_aux_gpu, bulkt,&
+  & fluid_mask_gpu, cv_coeff_gpu, indx_cp_l, indx_cp_r, t0, calorically_perfect, tol_iter_nr)
     integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind), intent(in) :: t0, tol_iter_nr
     real(rkind), dimension(1:), intent(in), device :: yn_gpu
@@ -2235,8 +2436,8 @@ contains
             ww = rhow*ri
             qq = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee = rhoe/rho-qq
-            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,j,k,6),t0,cv_coeff_gpu,indx_cp_l,indx_cp_&
-            &r, calorically_perfect,tol_iter_nr)
+            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,j,k,6),t0,cv_coeff_gpu,indx_cp_l,&
+            &indx_cp_r, calorically_perfect,tol_iter_nr)
             w_aux_gpu(i,j,k,6) = tt
             bulk_5 = bulk_5 + rhou*tt*dy
           endif
@@ -2275,7 +2476,7 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine force_var_2_cuf
-!
+
   subroutine update_flux_cuf(nx, ny, nz, nv, fl_gpu, fln_gpu, gamdt)
     integer :: nx, ny, nz, nv
     real(rkind) :: gamdt
@@ -2294,7 +2495,7 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine update_flux_cuf
-!
+
   subroutine update_field_cuf(nx, ny, nz, ng, nv, w_gpu, fln_gpu, fluid_mask_gpu)
     integer :: nx, ny, nz, nv, ng
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(inout), device :: w_gpu
@@ -2315,9 +2516,9 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine update_field_cuf
-!
+
   subroutine visflx_div_ord2_cuf(nx, ny, nz, ng, w_aux_gpu, fl_gpu, x_gpu, y_gpu, z_gpu, stream_id)
-!
+
     integer, intent(in) :: nx, ny, nz, ng
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
     real(rkind), dimension(1:,1:,1:, 1:), intent(inout), device :: fl_gpu
@@ -2327,17 +2528,17 @@ contains
     real(rkind) :: uu,vv,ww,mu
     real(rkind) :: sigq,sigx,sigy,sigz
     integer(kind=cuda_stream_kind), intent(in) :: stream_id
-!
+
     !$cuf kernel do(3) <<<*,*,stream=stream_id>>>
     do k=1,nz
       do j=1,ny
         do i=1,nx
-!
+
           uu = w_aux_gpu(i,j,k,2)
           vv = w_aux_gpu(i,j,k,3)
           ww = w_aux_gpu(i,j,k,4)
           mu = w_aux_gpu(i,j,k,7)
-!
+
           dxl = mu/(x_gpu(i+1)-x_gpu(i-1))
           dyl = mu/(y_gpu(j+1)-y_gpu(j-1))
           dzl = mu/(z_gpu(k+1)-z_gpu(k-1))
@@ -2345,21 +2546,21 @@ contains
           sigy = dyl*(w_aux_gpu(i,j+1,k,10)-w_aux_gpu(i,j-1,k,10))
           sigz = dzl*(w_aux_gpu(i,j,k+1,10)-w_aux_gpu(i,j,k-1,10))
           sigq = sigx*uu+sigy*vv+sigz*ww
-!
+
           fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
           fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
           fl_gpu(i,j,k,4) = fl_gpu(i,j,k,4) - sigz
           fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) - sigq
-!
+
         enddo
       enddo
     enddo
-!
+
   endsubroutine visflx_div_ord2_cuf
-!
-  subroutine visflx_div_cuf(nx, ny, nz, ng, visc_order, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, dcsidx_&
-  &gpu, detady_gpu, dzitdz_gpu, stream_id)
-!
+
+  subroutine visflx_div_cuf(nx, ny, nz, ng, visc_order, w_aux_gpu, fl_gpu, coeff_deriv1_gpu,&
+  & dcsidx_gpu, detady_gpu, dzitdz_gpu, stream_id)
+
     integer, intent(in) :: nx, ny, nz, ng, visc_order
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
     real(rkind), dimension(1:,1:,1:, 1:), intent(inout), device :: fl_gpu
@@ -2372,56 +2573,56 @@ contains
     real(rkind) :: divx3l, divy3l, divz3l
     integer :: lmax
     integer(kind=cuda_stream_kind), intent(in) :: stream_id
-!
+
     lmax = visc_order/2
-!
+
     !$cuf kernel do(3) <<<*,*,stream=stream_id>>>
     do k=1,nz
       do j=1,ny
         do i=1,nx
-!
+
           uu = w_aux_gpu(i,j,k,2)
           vv = w_aux_gpu(i,j,k,3)
           ww = w_aux_gpu(i,j,k,4)
           tt = w_aux_gpu(i,j,k,6)
           mu = w_aux_gpu(i,j,k,7)
-!
+
           divx3l = 0._rkind
           divy3l = 0._rkind
           divz3l = 0._rkind
-!
+
           do l=1,lmax
             ccl = coeff_deriv1_gpu(l,lmax)
             divx3l = divx3l+ccl*(w_aux_gpu(i+l,j,k,10)-w_aux_gpu(i-l,j,k,10))
             divy3l = divy3l+ccl*(w_aux_gpu(i,j+l,k,10)-w_aux_gpu(i,j-l,k,10))
             divz3l = divz3l+ccl*(w_aux_gpu(i,j,k+l,10)-w_aux_gpu(i,j,k-l,10))
           enddo
-!
+
           divx3l = divx3l*dcsidx_gpu(i)
           divy3l = divy3l*detady_gpu(j)
           divz3l = divz3l*dzitdz_gpu(k)
-!
+
           sigx = mu*divx3l
           sigy = mu*divy3l
           sigz = mu*divz3l
           sigq = sigx*uu+sigy*vv+sigz*ww
-!
+
           fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
           fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
           fl_gpu(i,j,k,4) = fl_gpu(i,j,k,4) - sigz
           fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) - sigq
-!
+
         enddo
       enddo
     enddo
-!
+
   endsubroutine visflx_div_cuf
-!
+
   subroutine visflx_cuf(nx, ny, nz, ng, visc_order, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu,&
-  & calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, coeff_deriv2_gpu, dcsidx_g&
-  &pu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, dcsidx2_gpu, detady2_gpu, dzitdz2&
-  &_gpu, wallprop_gpu)
-!
+  & calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, coeff_deriv2_gpu,&
+  & dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, dcsidx2_gpu,&
+  & detady2_gpu, dzitdz2_gpu, wallprop_gpu)
+
     integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
     real(rkind), intent(in) :: prandtl, u0, l0, t0
@@ -2454,20 +2655,20 @@ contains
     real(rkind) :: div, div3l, omegax, omegay, omegaz, omod2
     real(rkind) :: cploc
     integer :: lmax
-!
+
     lmax = visc_order/2
-!
+
     !$cuf kernel do(2) <<<*,*>>>
     do j=1,ny
       do i=1,nx
         do k=1,nz
-!
+
           uu = w_aux_gpu(i,j,k,2)
           vv = w_aux_gpu(i,j,k,3)
           ww = w_aux_gpu(i,j,k,4)
           tt = w_aux_gpu(i,j,k,6)
           mu = w_aux_gpu(i,j,k,7)
-!
+
           if (calorically_perfect==1) then
             cploc = cp_coeff_gpu(0)
           else
@@ -2476,7 +2677,7 @@ contains
               cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
             enddo
           endif
-!
+
           ux = 0._rkind
           vx = 0._rkind
           wx = 0._rkind
@@ -2492,7 +2693,7 @@ contains
           wz = 0._rkind
           tz = 0._rkind
           muz = 0._rkind
-!
+
           do l=1,lmax
             ccl = coeff_deriv1_gpu(l,lmax)
             ux = ux+ccl*(w_aux_gpu(i+l,j,k,2)-w_aux_gpu(i-l,j,k,2))
@@ -2500,13 +2701,13 @@ contains
             wx = wx+ccl*(w_aux_gpu(i+l,j,k,4)-w_aux_gpu(i-l,j,k,4))
             tx = tx+ccl*(w_aux_gpu(i+l,j,k,6)-w_aux_gpu(i-l,j,k,6))
             mux = mux+ccl*(w_aux_gpu(i+l,j,k,7)-w_aux_gpu(i-l,j,k,7))
-!
+
             uy = uy+ccl*(w_aux_gpu(i,j+l,k,2)-w_aux_gpu(i,j-l,k,2))
             vy = vy+ccl*(w_aux_gpu(i,j+l,k,3)-w_aux_gpu(i,j-l,k,3))
             wy = wy+ccl*(w_aux_gpu(i,j+l,k,4)-w_aux_gpu(i,j-l,k,4))
             ty = ty+ccl*(w_aux_gpu(i,j+l,k,6)-w_aux_gpu(i,j-l,k,6))
             muy = muy+ccl*(w_aux_gpu(i,j+l,k,7)-w_aux_gpu(i,j-l,k,7))
-!
+
             uz = uz+ccl*(w_aux_gpu(i,j,k+l,2)-w_aux_gpu(i,j,k-l,2))
             vz = vz+ccl*(w_aux_gpu(i,j,k+l,3)-w_aux_gpu(i,j,k-l,3))
             wz = wz+ccl*(w_aux_gpu(i,j,k+l,4)-w_aux_gpu(i,j,k-l,4))
@@ -2560,7 +2761,7 @@ contains
             tlapy = tlapy + clapl*(w_aux_gpu(i,j+l,k,6)+w_aux_gpu(i,j-l,k,6))
             tlapz = tlapz + clapl*(w_aux_gpu(i,j,k+l,6)+w_aux_gpu(i,j,k-l,6))
           enddo
-!
+
           ulapx = ulapx*dcsidxs_gpu(i)+ux*dcsidx2_gpu(i)
           vlapx = vlapx*dcsidxs_gpu(i)+vx*dcsidx2_gpu(i)
           wlapx = wlapx*dcsidxs_gpu(i)+wx*dcsidx2_gpu(i)
@@ -2573,12 +2774,12 @@ contains
           vlapz = vlapz*dzitdzs_gpu(k)+vz*dzitdz2_gpu(k)
           wlapz = wlapz*dzitdzs_gpu(k)+wz*dzitdz2_gpu(k)
           tlapz = tlapz*dzitdzs_gpu(k)+tz*dzitdz2_gpu(k)
-!
+
           ulap = ulapx+ulapy+ulapz
           vlap = vlapx+vlapy+vlapz
           wlap = wlapx+wlapy+wlapz
           tlap = tlapx+tlapy+tlapz
-!
+
           div = ux+vy+wz
           div3l = div/3._rkind
           w_aux_gpu(i,j,k,10) = div3l
@@ -2587,9 +2788,9 @@ contains
           omegaz = vx-uy
           omod2 = omegax*omegax+omegay*omegay+omegaz*omegaz
           w_aux_gpu(i,j,k,9) = sqrt(omod2)
-!
+
           w_aux_gpu(i,j,k,8) = (max(-div/sqrt(omod2+div**2+(u0/l0)**2),0._rkind))**2
-!
+
           sig11 = 2._rkind*(ux-div3l)
           sig12 = uy+vx
           sig13 = uz+wx
@@ -2600,27 +2801,28 @@ contains
           sigy = mux*sig12 + muy*sig22 + muz*sig23 + mu*vlap
           sigz = mux*sig13 + muy*sig23 + muz*sig33 + mu*wlap
           sigqt = (mux*tx+muy*ty+muz*tz+mu*tlap)*cploc/prandtl
-!
+
           sigah = (sig11*ux+sig12*uy+sig13*uz+sig12*vx+sig22*vy+sig23*vz+sig13*wx+sig23*wy+sig33*wz)*mu
-!
+
           sigq = sigx*uu+sigy*vv+sigz*ww+sigah+sigqt
-!
+
           fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
           fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
           fl_gpu(i,j,k,4) = fl_gpu(i,j,k,4) - sigz
           fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) - sigq
-!
+
         enddo
       enddo
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine visflx_cuf
-!
-  subroutine old_visflx_nosensor_cuf(nx, ny, nz, ng, visc_order, prandtl, t0, indx_cp_l, indx_cp_r, &
-  &cp_coeff_gpu, calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, coeff_deriv2_&
-  &gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, dcsidx2_gpu, detady2&
-  &_gpu, dzitdz2_gpu, wallprop_gpu)
-!
+
+
+  subroutine visflx_nosensor_cuf(nx, ny, nz, ng, visc_order, prandtl, t0, indx_cp_l, indx_cp_r,&
+  & cp_coeff_gpu, calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, coeff_deriv1_gpu,&
+  & coeff_deriv2_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu,&
+  & dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, wallprop_gpu)
+
     integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
     real(rkind), intent(in) :: prandtl, u0, l0, t0
@@ -2653,217 +2855,20 @@ contains
     real(rkind) :: div, div3l, omegax, omegay, omegaz, omod2
     real(rkind) :: cploc
     integer :: lmax
-!
+
     lmax = visc_order/2
-!
+
     !$cuf kernel do(2) <<<*,*>>>
     do j=1,ny
       do i=1,nx
         do k=1,nz
-!
+
           uu = w_aux_gpu(i,j,k,2)
           vv = w_aux_gpu(i,j,k,3)
           ww = w_aux_gpu(i,j,k,4)
           tt = w_aux_gpu(i,j,k,6)
           mu = w_aux_gpu(i,j,k,7)
-!
-          if (calorically_perfect==1) then
-            cploc = cp_coeff_gpu(0)
-          else
-            cploc = 0._rkind
-            do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
-            enddo
-          endif
-!
-          ux = 0._rkind
-          vx = 0._rkind
-          wx = 0._rkind
-          tx = 0._rkind
-          mux = 0._rkind
-          uy = 0._rkind
-          vy = 0._rkind
-          wy = 0._rkind
-          ty = 0._rkind
-          muy = 0._rkind
-          uz = 0._rkind
-          vz = 0._rkind
-          wz = 0._rkind
-          tz = 0._rkind
-          muz = 0._rkind
-!
-          do l=1,lmax
-            ccl = coeff_deriv1_gpu(l,lmax)
-            ux = ux+ccl*(w_aux_gpu(i+l,j,k,2)-w_aux_gpu(i-l,j,k,2))
-            vx = vx+ccl*(w_aux_gpu(i+l,j,k,3)-w_aux_gpu(i-l,j,k,3))
-            wx = wx+ccl*(w_aux_gpu(i+l,j,k,4)-w_aux_gpu(i-l,j,k,4))
-            tx = tx+ccl*(w_aux_gpu(i+l,j,k,6)-w_aux_gpu(i-l,j,k,6))
-            mux = mux+ccl*(w_aux_gpu(i+l,j,k,7)-w_aux_gpu(i-l,j,k,7))
-!
-            uy = uy+ccl*(w_aux_gpu(i,j+l,k,2)-w_aux_gpu(i,j-l,k,2))
-            vy = vy+ccl*(w_aux_gpu(i,j+l,k,3)-w_aux_gpu(i,j-l,k,3))
-            wy = wy+ccl*(w_aux_gpu(i,j+l,k,4)-w_aux_gpu(i,j-l,k,4))
-            ty = ty+ccl*(w_aux_gpu(i,j+l,k,6)-w_aux_gpu(i,j-l,k,6))
-            muy = muy+ccl*(w_aux_gpu(i,j+l,k,7)-w_aux_gpu(i,j-l,k,7))
-!
-            uz = uz+ccl*(w_aux_gpu(i,j,k+l,2)-w_aux_gpu(i,j,k-l,2))
-            vz = vz+ccl*(w_aux_gpu(i,j,k+l,3)-w_aux_gpu(i,j,k-l,3))
-            wz = wz+ccl*(w_aux_gpu(i,j,k+l,4)-w_aux_gpu(i,j,k-l,4))
-            tz = tz+ccl*(w_aux_gpu(i,j,k+l,6)-w_aux_gpu(i,j,k-l,6))
-            muz = muz+ccl*(w_aux_gpu(i,j,k+l,7)-w_aux_gpu(i,j,k-l,7))
-          enddo
-          ux = ux*dcsidx_gpu(i)
-          vx = vx*dcsidx_gpu(i)
-          wx = wx*dcsidx_gpu(i)
-          tx = tx*dcsidx_gpu(i)
-          mux = mux*dcsidx_gpu(i)
-          uy = uy*detady_gpu(j)
-          vy = vy*detady_gpu(j)
-          wy = wy*detady_gpu(j)
-          ty = ty*detady_gpu(j)
-          muy = muy*detady_gpu(j)
-          uz = uz*dzitdz_gpu(k)
-          vz = vz*dzitdz_gpu(k)
-          wz = wz*dzitdz_gpu(k)
-          tz = tz*dzitdz_gpu(k)
-          muz = muz*dzitdz_gpu(k)
-          if (j==1) then
-            wallprop_gpu(i,k,2) = mu*uy
-            wallprop_gpu(i,k,3) = mu*wy
-            wallprop_gpu(i,k,4) = mu*ty*cploc/prandtl
-          endif
-          ulapx = coeff_deriv2_gpu(0,lmax)*uu
-          ulapy = ulapx
-          ulapz = ulapx
-          vlapx = coeff_deriv2_gpu(0,lmax)*vv
-          vlapy = vlapx
-          vlapz = vlapx
-          wlapx = coeff_deriv2_gpu(0,lmax)*ww
-          wlapy = wlapx
-          wlapz = wlapx
-          tlapx = coeff_deriv2_gpu(0,lmax)*tt
-          tlapy = tlapx
-          tlapz = tlapx
-          do l=1,lmax
-            clapl = coeff_deriv2_gpu(l,lmax)
-            ulapx = ulapx + clapl*(w_aux_gpu(i+l,j,k,2)+w_aux_gpu(i-l,j,k,2))
-            ulapy = ulapy + clapl*(w_aux_gpu(i,j+l,k,2)+w_aux_gpu(i,j-l,k,2))
-            ulapz = ulapz + clapl*(w_aux_gpu(i,j,k+l,2)+w_aux_gpu(i,j,k-l,2))
-            vlapx = vlapx + clapl*(w_aux_gpu(i+l,j,k,3)+w_aux_gpu(i-l,j,k,3))
-            vlapy = vlapy + clapl*(w_aux_gpu(i,j+l,k,3)+w_aux_gpu(i,j-l,k,3))
-            vlapz = vlapz + clapl*(w_aux_gpu(i,j,k+l,3)+w_aux_gpu(i,j,k-l,3))
-            wlapx = wlapx + clapl*(w_aux_gpu(i+l,j,k,4)+w_aux_gpu(i-l,j,k,4))
-            wlapy = wlapy + clapl*(w_aux_gpu(i,j+l,k,4)+w_aux_gpu(i,j-l,k,4))
-            wlapz = wlapz + clapl*(w_aux_gpu(i,j,k+l,4)+w_aux_gpu(i,j,k-l,4))
-            tlapx = tlapx + clapl*(w_aux_gpu(i+l,j,k,6)+w_aux_gpu(i-l,j,k,6))
-            tlapy = tlapy + clapl*(w_aux_gpu(i,j+l,k,6)+w_aux_gpu(i,j-l,k,6))
-            tlapz = tlapz + clapl*(w_aux_gpu(i,j,k+l,6)+w_aux_gpu(i,j,k-l,6))
-          enddo
-!
-          ulapx = ulapx*dcsidxs_gpu(i)+ux*dcsidx2_gpu(i)
-          vlapx = vlapx*dcsidxs_gpu(i)+vx*dcsidx2_gpu(i)
-          wlapx = wlapx*dcsidxs_gpu(i)+wx*dcsidx2_gpu(i)
-          tlapx = tlapx*dcsidxs_gpu(i)+tx*dcsidx2_gpu(i)
-          ulapy = ulapy*detadys_gpu(j)+uy*detady2_gpu(j)
-          vlapy = vlapy*detadys_gpu(j)+vy*detady2_gpu(j)
-          wlapy = wlapy*detadys_gpu(j)+wy*detady2_gpu(j)
-          tlapy = tlapy*detadys_gpu(j)+ty*detady2_gpu(j)
-          ulapz = ulapz*dzitdzs_gpu(k)+uz*dzitdz2_gpu(k)
-          vlapz = vlapz*dzitdzs_gpu(k)+vz*dzitdz2_gpu(k)
-          wlapz = wlapz*dzitdzs_gpu(k)+wz*dzitdz2_gpu(k)
-          tlapz = tlapz*dzitdzs_gpu(k)+tz*dzitdz2_gpu(k)
-!
-          ulap = ulapx+ulapy+ulapz
-          vlap = vlapx+vlapy+vlapz
-          wlap = wlapx+wlapy+wlapz
-          tlap = tlapx+tlapy+tlapz
-!
-          div = ux+vy+wz
-          div3l = div/3._rkind
-          w_aux_gpu(i,j,k,10) = div3l
-          omegax = wy-vz
-          omegay = uz-wx
-          omegaz = vx-uy
-          omod2 = omegax*omegax+omegay*omegay+omegaz*omegaz
-          w_aux_gpu(i,j,k,9) = sqrt(omod2)
-!
-          sig11 = 2._rkind*(ux-div3l)
-          sig12 = uy+vx
-          sig13 = uz+wx
-          sig22 = 2._rkind*(vy-div3l)
-          sig23 = vz+wy
-          sig33 = 2._rkind*(wz-div3l)
-          sigx = mux*sig11 + muy*sig12 + muz*sig13 + mu*ulap
-          sigy = mux*sig12 + muy*sig22 + muz*sig23 + mu*vlap
-          sigz = mux*sig13 + muy*sig23 + muz*sig33 + mu*wlap
-          sigqt = (mux*tx+muy*ty+muz*tz+mu*tlap)*cploc/prandtl
-!
-          sigah = (sig11*ux+sig12*uy+sig13*uz+sig12*vx+sig22*vy+sig23*vz+sig13*wx+sig23*wy+sig33*wz)*mu
-!
-          sigq = sigx*uu+sigy*vv+sigz*ww+sigah+sigqt
-!
-          fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
-          fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
-          fl_gpu(i,j,k,4) = fl_gpu(i,j,k,4) - sigz
-          fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) - sigq
-!
-        enddo
-      enddo
-    enddo
-    !@cuf iercuda=cudadevicesynchronize()
-  endsubroutine old_visflx_nosensor_cuf
-!
-  subroutine visflx_nosensor_cuf(nx, ny, nz, ng, visc_order, prandtl, t0, indx_cp_l, indx_cp_r, cp_c&
-  &oeff_gpu, calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, coeff_deriv2_gpu,&
-  & dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, dcsidx2_gpu, detady2_gpu&
-  &, dzitdz2_gpu, wallprop_gpu)
-!
-    integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
-    integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: prandtl, u0, l0, t0
-    real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_gpu
-    real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
-    real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout), device :: wallprop_gpu
-    real(rkind), dimension(1:,1:,1:, 1:), intent(inout), device :: fl_gpu
-    real(rkind), dimension(1:,1:), intent(in), device :: coeff_deriv1_gpu
-    real(rkind), dimension(0:,1:), intent(in), device :: coeff_deriv2_gpu
-    real(rkind), dimension(1:), intent(in), device :: dcsidx_gpu, detady_gpu, dzitdz_gpu
-    real(rkind), dimension(1:), intent(in), device :: dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
-    real(rkind), dimension(1:), intent(in), device :: dcsidx2_gpu, detady2_gpu, dzitdz2_gpu
-    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
-    integer :: i,j,k,l,ll,iercuda
-    real(rkind) :: ccl,clapl
-    real(rkind) :: sig11,sig12,sig13
-    real(rkind) :: sig22,sig23
-    real(rkind) :: sig33
-    real(rkind) :: uu,vv,ww,tt,mu
-    real(rkind) :: ux,uy,uz
-    real(rkind) :: vx,vy,vz
-    real(rkind) :: wx,wy,wz
-    real(rkind) :: tx,ty,tz
-    real(rkind) :: mux, muy, muz
-    real(rkind) :: ulap,ulapx,ulapy,ulapz
-    real(rkind) :: vlap,vlapx,vlapy,vlapz
-    real(rkind) :: wlap,wlapx,wlapy,wlapz
-    real(rkind) :: tlap,tlapx,tlapy,tlapz
-    real(rkind) :: sigq,sigx,sigy,sigz,sigqt,sigah
-    real(rkind) :: div, div3l, omegax, omegay, omegaz, omod2
-    real(rkind) :: cploc
-    integer :: lmax
-!
-    lmax = visc_order/2
-!
-    !$cuf kernel do(2) <<<*,*>>>
-    do j=1,ny
-      do i=1,nx
-        do k=1,nz
-!
-          uu = w_aux_gpu(i,j,k,2)
-          vv = w_aux_gpu(i,j,k,3)
-          ww = w_aux_gpu(i,j,k,4)
-          tt = w_aux_gpu(i,j,k,6)
-          mu = w_aux_gpu(i,j,k,7)
-!
+
           ux = 0._rkind
           vx = 0._rkind
           wx = 0._rkind
@@ -2891,7 +2896,7 @@ contains
           tlapx = coeff_deriv2_gpu(0,lmax)*tt
           tlapy = tlapx
           tlapz = tlapx
-!
+
           do l=1,lmax
             ccl = coeff_deriv1_gpu(l,lmax)
             clapl = coeff_deriv2_gpu(l,lmax)
@@ -2905,7 +2910,7 @@ contains
             tlapx = tlapx + clapl*(w_aux_gpu(i+l,j,k,6)+w_aux_gpu(i-l,j,k,6))
             mux = mux+ccl*(w_aux_gpu(i+l,j,k,7)-w_aux_gpu(i-l,j,k,7))
           enddo
-!
+
           do l=1,lmax
             ccl = coeff_deriv1_gpu(l,lmax)
             clapl = coeff_deriv2_gpu(l,lmax)
@@ -2919,7 +2924,7 @@ contains
             tlapy = tlapy + clapl*(w_aux_gpu(i,j+l,k,6)+w_aux_gpu(i,j-l,k,6))
             muy = muy+ccl*(w_aux_gpu(i,j+l,k,7)-w_aux_gpu(i,j-l,k,7))
           enddo
-!
+
           do l=1,lmax
             ccl = coeff_deriv1_gpu(l,lmax)
             clapl = coeff_deriv2_gpu(l,lmax)
@@ -2933,7 +2938,7 @@ contains
             tlapz = tlapz + clapl*(w_aux_gpu(i,j,k+l,6)+w_aux_gpu(i,j,k-l,6))
             muz = muz+ccl*(w_aux_gpu(i,j,k+l,7)-w_aux_gpu(i,j,k-l,7))
           enddo
-!
+
           ux = ux*dcsidx_gpu(i)
           vx = vx*dcsidx_gpu(i)
           wx = wx*dcsidx_gpu(i)
@@ -2949,7 +2954,7 @@ contains
           wz = wz*dzitdz_gpu(k)
           tz = tz*dzitdz_gpu(k)
           muz = muz*dzitdz_gpu(k)
-!
+
           ulapx = ulapx*dcsidxs_gpu(i)+ux*dcsidx2_gpu(i)
           vlapx = vlapx*dcsidxs_gpu(i)+vx*dcsidx2_gpu(i)
           wlapx = wlapx*dcsidxs_gpu(i)+wx*dcsidx2_gpu(i)
@@ -2962,12 +2967,12 @@ contains
           vlapz = vlapz*dzitdzs_gpu(k)+vz*dzitdz2_gpu(k)
           wlapz = wlapz*dzitdzs_gpu(k)+wz*dzitdz2_gpu(k)
           tlapz = tlapz*dzitdzs_gpu(k)+tz*dzitdz2_gpu(k)
-!
+
           ulap = ulapx+ulapy+ulapz
           vlap = vlapx+vlapy+vlapz
           wlap = wlapx+wlapy+wlapz
           tlap = tlapx+tlapy+tlapz
-!
+
           div = ux+vy+wz
           div3l = div/3._rkind
           w_aux_gpu(i,j,k,10) = div3l
@@ -2976,7 +2981,7 @@ contains
           omegaz = vx-uy
           omod2 = omegax*omegax+omegay*omegay+omegaz*omegaz
           w_aux_gpu(i,j,k,9) = sqrt(omod2)
-!
+
           if (calorically_perfect==1) then
             cploc = cp_coeff_gpu(0)
           else
@@ -2985,7 +2990,7 @@ contains
               cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
             enddo
           endif
-!
+
           sig11 = 2._rkind*(ux-div3l)
           sig12 = uy+vx
           sig13 = uz+wx
@@ -2996,11 +3001,11 @@ contains
           sigy = mux*sig12 + muy*sig22 + muz*sig23 + mu*vlap
           sigz = mux*sig13 + muy*sig23 + muz*sig33 + mu*wlap
           sigqt = (mux*tx+muy*ty+muz*tz+mu*tlap)*cploc/prandtl
-!
+
           sigah = (sig11*ux+sig12*uy+sig13*uz+sig12*vx+sig22*vy+sig23*vz+sig13*wx+sig23*wy+sig33*wz)*mu
-!
+
           sigq = sigx*uu+sigy*vv+sigz*ww+sigah+sigqt
-!
+
           fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
           fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
           fl_gpu(i,j,k,4) = fl_gpu(i,j,k,4) - sigz
@@ -3010,17 +3015,17 @@ contains
             wallprop_gpu(i,k,3) = mu*wy
             wallprop_gpu(i,k,4) = mu*ty*cploc/prandtl
           endif
-!
+
         enddo
       enddo
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine visflx_nosensor_cuf
-!
-  subroutine visflx_reduced_ord2_cuf(nx, ny, nz, ng, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu&
-  &, calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, x_gpu, y_gpu, z_gpu, wallprop_gpu, update_s&
-  &ensor)
-!
+
+  subroutine visflx_reduced_ord2_cuf(nx, ny, nz, ng, prandtl, t0, indx_cp_l, indx_cp_r,&
+  & cp_coeff_gpu, calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, x_gpu, y_gpu, z_gpu,&
+  & wallprop_gpu, update_sensor)
+
     integer, intent(in) :: nx, ny, nz, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
     real(rkind), intent(in) :: prandtl, u0, l0, t0
@@ -3045,18 +3050,18 @@ contains
     real(rkind) :: sigq,sigx,sigy,sigz,sigqt,sigah
     real(rkind) :: div, div3l, omegax, omegay, omegaz, omod2
     real(rkind) :: cploc
-!
+
     !$cuf kernel do(3) <<<*,*>>>
     do k=1,nz
       do j=1,ny
         do i=1,nx
-!
+
           uu = w_aux_gpu(i,j,k,2)
           vv = w_aux_gpu(i,j,k,3)
           ww = w_aux_gpu(i,j,k,4)
           tt = w_aux_gpu(i,j,k,6)
           mu = w_aux_gpu(i,j,k,7)
-!
+
           if (calorically_perfect==1) then
             cploc = cp_coeff_gpu(0)
           else
@@ -3065,22 +3070,22 @@ contains
               cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
             enddo
           endif
-!
+
           dxl = 1._rkind/(x_gpu(i+1)-x_gpu(i-1))
           dyl = 1._rkind/(y_gpu(j+1)-y_gpu(j-1))
           dzl = 1._rkind/(z_gpu(k+1)-z_gpu(k-1))
-!
+
           ux = dxl*(w_aux_gpu(i+1,j,k,2)-w_aux_gpu(i-1,j,k,2))
           vx = dxl*(w_aux_gpu(i+1,j,k,3)-w_aux_gpu(i-1,j,k,3))
           wx = dxl*(w_aux_gpu(i+1,j,k,4)-w_aux_gpu(i-1,j,k,4))
           mux = dxl*(w_aux_gpu(i+1,j,k,7)-w_aux_gpu(i-1,j,k,7))
-!
+
           uy = dyl*(w_aux_gpu(i,j+1,k,2)-w_aux_gpu(i,j-1,k,2))
           vy = dyl*(w_aux_gpu(i,j+1,k,3)-w_aux_gpu(i,j-1,k,3))
           wy = dyl*(w_aux_gpu(i,j+1,k,4)-w_aux_gpu(i,j-1,k,4))
           ty = dyl*(w_aux_gpu(i,j+1,k,6)-w_aux_gpu(i,j-1,k,6))
           muy = dyl*(w_aux_gpu(i,j+1,k,7)-w_aux_gpu(i,j-1,k,7))
-!
+
           uz = dzl*(w_aux_gpu(i,j,k+1,2)-w_aux_gpu(i,j,k-1,2))
           vz = dzl*(w_aux_gpu(i,j,k+1,3)-w_aux_gpu(i,j,k-1,3))
           wz = dzl*(w_aux_gpu(i,j,k+1,4)-w_aux_gpu(i,j,k-1,4))
@@ -3098,11 +3103,11 @@ contains
           omegaz = vx-uy
           omod2 = omegax*omegax+omegay*omegay+omegaz*omegaz
           w_aux_gpu(i,j,k,9) = sqrt(omod2)
-!
+
           if (update_sensor == 1) then
             w_aux_gpu(i,j,k,8) = (max(-div/sqrt(omod2+div**2+(u0/l0)**2),0._rkind))**2
           endif
-!
+
           sig11 = ux-2._rkind*div3l
           sig12 = vx
           sig13 = wx
@@ -3126,181 +3131,34 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine visflx_reduced_ord2_cuf
-!
-  subroutine visflx_reduced_cuf(nx, ny, nz, ng, visc_order, prandtl, t0, indx_cp_l, indx_cp_r, cp_co&
-  &eff_gpu, calorically_perfect, u0, l0, w_gpu, w_aux_gpu, fl_gpu, coeff_deriv1_gpu, coeff_deriv2_gpu, &
-  &dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, dcsidx2_gpu, detady2_gpu,&
-  & dzitdz2_gpu, wallprop_gpu, update_sensor)
-!
-    integer, intent(in) :: nx, ny, nz, ng, visc_order, calorically_perfect
-    integer, intent(in) :: indx_cp_l, indx_cp_r
-    real(rkind), intent(in) :: prandtl, u0, l0, t0
-    integer, intent(in) :: update_sensor
-    real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_gpu
-    real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
-    real(rkind), dimension(1-ng:,1-ng:, 2:), intent(inout), device :: wallprop_gpu
-    real(rkind), dimension(1:,1:,1:, 1:), intent(inout), device :: fl_gpu
-    real(rkind), dimension(1:,1:), intent(in), device :: coeff_deriv1_gpu
-    real(rkind), dimension(0:,1:), intent(in), device :: coeff_deriv2_gpu
-    real(rkind), dimension(1:), intent(in), device :: dcsidx_gpu, detady_gpu, dzitdz_gpu
-    real(rkind), dimension(1:), intent(in), device :: dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
-    real(rkind), dimension(1:), intent(in), device :: dcsidx2_gpu, detady2_gpu, dzitdz2_gpu
-    real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cp_coeff_gpu
-    integer :: i,j,k,l,ll,iercuda
-    real(rkind) :: ccl,clapl
-    real(rkind) :: sig11,sig12,sig13
-    real(rkind) :: sig21,sig22,sig23
-    real(rkind) :: sig31,sig32,sig33
-    real(rkind) :: uu,vv,ww,tt,mu
-    real(rkind) :: ux,uy,uz
-    real(rkind) :: vx,vy,vz
-    real(rkind) :: wx,wy,wz
-    real(rkind) :: tx,ty,tz
-    real(rkind) :: mux, muy, muz
-    real(rkind) :: ulap,ulapx,ulapy,ulapz
-    real(rkind) :: vlap,vlapx,vlapy,vlapz
-    real(rkind) :: wlap,wlapx,wlapy,wlapz
-    real(rkind) :: tlap,tlapx,tlapy,tlapz
-    real(rkind) :: sigq,sigx,sigy,sigz,sigqt,sigah
-    real(rkind) :: div, div3l, omegax, omegay, omegaz, omod2
-    real(rkind) :: cploc
-    integer :: lmax
-!
-    lmax = visc_order/2
-!
-    !$cuf kernel do(3) <<<*,*>>>
-    do k=1,nz
-      do j=1,ny
-        do i=1,nx
-!
-          uu = w_aux_gpu(i,j,k,2)
-          vv = w_aux_gpu(i,j,k,3)
-          ww = w_aux_gpu(i,j,k,4)
-          tt = w_aux_gpu(i,j,k,6)
-          mu = w_aux_gpu(i,j,k,7)
-!
-          if (calorically_perfect==1) then
-            cploc = cp_coeff_gpu(0)
-          else
-            cploc = 0._rkind
-            do ll=indx_cp_l,indx_cp_r
-              cploc = cploc+cp_coeff_gpu(ll)*(tt/t0)**ll
-            enddo
-          endif
-!
-          ux = 0._rkind
-          vx = 0._rkind
-          wx = 0._rkind
-          mux = 0._rkind
-          uy = 0._rkind
-          vy = 0._rkind
-          wy = 0._rkind
-          ty = 0._rkind
-          muy = 0._rkind
-          uz = 0._rkind
-          vz = 0._rkind
-          wz = 0._rkind
-          muz = 0._rkind
-!
-          do l=1,lmax
-            ccl = coeff_deriv1_gpu(l,lmax)
-            ux = ux+ccl*(w_aux_gpu(i+l,j,k,2)-w_aux_gpu(i-l,j,k,2))
-            vx = vx+ccl*(w_aux_gpu(i+l,j,k,3)-w_aux_gpu(i-l,j,k,3))
-            wx = wx+ccl*(w_aux_gpu(i+l,j,k,4)-w_aux_gpu(i-l,j,k,4))
-            mux = mux+ccl*(w_aux_gpu(i+l,j,k,7)-w_aux_gpu(i-l,j,k,7))
-!
-            uy = uy+ccl*(w_aux_gpu(i,j+l,k,2)-w_aux_gpu(i,j-l,k,2))
-            vy = vy+ccl*(w_aux_gpu(i,j+l,k,3)-w_aux_gpu(i,j-l,k,3))
-            wy = wy+ccl*(w_aux_gpu(i,j+l,k,4)-w_aux_gpu(i,j-l,k,4))
-            ty = ty+ccl*(w_aux_gpu(i,j+l,k,6)-w_aux_gpu(i,j-l,k,6))
-            muy = muy+ccl*(w_aux_gpu(i,j+l,k,7)-w_aux_gpu(i,j-l,k,7))
-!
-            uz = uz+ccl*(w_aux_gpu(i,j,k+l,2)-w_aux_gpu(i,j,k-l,2))
-            vz = vz+ccl*(w_aux_gpu(i,j,k+l,3)-w_aux_gpu(i,j,k-l,3))
-            wz = wz+ccl*(w_aux_gpu(i,j,k+l,4)-w_aux_gpu(i,j,k-l,4))
-            muz = muz+ccl*(w_aux_gpu(i,j,k+l,7)-w_aux_gpu(i,j,k-l,7))
-          enddo
-          ux = ux*dcsidx_gpu(i)
-          vx = vx*dcsidx_gpu(i)
-          wx = wx*dcsidx_gpu(i)
-          mux = mux*dcsidx_gpu(i)
-          uy = uy*detady_gpu(j)
-          vy = vy*detady_gpu(j)
-          wy = wy*detady_gpu(j)
-          ty = ty*detady_gpu(j)
-          muy = muy*detady_gpu(j)
-          uz = uz*dzitdz_gpu(k)
-          vz = vz*dzitdz_gpu(k)
-          wz = wz*dzitdz_gpu(k)
-          muz = muz*dzitdz_gpu(k)
-          if (j==1) then
-            wallprop_gpu(i,k,2) = mu*uy
-            wallprop_gpu(i,k,3) = mu*wy
-            wallprop_gpu(i,k,4) = mu*ty*cploc/prandtl
-          endif
-          div = ux+vy+wz
-          div3l = div/3._rkind
-          w_aux_gpu(i,j,k,10) = div3l
-          omegax = wy-vz
-          omegay = uz-wx
-          omegaz = vx-uy
-          omod2 = omegax*omegax+omegay*omegay+omegaz*omegaz
-          w_aux_gpu(i,j,k,9) = sqrt(omod2)
-!
-          if (update_sensor == 1) then
-            w_aux_gpu(i,j,k,8) = (max(-div/sqrt(omod2+div**2+(u0/l0)**2),0._rkind))**2
-          endif
-!
-          sig11 = ux-2._rkind*div3l
-          sig12 = vx
-          sig13 = wx
-          sig21 = uy
-          sig22 = vy-2._rkind*div3l
-          sig23 = wy
-          sig31 = uz
-          sig32 = vz
-          sig33 = wz-2._rkind*div3l
-          sigx = mux*sig11 + muy*sig12 + muz*sig13
-          sigy = mux*sig21 + muy*sig22 + muz*sig23
-          sigz = mux*sig31 + muy*sig32 + muz*sig33
-          sigah = (sig11*ux+sig12*uy+sig13*uz+sig21*vx+sig22*vy+sig23*vz+sig31*wx+sig32*wy+sig33*wz)*mu
-          sigq = sigx*uu+sigy*vv+sigz*ww+sigah
-          fl_gpu(i,j,k,2) = fl_gpu(i,j,k,2) - sigx
-          fl_gpu(i,j,k,3) = fl_gpu(i,j,k,3) - sigy
-          fl_gpu(i,j,k,4) = fl_gpu(i,j,k,4) - sigz
-          fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) - sigq
-        enddo
-      enddo
-    enddo
-    !@cuf iercuda=cudadevicesynchronize()
-  endsubroutine visflx_reduced_cuf
-!
+
+
   subroutine sensor_cuf(nx, ny, nz, ng, u0, l0, w_aux_gpu)
     integer, intent(in) :: nx, ny, nz, ng
     real(rkind), intent(in) :: u0, l0
     real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(inout), device :: w_aux_gpu
     integer :: i,j,k,iercuda
     real(rkind) :: div, omod2
-!
+
     !$cuf kernel do(3) <<<*,*>>>
     do k=1,nz
       do j=1,ny
         do i=1,nx
-!
+
           omod2 = w_aux_gpu(i,j,k,9)**2
           div = 3._rkind*w_aux_gpu(i,j,k,10)
-!
+
           w_aux_gpu(i,j,k,8) = (max(-div/sqrt(omod2+div**2+(u0/l0)**2),0._rkind))**2
-!
+
         enddo
       enddo
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine sensor_cuf
-!
-  subroutine visflx_x_cuf(nx, ny, nz, nv, ng, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calor&
-  &ically_perfect, x_gpu, w_aux_gpu, fl_gpu, fhat_gpu)
-!
+
+  subroutine visflx_x_cuf(nx, ny, nz, nv, ng, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu,&
+  & calorically_perfect, x_gpu, w_aux_gpu, fl_gpu, fhat_gpu)
+
     integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
     real(rkind), intent(in) :: prandtl, t0
@@ -3352,11 +3210,10 @@ contains
           sigy = sigy*muf
           sigz = sigz*muf
           sigq = (sigq_tt*cploc/prandtl+sigq_qq)*muf
-          dxhl = 2._rkind/(x_gpu(i+2)-x_gpu(i))
-          fhat_gpu(i,j,k,2) = - sigx*dxhl
-          fhat_gpu(i,j,k,3) = - sigy*dxhl
-          fhat_gpu(i,j,k,4) = - sigz*dxhl
-          fhat_gpu(i,j,k,5) = - sigq*dxhl
+          fhat_gpu(i,j,k,2) = - sigx
+          fhat_gpu(i,j,k,3) = - sigy
+          fhat_gpu(i,j,k,4) = - sigz
+          fhat_gpu(i,j,k,5) = - sigq
         enddo
       enddo
     enddo
@@ -3365,19 +3222,20 @@ contains
     do k=1,nz
       do j=1,ny
         do i=1,nx
+          dxhl = 2._rkind/(x_gpu(i+1)-x_gpu(i-1))
           do iv=2,nv
-            fl_gpu(i,j,k,iv) = fl_gpu(i,j,k,iv) + (fhat_gpu(i,j,k,iv)-fhat_gpu(i-1,j,k,iv))
+            fl_gpu(i,j,k,iv) = fl_gpu(i,j,k,iv) + dxhl*(fhat_gpu(i,j,k,iv)-fhat_gpu(i-1,j,k,iv))
           enddo
         enddo
       enddo
     enddo
     !@cuf iercuda=cudadevicesynchronize()
-!
+
   endsubroutine visflx_x_cuf
-!
-  subroutine visflx_y_cuf(nx, ny, nz, nv, ng, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calor&
-  &ically_perfect, y_gpu, w_aux_gpu, fl_gpu)
-!
+
+  subroutine visflx_y_cuf(nx, ny, nz, nv, ng, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu,&
+  & calorically_perfect, y_gpu, w_aux_gpu, fl_gpu)
+
     integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
     real(rkind), intent(in) :: prandtl, t0
@@ -3446,9 +3304,9 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine visflx_y_cuf
-  subroutine visflx_z_cuf(nx, ny, nz, nv, ng, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu, calor&
-  &ically_perfect, z_gpu, w_aux_gpu, fl_gpu)
-!
+  subroutine visflx_z_cuf(nx, ny, nz, nv, ng, prandtl, t0, indx_cp_l, indx_cp_r, cp_coeff_gpu,&
+  & calorically_perfect, z_gpu, w_aux_gpu, fl_gpu)
+
     integer, intent(in) :: nx, ny, nz, nv, ng, calorically_perfect
     integer, intent(in) :: indx_cp_l, indx_cp_r
     real(rkind), intent(in) :: prandtl, t0
@@ -3517,7 +3375,7 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine visflx_z_cuf
-!
+
   subroutine recyc_exchange_cuf_1(irecyc, w_gpu, wbuf1s_gpu, nx, ny, nz, ng, nv)
     integer, intent(in) :: irecyc, nx, ny, nz, ng, nv
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,1:), intent(in), device :: w_gpu
@@ -3569,17 +3427,17 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine recyc_exchange_cuf_3
-!
+
   subroutine bcextr_sub_cuf(ilat, nx, ny, nz, ng, p0, rgas0, w_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect)
-!
+
     integer, intent(in) :: ilat, nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind), intent(in) :: p0, t0, rgas0
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
-!
+
     real(rkind) :: rho,rhou,rhov,rhow,tt,ee
     integer :: i,j,k,l,m,iercuda
-!
+
     if (ilat==1) then
     elseif (ilat==2) then
       !$cuf kernel do(3) <<<*,*>>>
@@ -3622,16 +3480,53 @@ contains
         enddo
       enddo
       !@cuf iercuda=cudadevicesynchronize()
-!
     elseif (ilat==5) then
+      !$cuf kernel do(3) <<<*,*>>>
+      do l=1,ng
+        do j=1,ny
+          do i=1,nx
+            rho = w_gpu(i,j,1,1)
+            rhou = w_gpu(i,j,1,2)
+            rhov = w_gpu(i,j,1,3)
+            rhow = w_gpu(i,j,1,4)
+            tt = p0/rho/rgas0
+            ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+            w_gpu(i,j,1-l,1) = rho
+            w_gpu(i,j,1-l,2) = rhou
+            w_gpu(i,j,1-l,3) = rhov
+            w_gpu(i,j,1-l,4) = rhow
+            w_gpu(i,j,1-l,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
+          enddo
+        enddo
+      enddo
+      !@cuf iercuda=cudadevicesynchronize()
     elseif (ilat==6) then
+      !$cuf kernel do(3) <<<*,*>>>
+      do l=1,ng
+        do j=1,ny
+          do i=1,nx
+            rho = w_gpu(i,j,nz,1)
+            rhou = w_gpu(i,j,nz,2)
+            rhov = w_gpu(i,j,nz,3)
+            rhow = w_gpu(i,j,nz,4)
+            tt = p0/rho/rgas0
+            ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
+            w_gpu(i,j,nz+l,1) = rho
+            w_gpu(i,j,nz+l,2) = rhou
+            w_gpu(i,j,nz+l,3) = rhov
+            w_gpu(i,j,nz+l,4) = rhow
+            w_gpu(i,j,nz+l,5) = rho*ee + 0.5_rkind*(rhou**2+rhov**2+rhow**2)/rho
+          enddo
+        enddo
+      enddo
+      !@cuf iercuda=cudadevicesynchronize()
     endif
   endsubroutine bcextr_sub_cuf
-!
-!
-  attributes(global) subroutine bc_nr_lat_x_kernel(start_or_end, nr_type, nx, ny, nz, ng, nv, w_aux_&
-  &gpu, w_gpu, fl_gpu, dcsidx_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu, calorically_perfect, r&
-  &gas0,t0)
+
+
+  attributes(global) subroutine bc_nr_lat_x_kernel(start_or_end, nr_type, nx, ny, nz, ng, nv,&
+  & w_aux_gpu, w_gpu, fl_gpu, dcsidx_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu,&
+  & calorically_perfect, rgas0,t0)
     integer, intent(in), value :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind), intent(in), value :: rgas0,t0
     real(rkind), dimension(3) :: c_one
@@ -3646,11 +3541,11 @@ contains
     real(rkind), dimension(:) :: dcsidx_gpu
     real(rkind), dimension(:) :: winf_gpu
     real(rkind) :: rho,tt,gamloc,p_rho,p_e,etot,b3
-!
+
     j = blockdim%x * (blockidx%x - 1) + threadidx%x
     k = blockdim%y * (blockidx%y - 1) + threadidx%y
     if (j > ny .or. k > nz) return
-!
+
     c_one = [-1.5_rkind, 2._rkind, -0.5_rkind]
     if(start_or_end == 1) then
       i = 1
@@ -3659,8 +3554,8 @@ contains
       i = nx
       sgn_dw = -1
     endif
-!
-    do m=1,nv
+
+    do m=1,5
       dw_dn(m) = 0._rkind
       do l=1,3
         dw_dn(m) = dw_dn(m) + sgn_dw * c_one(l)*w_gpu(i+sgn_dw*(l-1),j,k,m)
@@ -3668,7 +3563,7 @@ contains
       w_target = w_gpu(i-sgn_dw,j,k,m)
       dw_dn_outer(m) = sgn_dw * (w_gpu(i,j,k,m)-w_target)
     enddo
-!
+
     rho = w_aux_gpu(i,j,k,1)
     uu = w_aux_gpu(i,j,k,2)
     vv = w_aux_gpu(i,j,k,3)
@@ -3687,7 +3582,7 @@ contains
     b2 = p_e/(rho*cc)
     b1 = p_rho/cc - b2*(etot - 2._rkind*qq)
     call eigenvectors_x(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
-!
+
     do m=1,5
       dwc_dn(m) = 0._rkind
       dwc_dn_outer(m) = 0._rkind
@@ -3696,19 +3591,19 @@ contains
         dwc_dn_outer(m) = dwc_dn_outer(m) + el(mm,m) * dw_dn_outer(mm)
       enddo
     enddo
-!
+
     ev(1) = uu-c
     ev(2) = uu
-    ev(3) = uu+c
+    ev(3) = ev(2)
     ev(4) = ev(2)
-    ev(5) = ev(2)
-!
+    ev(5) = uu+c
+
     if (nr_type == 1) then
       do l=1,5
         ev(l) = sgn_dw*min(sgn_dw*ev(l) ,0._rkind)
       enddo
     endif
-!
+
     if(nr_type == 2) then
       do m=1,5
         if(sgn_dw*ev(m) > 0._rkind) then
@@ -3716,22 +3611,22 @@ contains
         endif
       enddo
     endif
-!
+
     do m=1,5
       dwc_dn(m) = ev(m) * dwc_dn(m)
     enddo
-!
+
     if(nr_type == 6) then
       dwc_dn(2) = 0._rkind
-      if(start_or_end == 1) then
-        dwc_dn(3) = dwc_dn(1)
-      elseif(start_or_end == 2) then
-        dwc_dn(1) = dwc_dn(3)
-      endif
+      dwc_dn(3) = 0._rkind
       dwc_dn(4) = 0._rkind
-      dwc_dn(5) = 0._rkind
+      if(start_or_end == 1) then
+        dwc_dn(5) = dwc_dn(1)
+      elseif(start_or_end == 2) then
+        dwc_dn(1) = dwc_dn(5)
+      endif
     endif
-!
+
     do m=1,5
       df = 0._rkind
       do mm=1,5
@@ -3740,10 +3635,10 @@ contains
       fl_gpu(i,j,k,m) = fl_gpu(i,j,k,m) + df * dcsidx_gpu(i)
     enddo
   endsubroutine bc_nr_lat_x_kernel
-!
-  attributes(global) subroutine bc_nr_lat_y_kernel(start_or_end, nr_type, nx, ny, nz, ng, nv, w_aux_&
-  &gpu, w_gpu, fl_gpu, detady_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu, calorically_perfect,rg&
-  &as0,t0)
+
+  attributes(global) subroutine bc_nr_lat_y_kernel(start_or_end, nr_type, nx, ny, nz, ng, nv,&
+  & w_aux_gpu, w_gpu, fl_gpu, detady_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu,&
+  & calorically_perfect,rgas0,t0)
     integer, intent(in), value :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind), intent(in), value :: rgas0,t0
     real(rkind), dimension(3) :: c_one
@@ -3758,11 +3653,11 @@ contains
     real(rkind), dimension(:) :: detady_gpu
     real(rkind), dimension(:) :: winf_gpu
     real(rkind) :: rho,tt,gamloc,p_rho,p_e,etot,b3
-!
+
     i = blockdim%x * (blockidx%x - 1) + threadidx%x
     k = blockdim%y * (blockidx%y - 1) + threadidx%y
     if (i > nx .or. k > nz) return
-!
+
     c_one = [-1.5_rkind, 2._rkind, -0.5_rkind]
     if(start_or_end == 1) then
       j = 1
@@ -3771,8 +3666,8 @@ contains
       j = ny
       sgn_dw = -1
     endif
-!
-    do m=1,nv
+
+    do m=1,5
       dw_dn(m) = 0._rkind
       do l=1,3
         dw_dn(m) = dw_dn(m) + sgn_dw * c_one(l)*w_gpu(i,j+sgn_dw*(l-1),k,m)
@@ -3780,7 +3675,7 @@ contains
       w_target = winf_gpu(m)
       dw_dn_outer(m) = sgn_dw * (w_gpu(i,j,k,m)-w_target)
     enddo
-!
+
     rho = w_aux_gpu(i,j,k,1)
     uu = w_aux_gpu(i,j,k,2)
     vv = w_aux_gpu(i,j,k,3)
@@ -3799,7 +3694,7 @@ contains
     b2 = p_e/(rho*cc)
     b1 = p_rho/cc - b2*(etot - 2._rkind*qq)
     call eigenvectors_y(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
-!
+
     do m=1,5
       dwc_dn(m) = 0._rkind
       dwc_dn_outer(m) = 0._rkind
@@ -3808,13 +3703,13 @@ contains
         dwc_dn_outer(m) = dwc_dn_outer(m) + el(mm,m) * dw_dn_outer(mm)
       enddo
     enddo
-!
+
     ev(1) = vv-c
     ev(2) = vv
-    ev(3) = vv+c
+    ev(3) = ev(2)
     ev(4) = ev(2)
-    ev(5) = ev(2)
-!
+    ev(5) = vv+c
+
     if(nr_type == 1) then
       if(start_or_end == 1) then
         do l=1,5
@@ -3826,7 +3721,7 @@ contains
         enddo
       endif
     endif
-!
+
     if(nr_type == 2) then
       do m=1,5
         if(sgn_dw*ev(m) > 0._rkind) then
@@ -3834,22 +3729,22 @@ contains
         endif
       enddo
     endif
-!
+
     do m=1,5
       dwc_dn(m) = ev(m) * dwc_dn(m)
     enddo
-!
+
     if(nr_type == 6) then
       dwc_dn(2) = 0._rkind
-      if(start_or_end == 1) then
-        dwc_dn(3) = dwc_dn(1)
-      elseif(start_or_end == 2) then
-        dwc_dn(1) = dwc_dn(3)
-      endif
+      dwc_dn(3) = 0._rkind
       dwc_dn(4) = 0._rkind
-      dwc_dn(5) = 0._rkind
+      if(start_or_end == 1) then
+        dwc_dn(5) = dwc_dn(1)
+      elseif(start_or_end == 2) then
+        dwc_dn(1) = dwc_dn(5)
+      endif
     endif
-!
+
     do m=1,5
       df = 0._rkind
       do mm=1,5
@@ -3858,10 +3753,10 @@ contains
       fl_gpu(i,j,k,m) = fl_gpu(i,j,k,m) + df * detady_gpu(j)
     enddo
   endsubroutine bc_nr_lat_y_kernel
-!
-  attributes(global) subroutine bc_nr_lat_z_kernel(start_or_end, nr_type, nx, ny, nz, ng, nv, w_aux_&
-  &gpu, w_gpu, fl_gpu, dzitdz_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu, calorically_perfect,rg&
-  &as0,t0)
+
+  attributes(global) subroutine bc_nr_lat_z_kernel(start_or_end, nr_type, nx, ny, nz, ng, nv,&
+  & w_aux_gpu, w_gpu, fl_gpu, dzitdz_gpu, indx_cp_l, indx_cp_r, cp_coeff_gpu, winf_gpu,&
+  & calorically_perfect,rgas0,t0)
     integer, intent(in), value :: start_or_end, nr_type, nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind), intent(in), value :: rgas0,t0
     real(rkind), dimension(3) :: c_one
@@ -3876,11 +3771,11 @@ contains
     real(rkind), dimension(:) :: dzitdz_gpu
     real(rkind), dimension(:) :: winf_gpu
     real(rkind) :: rho,tt,gamloc,p_rho,p_e,etot,b3
-!
+
     i = blockdim%x * (blockidx%x - 1) + threadidx%x
     j = blockdim%y * (blockidx%y - 1) + threadidx%y
     if (i > nx .or. j > ny) return
-!
+
     c_one = [-1.5_rkind, 2._rkind, -0.5_rkind]
     if(start_or_end == 1) then
       k = 1
@@ -3889,8 +3784,8 @@ contains
       k = nz
       sgn_dw = -1
     endif
-!
-    do m=1,nv
+
+    do m=1,5
       dw_dn(m) = 0._rkind
       do l=1,3
         dw_dn(m) = dw_dn(m) + sgn_dw * c_one(l)*w_gpu(i,j,k+sgn_dw*(l-1),m)
@@ -3898,7 +3793,7 @@ contains
       w_target = winf_gpu(m)
       dw_dn_outer(m) = sgn_dw * (w_gpu(i,j,k,m)-w_target)
     enddo
-!
+
     rho = w_aux_gpu(i,j,k,1)
     uu = w_aux_gpu(i,j,k,2)
     vv = w_aux_gpu(i,j,k,3)
@@ -3917,7 +3812,7 @@ contains
     b2 = p_e/(rho*cc)
     b1 = p_rho/cc - b2*(etot - 2._rkind*qq)
     call eigenvectors_z(b1, b2, b3, uu, vv, ww, c, ci, h, el, er)
-!
+
     do m=1,5
       dwc_dn(m) = 0._rkind
       dwc_dn_outer(m) = 0._rkind
@@ -3926,13 +3821,13 @@ contains
         dwc_dn_outer(m) = dwc_dn_outer(m) + el(mm,m) * dw_dn_outer(mm)
       enddo
     enddo
-!
+
     ev(1) = ww-c
     ev(2) = ww
-    ev(3) = ww+c
+    ev(3) = ev(2)
     ev(4) = ev(2)
-    ev(5) = ev(2)
-!
+    ev(5) = ww+c
+
     if(nr_type == 1) then
       if(start_or_end == 1) then
         do l=1,5
@@ -3944,7 +3839,7 @@ contains
         enddo
       endif
     endif
-!
+
     if(nr_type == 2) then
       do m=1,5
         if(sgn_dw*ev(m) > 0._rkind) then
@@ -3952,22 +3847,22 @@ contains
         endif
       enddo
     endif
-!
+
     do m=1,5
       dwc_dn(m) = ev(m) * dwc_dn(m)
     enddo
-!
+
     if(nr_type == 6) then
       dwc_dn(2) = 0._rkind
-      if(start_or_end == 1) then
-        dwc_dn(3) = dwc_dn(1)
-      elseif(start_or_end == 2) then
-        dwc_dn(1) = dwc_dn(3)
-      endif
+      dwc_dn(3) = 0._rkind
       dwc_dn(4) = 0._rkind
-      dwc_dn(5) = 0._rkind
+      if(start_or_end == 1) then
+        dwc_dn(5) = dwc_dn(1)
+      elseif(start_or_end == 2) then
+        dwc_dn(1) = dwc_dn(5)
+      endif
     endif
-!
+
     do m=1,5
       df = 0._rkind
       do mm=1,5
@@ -3976,7 +3871,7 @@ contains
       fl_gpu(i,j,k,m) = fl_gpu(i,j,k,m) + df * dzitdz_gpu(k)
     enddo
   endsubroutine bc_nr_lat_z_kernel
-!
+
   subroutine bcrecyc_cuf_1(nx, ny, nz, ng, nv, wrecycav_gpu, wrecyc_gpu)
     integer, intent(in) :: nx, ny, nz, ng, nv
     real(rkind), dimension(:,:,:), intent(inout), device :: wrecycav_gpu
@@ -3995,14 +3890,14 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine bcrecyc_cuf_1
-!
+
   subroutine bcrecyc_cuf_2(nx, ny, nz, nzmax, ng, wrecycav_gpu, wrecyc_gpu)
     integer, intent(in) :: nx, ny, nz, nzmax, ng
     real(rkind), dimension(:,:,:), intent(in), device :: wrecycav_gpu
     real(rkind), dimension(:,:,:,:), intent(inout), device :: wrecyc_gpu
     real(rkind) :: ufav, vfav, wfav, rhom
     integer :: i,j,k,iercuda
-!
+
     !$cuf kernel do(2) <<<*,*>>>
     do j=1,ny
       do i=1,ng
@@ -4019,15 +3914,16 @@ contains
       enddo
     enddo
     !@cuf iercuda=cudadevicesynchronize()
-!
+
   endsubroutine bcrecyc_cuf_2
-!
-  subroutine bcrecyc_cuf_3(nx, ny, nz, ng, p0, u0, rgas0, w_gpu, wmean_gpu, wrecyc_gpu, weta_inflow_&
-  &gpu, map_j_inn_gpu, map_j_out_gpu, yplus_inflow_gpu, eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu,&
-  & betarecyc, inflow_random_plane_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect, ra&
-  &nd_type)
+
+
+  subroutine bcrecyc_cuf_3(nx, ny, nz, ng, p0, u0, rgas0, w_gpu, wmean_gpu, wrecyc_gpu,&
+  & weta_inflow_gpu, map_j_inn_gpu, map_j_out_gpu, map_j_out_blend_gpu, yplus_inflow_gpu,&
+  & eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu, eta_recyc_blend_gpu, betarecyc, glund1,&
+  & inflow_random_plane_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, t0, calorically_perfect, rand_type)
     integer, intent(in) :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect, rand_type
-    real(rkind) :: p0, rgas0, betarecyc, t0, u0
+    real(rkind) :: p0, rgas0, betarecyc, glund1, t0, u0
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
     real(rkind), dimension(1-ng:,:,:), intent(in), device :: wmean_gpu
     real(rkind), dimension(:,:,:,:), intent(in), device :: wrecyc_gpu
@@ -4035,17 +3931,18 @@ contains
     real(rkind), dimension(1-ng:,1-ng:,1-ng:,:), intent(inout), device :: w_gpu
     real(rkind), dimension(:), intent(in), device :: weta_inflow_gpu
     real(rkind), dimension(1-ng:), intent(in), device :: yplus_inflow_gpu, eta_inflow_gpu, yplus_recyc_gpu, eta_recyc_gpu
-    integer, dimension(:), intent(in), device :: map_j_inn_gpu, map_j_out_gpu
+    real(rkind), dimension(1-ng:), intent(in), device :: eta_recyc_blend_gpu
+    integer, dimension(:), intent(in), device :: map_j_inn_gpu, map_j_out_gpu, map_j_out_blend_gpu
     integer :: i,j,k,iercuda
     real(rkind) :: eta, weta, weta1, bdamp, disty_inn, disty_out, rhofluc, ufluc, vfluc, wfluc, rhof_inn, rhof_out
     real(rkind) :: uf_inn, uf_out, vf_inn, vf_out, wf_inn, wf_out
     real(rkind) :: rhomean, uumean , vvmean , wwmean , tmean , rho , uu , vv , ww , rhou , rhov , rhow, tt, ee
     real(rkind) :: u0_05
     integer :: j_inn, j_out
-!
+
     u0_05 = 0.05_rkind*u0
     if (rand_type==0) u0_05 = 0._rkind
-!
+
     !$cuf kernel do(2) <<<*,*>>>
     do k=1,nz
       do j=1,ny
@@ -4057,9 +3954,9 @@ contains
         j_out = map_j_out_gpu(j)
         disty_inn = (yplus_inflow_gpu(j)-yplus_recyc_gpu(j_inn))/(yplus_recyc_gpu(j_inn+1)-yplus_recyc_gpu(j_inn))
         disty_out = (eta_inflow_gpu(j)-eta_recyc_gpu(j_out))/(eta_recyc_gpu(j_out+1)-eta_recyc_gpu(j_out))
-!
+
         do i=1,ng
-!
+
           if (j==1.or.j_inn>=ny.or.j_out>=ny) then
             rhofluc = 0._rkind
             ufluc = 0._rkind
@@ -4086,7 +3983,7 @@ contains
             vfluc = vfluc+u0_05*(inflow_random_plane_gpu(j,k,2)-0.5_rkind)*eta
             wfluc = wfluc+u0_05*(inflow_random_plane_gpu(j,k,3)-0.5_rkind)*eta
           endif
-!
+
           rhomean = wmean_gpu(1-i,j,1)
           uumean = wmean_gpu(1-i,j,2)/rhomean
           vvmean = wmean_gpu(1-i,j,3)/rhomean
@@ -4099,7 +3996,7 @@ contains
           rhou = rho*uu
           rhov = rho*vv
           rhow = rho*ww
-!
+
           w_gpu(1-i,j,k,1) = rho
           w_gpu(1-i,j,k,2) = rhou
           w_gpu(1-i,j,k,3) = rhov
@@ -4112,20 +4009,20 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine bcrecyc_cuf_3
-!
-  subroutine bclam_cuf(ilat, nx, ny, nz, ng, nv, w_gpu, wmean_gpu, p0, rgas0, indx_cp_l, indx_cp_r, &
-  &cv_coeff_gpu, t0, calorically_perfect)
-!
+
+  subroutine bclam_cuf(ilat, nx, ny, nz, ng, nv, w_gpu, wmean_gpu, p0, rgas0, indx_cp_l, indx_cp_r,&
+  & cv_coeff_gpu, t0, calorically_perfect)
+
     integer, intent(in) :: nx, ny, nz, ng, nv, indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind), intent(in) :: p0, rgas0, t0
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:,:,:), intent(in), device :: wmean_gpu
-!
+
     integer :: ilat
     integer :: j,k,l,iercuda
     real(rkind) :: rho,rhou,rhov,rhow,tt,ee
-!
+
     if (ilat==1) then
       !$cuf kernel do(3) <<<*,*>>>
       do k=1,nz
@@ -4153,13 +4050,13 @@ contains
     elseif (ilat==6) then
     endif
   endsubroutine bclam_cuf
-!
+
   subroutine bcfree_cuf(ilat, nx, ny, nz, ng, nv, winf_gpu, w_gpu)
     integer, intent(in) :: ilat,nx,ny,nz,ng,nv
     real(rkind), dimension(1:), intent(in), device :: winf_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
-    integer :: j,k,l,m,iercuda
-!
+    integer :: i,j,k,l,m,iercuda
+
     if (ilat==1) then
       !$cuf kernel do(3) <<<*,*>>>
       do k=1,nz
@@ -4174,12 +4071,23 @@ contains
       !@cuf iercuda=cudadevicesynchronize()
     elseif (ilat==2) then
     elseif (ilat==3) then
+      !$cuf kernel do(3) <<<*,*>>>
+      do k=1,nz
+        do l=1,ng
+          do i=1,nx
+            do m=1,nv
+              w_gpu(i,1-l,k,m) = winf_gpu(m)
+            enddo
+          enddo
+        enddo
+      enddo
+      !@cuf iercuda=cudadevicesynchronize()
     elseif (ilat==4) then
     elseif (ilat==5) then
     elseif (ilat==6) then
     endif
   endsubroutine bcfree_cuf
-!
+
   subroutine bcshock_cuf(ilat, nx, ny, nz, ng, nv, w_gpu, winf_gpu, winf_past_shock_gpu, xshock_imp,&
   & shock_angle, x_gpu, y_gpu, tanhfacs)
     integer, intent(in) :: nx,ny,nz,ng,nv,ilat
@@ -4189,9 +4097,9 @@ contains
     real(rkind), dimension(1-ng:), intent(in), device :: x_gpu, y_gpu
     integer :: i,k,l,m,iercuda
     real(rkind) :: xsh, xx, tanhlen, tanhf, dwinf
-!
+
     tanhlen = 8._rkind*tanhfacs
-!
+
     if (ilat==1) then
     elseif (ilat==2) then
     elseif (ilat==3) then
@@ -4226,7 +4134,7 @@ contains
     integer :: ilat
     integer :: i,j,k,l,m,iercuda
     real(rkind), dimension(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng, 1:1), intent(inout), device :: w_var_gpu
-!
+
     !$cuf kernel do(2) <<<*,*>>>
     do k=1,nz
       do j=1,ny
@@ -4282,13 +4190,13 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine bcextr_var_cuf
-!
+
   subroutine bcextr_cuf(ilat, nx, ny, nz, ng, nv, w_gpu)
     integer :: nx,ny,nz,ng,nv
     integer :: ilat
     integer :: i,j,k,l,m,iercuda
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
-!
+
     if (ilat==1) then
     elseif (ilat==2) then
       !$cuf kernel do(2) <<<*,*>>>
@@ -4352,7 +4260,7 @@ contains
       !@cuf iercuda=cudadevicesynchronize()
     endif
   endsubroutine bcextr_cuf
-!
+
   subroutine bcsym_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
     integer :: nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect
     integer :: ilat
@@ -4361,7 +4269,7 @@ contains
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in), device :: w_aux_gpu
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
-!
+
     if (ilat==1) then
     elseif (ilat==2) then
     elseif (ilat==3) then
@@ -4383,9 +4291,9 @@ contains
     elseif (ilat==6) then
     endif
   endsubroutine bcsym_cuf
-!
-  subroutine bcwall_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_r, cv_coef&
-  &f_gpu, t0, rgas0, calorically_perfect, tol_iter_nr)
+
+  subroutine bcwall_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_r,&
+  & cv_coeff_gpu, t0, rgas0, calorically_perfect, tol_iter_nr)
     integer :: nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect
     integer :: ilat
     real(rkind) :: twall, t0, rgas0, tol_iter_nr
@@ -4394,7 +4302,7 @@ contains
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in), device :: w_aux_gpu
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
-!
+
     if (ilat==1) then
     elseif (ilat==2) then
     elseif (ilat==3) then
@@ -4414,8 +4322,8 @@ contains
             rhoe = w_gpu(i,1+l,k,5)
             qq = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee = rhoe/rho-qq
-            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,1+l,k,6),t0,cv_coeff_gpu,indx_cp_l,indx_c&
-            &p_r,calorically_perfect,tol_iter_nr)
+            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,1+l,k,6),t0,cv_coeff_gpu,indx_cp_l,&
+            &indx_cp_r,calorically_perfect,tol_iter_nr)
             pp = rho*tt*rgas0
             tt = 2._rkind*twall-tt
             ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
@@ -4434,9 +4342,9 @@ contains
     elseif (ilat==6) then
     endif
   endsubroutine bcwall_cuf
-!
-  subroutine bcwall_staggered_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l, indx_cp_&
-  &r, cv_coeff_gpu, t0, rgas0, calorically_perfect, tol_iter_nr)
+
+  subroutine bcwall_staggered_cuf(ilat, nx, ny, nz, ng, twall, w_gpu, w_aux_gpu, indx_cp_l,&
+  & indx_cp_r, cv_coeff_gpu, t0, rgas0, calorically_perfect, tol_iter_nr)
     integer :: nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect
     integer :: ilat
     real(rkind) :: twall, t0, rgas0, tol_iter_nr
@@ -4445,7 +4353,7 @@ contains
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(inout), device :: w_gpu
     real(rkind), dimension(1-ng:, 1-ng:, 1-ng:, 1:), intent(in), device :: w_aux_gpu
     real(rkind), dimension(indx_cp_l:indx_cp_r+1), intent(in), device :: cv_coeff_gpu
-!
+
     if (ilat==1) then
     elseif (ilat==2) then
     elseif (ilat==3) then
@@ -4460,8 +4368,8 @@ contains
             rhoe = w_gpu(i,l,k,5)
             qq = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee = rhoe/rho-qq
-            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,l,k,6),t0,cv_coeff_gpu,indx_cp_l,indx_cp_&
-            &r,calorically_perfect,tol_iter_nr)
+            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,l,k,6),t0,cv_coeff_gpu,indx_cp_l,&
+            &indx_cp_r,calorically_perfect,tol_iter_nr)
             pp = rho*tt*rgas0
             tt = 2._rkind*twall-tt
             ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
@@ -4487,8 +4395,8 @@ contains
             rhoe = w_gpu(i,ny+1-l,k,5)
             qq = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
             ee = rhoe/rho-qq
-            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,ny+1-l,k,6),t0,cv_coeff_gpu,indx_cp_l,ind&
-            &x_cp_r,calorically_perfect,tol_iter_nr)
+            tt = get_temperature_from_e_dev(ee,w_aux_gpu(i,ny+1-l,k,6),t0,cv_coeff_gpu,indx_cp_l,&
+            &indx_cp_r,calorically_perfect,tol_iter_nr)
             pp = rho*tt*rgas0
             tt = 2._rkind*twall-tt
             ee = get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu,calorically_perfect)
@@ -4506,7 +4414,7 @@ contains
     elseif (ilat==6) then
     endif
   endsubroutine bcwall_staggered_cuf
-!
+
   subroutine compute_residual_cuf(nx, ny, nz, ng, nv, fln_gpu, dt, residual_rhou, fluid_mask_gpu)
     integer :: nx, ny, nz, ng, nv
     real(rkind), intent(out) :: residual_rhou
@@ -4514,7 +4422,7 @@ contains
     real(rkind), dimension(1:nx, 1:ny, 1:nz, nv), intent(in), device :: fln_gpu
     integer, dimension(1-ng:,1-ng:,1-ng:), intent(in), device :: fluid_mask_gpu
     integer :: i,j,k,iercuda
-!
+
     residual_rhou = 0._rkind
     !$cuf kernel do(3) <<<*,*>>> reduce(+:residual_rhou)
     do k=1,nz
@@ -4528,33 +4436,63 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine compute_residual_cuf
-!
-  subroutine compute_vmax_cuf(nx, ny, nz, ng, nv, w_gpu, vmax, fluid_mask_gpu)
-    integer :: nx, ny, nz, ng, nv
-    real(rkind), intent(out) :: vmax
-    real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng, nv), intent(in), device :: w_gpu
+
+
+  subroutine compute_rho_t_p_minmax_cuf(nx, ny, nz, ng, rgas0, w_aux_gpu, rhomin, rhomax, tmin, tmax, pmin, pmax, fluid_mask_gpu)
+    integer, intent(in) :: nx, ny, nz, ng
+    real(rkind), intent(in) :: rgas0
+    real(rkind), dimension(1-ng:,1-ng:,1-ng:, 1:), intent(in), device :: w_aux_gpu
     integer, dimension(1-ng:,1-ng:,1-ng:), intent(in), device :: fluid_mask_gpu
+    real(rkind), intent(out) :: rhomin, rhomax, tmin, tmax, pmin, pmax
     integer :: i,j,k,iercuda
-!
-    vmax = 0._rkind
-    !$cuf kernel do(2) <<<*,*>>> reduce(max:vmax)
+    real(rkind) :: rho,tt,pp
+
+    rhomin = huge(1._rkind)
+    rhomax = -100._rkind
+    tmin = huge(1._rkind)
+    tmax = -100._rkind
+    pmin = huge(1._rkind)
+    pmax = -100._rkind
+
+    !$cuf kernel do(3) <<<*,*>>> reduce(min:rhomin, tmin, pmin)
     do k=1,nz
       do j=1,ny
         do i=1,nx
           if (fluid_mask_gpu(i,j,k)==0) then
-            vmax = max(vmax,w_gpu(i,j,k,3)/w_gpu(i,j,k,1))
+            rho = w_aux_gpu(i,j,k,1)
+            tt = w_aux_gpu(i,j,k,6)
+            pp = rho*tt*rgas0
+            rhomin = min(rhomin,rho)
+            tmin = min(tmin ,tt )
+            pmin = min(pmin ,pp )
           endif
         enddo
       enddo
     enddo
     !@cuf iercuda=cudadevicesynchronize()
-  endsubroutine compute_vmax_cuf
-!
-!
-  subroutine compute_dt_cuf(nx, ny, nz, ng, rgas0, prandtl, dcsidx_gpu, detady_gpu, dzitdz_gpu, dcsi&
-  &dxs_gpu, detadys_gpu, dzitdzs_gpu, w_gpu, w_aux_gpu, dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_ma&
-  &x, dtzv_max, dtxk_max, dtyk_max, dtzk_max, indx_cp_l, indx_cp_r, cp_coeff_gpu,fluid_mask_gpu,caloric&
-  &ally_perfect,t0)
+
+    !$cuf kernel do(3) <<<*,*>>> reduce(max:rhomax, tmax, pmax)
+    do k=1,nz
+      do j=1,ny
+        do i=1,nx
+          if (fluid_mask_gpu(i,j,k)==0) then
+            rho = w_aux_gpu(i,j,k,1)
+            tt = w_aux_gpu(i,j,k,6)
+            pp = rho*tt*rgas0
+            rhomax = max(rhomax,rho)
+            tmax = max(tmax ,tt )
+            pmax = max(pmax ,pp )
+          endif
+        enddo
+      enddo
+    enddo
+    !@cuf iercuda=cudadevicesynchronize()
+  endsubroutine compute_rho_t_p_minmax_cuf
+
+  subroutine compute_dt_cuf(nx, ny, nz, ng, rgas0, prandtl, dcsidx_gpu, detady_gpu, dzitdz_gpu,&
+  & dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, w_gpu, w_aux_gpu, dtxi_max, dtyi_max, dtzi_max, dtxv_max,&
+  & dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max, indx_cp_l, indx_cp_r, cp_coeff_gpu,&
+  &fluid_mask_gpu,calorically_perfect,t0)
     integer :: nx, ny, nz, ng, indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind) :: rgas0, t0
     real(rkind) :: prandtl
@@ -4569,7 +4507,7 @@ contains
     real(rkind) :: rho, ri, uu, vv, ww, tt, mu, nu, k_over_rhocp, c
     real(rkind) :: dtxi_max, dtyi_max, dtzi_max, dtxv_max, dtyv_max, dtzv_max, dtxk_max, dtyk_max, dtzk_max
     real(rkind) :: gamloc
-!
+
     dtxi_max = 0._rkind
     dtyi_max = 0._rkind
     dtzi_max = 0._rkind
@@ -4579,7 +4517,7 @@ contains
     dtxk_max = 0._rkind
     dtyk_max = 0._rkind
     dtzk_max = 0._rkind
-!
+
     !$cuf kernel do(3) <<<*,*>>> reduce(max:dtxi_max,dtyi_max,dtzi_max,dtxv_max,dtyv_max,dtzv_max,dtxk_max,dtyk_max,dtzk_max)
     do k=1,nz
       do j=1,ny
@@ -4605,7 +4543,7 @@ contains
             dtxk = k_over_rhocp*dcsidxs_gpu(i)
             dtyk = k_over_rhocp*detadys_gpu(j)
             dtzk = k_over_rhocp*dzitdzs_gpu(k)
-!
+
             dtxi_max = max(dtxi_max, dtxi)
             dtyi_max = max(dtyi_max, dtyi)
             dtzi_max = max(dtzi_max, dtzi)
@@ -4621,10 +4559,11 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine compute_dt_cuf
-!
-  subroutine eval_aux_cuf(nx, ny, nz, ng, istart, iend, jstart, jend, kstart, kend, w_gpu, w_aux_gpu&
-  &, visc_model, mu0, t0, sutherland_s, t_ref_dim, powerlaw_vtexp, visc_power, visc_sutherland, visc_no&
-  &, cv_coeff_gpu, indx_cp_l, indx_cp_r, rgas0, calorically_perfect, tol_iter_nr, stream_id)
+
+  subroutine eval_aux_cuf(nx, ny, nz, ng, istart, iend, jstart, jend, kstart, kend, w_gpu,&
+  & w_aux_gpu, visc_model, mu0, t0, sutherland_s, t_ref_dim, powerlaw_vtexp, visc_power,&
+  & visc_sutherland, visc_no, cv_coeff_gpu, indx_cp_l, indx_cp_r, rgas0, calorically_perfect,&
+  & tol_iter_nr, stream_id)
     integer(ikind), intent(in) :: nx, ny, nz, ng, visc_model
     integer(ikind), intent(in) :: istart, iend, jstart, jend, kstart, kend
     integer(ikind), intent(in) :: visc_power, visc_sutherland, visc_no, indx_cp_l, indx_cp_r, calorically_perfect
@@ -4636,8 +4575,8 @@ contains
     integer(ikind) :: i, j, k
     real(rkind) :: rho, rhou, rhov, rhow, rhoe, ri, uu, vv, ww, qq, pp, tt, mu, ee
     integer(ikind) :: iercuda
-!
-!
+
+
     !$cuf kernel do(3) <<<*,*,stream=stream_id>>>
     do k=kstart,kend
       do j=jstart,jend
@@ -4653,17 +4592,17 @@ contains
           ww = rhow*ri
           qq = 0.5_rkind*(uu*uu+vv*vv+ww*ww)
           ee = rhoe/rho-qq
-          tt = get_temperature_from_e_dev(ee, w_aux_gpu(i,j,k,6), t0, cv_coeff_gpu, indx_cp_l, indx_&
-          &cp_r, calorically_perfect, tol_iter_nr)
+          tt = get_temperature_from_e_dev(ee, w_aux_gpu(i,j,k,6), t0, cv_coeff_gpu, indx_cp_l,&
+          & indx_cp_r, calorically_perfect, tol_iter_nr)
           pp = rho*tt*rgas0
-!
+
           w_aux_gpu(i,j,k,1) = rho
           w_aux_gpu(i,j,k,2) = uu
           w_aux_gpu(i,j,k,3) = vv
           w_aux_gpu(i,j,k,4) = ww
           w_aux_gpu(i,j,k,5) = (rhoe+pp)/rho
           w_aux_gpu(i,j,k,6) = tt
-!
+
           if (visc_model == visc_power) then
             mu = mu0 * (tt/t0)**powerlaw_vtexp
           elseif (visc_model == visc_sutherland) then
@@ -4676,7 +4615,7 @@ contains
       enddo
     enddo
   endsubroutine eval_aux_cuf
-!
+
   attributes(device) function get_gamloc_dev(indx_cp_l,indx_cp_r,tt,t0,cp_coeff_gpu,calorically_perfect,rgas0)
     real(rkind) :: get_gamloc_dev
     integer, value :: indx_cp_l, indx_cp_r, calorically_perfect
@@ -4684,7 +4623,7 @@ contains
     real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cp_coeff_gpu
     real(rkind) :: cploc, gamloc
     integer :: l
-!
+
     if (calorically_perfect==1) then
       cploc = cp_coeff_gpu(0)
     else
@@ -4695,25 +4634,25 @@ contains
     endif
     gamloc = cploc/(cploc-rgas0)
     get_gamloc_dev = gamloc
-!
+
   endfunction get_gamloc_dev
-!
-  attributes(device) function get_temperature_from_e_dev(ee, t_start, t0, cv_coeff_gpu, indx_cp_l, i&
-  &ndx_cp_r, calorically_perfect,tol_iter_nr)
+
+  attributes(device) function get_temperature_from_e_dev(ee, t_start, t0, cv_coeff_gpu, indx_cp_l,&
+  & indx_cp_r, calorically_perfect,tol_iter_nr)
     real(rkind) :: get_temperature_from_e_dev
     integer, value :: indx_cp_l, indx_cp_r, calorically_perfect
     real(rkind), value :: ee, t_start, t0, tol_iter_nr
     real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cv_coeff_gpu
     real(rkind) :: tt, t_old, ebar, den, num, t_pow, t_powp
     integer :: l,iter,max_iter
-!
+
     max_iter = 50
-!
+
+    ebar = ee - cv_coeff_gpu(indx_cp_r+1)*t0
     if (calorically_perfect==1) then
-      tt = ee/cv_coeff_gpu(0)
+      tt = t0+ebar/cv_coeff_gpu(0)
     else
       t_old = t_start
-      ebar = ee - cv_coeff_gpu(indx_cp_r+1)*t0
       do iter=1,max_iter
         den = 0._rkind
         num = 0._rkind
@@ -4737,7 +4676,7 @@ contains
     endif
     get_temperature_from_e_dev = tt
   endfunction get_temperature_from_e_dev
-!
+
   attributes(device) function get_e_from_temperature_dev(tt, t0, indx_cp_l, indx_cp_r, cv_coeff_gpu, calorically_perfect)
     real(rkind) :: get_e_from_temperature_dev
     real(rkind),value :: tt, t0
@@ -4745,11 +4684,11 @@ contains
     real(rkind), dimension(indx_cp_l:indx_cp_r+1) :: cv_coeff_gpu
     real(rkind) :: ee
     integer :: l
-!
+
+    ee = cv_coeff_gpu(indx_cp_r+1)
     if (calorically_perfect==1) then
-      ee = cv_coeff_gpu(0)* tt
+      ee = ee+cv_coeff_gpu(0)*(tt/t0-1._rkind)
     else
-      ee = cv_coeff_gpu(indx_cp_r+1)
       do l=indx_cp_l,indx_cp_r
         if (l==-1) then
           ee = ee+cv_coeff_gpu(l)*log(tt/t0)
@@ -4757,21 +4696,126 @@ contains
           ee = ee+cv_coeff_gpu(l)/(l+1._rkind)*((tt/t0)**(l+1)-1._rkind)
         endif
       enddo
-      ee = ee*t0
     endif
+    ee = ee*t0
     get_e_from_temperature_dev = ee
   endfunction get_e_from_temperature_dev
-!
-!
-!
-!
-!
-!
-!
-!
-!
-!
-!
+
+
+
+
+  attributes(device) subroutine eigs33(rmat,rex,rimx)
+    implicit none
+    integer, parameter :: doubtype = real64
+    real(rkind), dimension(3) :: rex,rimx
+    real(rkind), dimension(3) :: rey,rimy
+    real(rkind), dimension(3) :: reu,rimu
+    real(rkind), dimension(3) :: rev,rimv
+    real(rkind), dimension(3,3) :: rmat,s,ww,temp
+    real(doubtype) :: ddbl,pdbl,qdbl
+    real(rkind) :: otrd, pi, a, temps, tempw, b, somma, c, p, q, sqdel, sqp, teta
+    integer :: ii, jj, k
+
+    otrd = 1./3._rkind
+    pi = acos(-1._rkind)
+    do ii = 1,3
+      do jj = 1,3
+        s(ii,jj) = 0.5*(rmat(ii,jj)+rmat(jj,ii))
+        ww(ii,jj) = 0.5*(rmat(ii,jj)-rmat(jj,ii))
+      enddo
+    enddo
+    a = -(s(1,1)+s(2,2)+s(3,3))
+    temps = 0.
+    tempw = 0.
+    do ii = 1,3
+      do jj = 1,3
+        temps = temps + s(ii,jj)*s(ii,jj)
+        tempw = tempw + ww(ii,jj)*ww(ii,jj)
+      enddo
+    enddo
+    b = 0.5*(a**2-temps+tempw)
+    do ii = 1,3
+      do jj = 1,3
+        temp(ii,jj)=0.
+        do k = 1,3
+          temp(ii,jj) = temp(ii,jj)+s(ii,k)*s(k,jj)+3.*ww(ii,k)*ww(k,jj)
+        enddo
+      enddo
+    enddo
+    somma=0.
+    do ii=1,3
+      do jj=1,3
+        somma= somma+temp(ii,jj)*s(jj,ii)
+      enddo
+    enddo
+    c = -1./3.*(a**3-3.*a*b+somma)
+    pdbl = real(b-a**2/3., doubtype)
+    qdbl = real(c-a*b/3.+2*a**3/27.,doubtype)
+    ddbl = (qdbl**2)/4.D0 + (pdbl**3)/27.D0
+    p = real(pdbl,rkind)
+    q = real(qdbl,rkind)
+    if(ddbl.gt.0.D0) then
+      sqdel = real(sqrt(ddbl), rkind)
+      reu(1) =-0.5*q+sqdel
+      rev(1) =-0.5*q-sqdel
+      reu(1) = sign(1._rkind,reu(1))*(abs(reu(1)))**otrd
+      rev(1) = sign(1._rkind,rev(1))*(abs(rev(1)))**otrd
+      reu(2) = -0.5*reu(1)
+      rev(2) = -0.5*rev(1)
+      reu(3) = reu(2)
+      rev(3) = rev(2)
+      rimu(1) = 0.
+      rimv(1) = 0.
+      rimu(2) = sqrt(3._rkind)/2.*reu(1)
+      rimv(2) = sqrt(3._rkind)/2.*rev(1)
+      rimu(3) = -rimu(2)
+      rimv(3) = -rimv(2)
+      rey(1) = reu(1)+rev(1)
+      rimy(1) = rimu(1)+rimv(1)
+      rey(2) = reu(2)+rev(3)
+      rimy(2) = rimu(2)+rimv(3)
+      rey(3) = reu(3)+rev(2)
+      rimy(3) = rimu(3)+rimv(2)
+    else
+      if (q.eq.0.) then
+        rey(1) = 0.
+        rey(2) = sqrt(-p)
+        rey(3) = -rey(2)
+      else
+        sqp = 2.*sqrt(-p/3.)
+        sqdel = real(sqrt(-ddbl), rkind)
+        if (q.lt.0.) then
+          teta = atan(-2.*sqdel/q)
+        else
+          teta = pi+atan(-2.*sqdel/q)
+        endif
+        rey(1) = sqp*cos(teta/3.)
+        rey(2) = sqp*cos((teta+2*pi)/3.)
+        rey(3) = sqp*cos((teta+4*pi)/3.)
+      endif
+      rimy(1) = 0.
+      rimy(2) = 0.
+      rimy(3) = 0.
+    endif
+    rex(1) = rey(1)-(a/3.)
+    rimx(1) = rimy(1)
+    rex(2) = rey(2)-(a/3.)
+    rimx(2) = rimy(2)
+    rex(3) = rey(3)-(a/3.)
+    rimx(3) = rimy(3)
+    if (rimy(2).lt.0.) then
+      rex(2) = rey(3)-(a/3.)
+      rimx(2) = rimy(3)
+      rex(3) = rey(2)-(a/3.)
+      rimx(3) = rimy(2)
+    endif
+  endsubroutine eigs33
+
+
+
+
+
+
   subroutine probe_interpolation_cuf(num_probe,nx,ny,nz,ng,nv_aux,ijk_probe_gpu,w_aux_probe_gpu,w_aux_gpu,probe_coeff_gpu)
     integer, intent(in) :: num_probe,nx,ny,nz,ng,nv_aux
     real(rkind), dimension(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,1:nv_aux), intent(in), device :: w_aux_gpu
@@ -4780,7 +4824,7 @@ contains
     integer, dimension(3,num_probe), intent(in), device :: ijk_probe_gpu
     integer :: i,j,k,ii,jj,kk,l,iercuda
     real(rkind) :: w1,w2,w3,w4,w5,w6
-!
+
     !$cuf kernel do(1) <<<*,*>>>
     do l=1,num_probe
       ii = ijk_probe_gpu(1,l)
@@ -4813,6 +4857,6 @@ contains
     enddo
     !@cuf iercuda=cudadevicesynchronize()
   endsubroutine probe_interpolation_cuf
-!
+
 endmodule streams_kernels_gpu
 
