@@ -16,7 +16,7 @@ module postpro_bl
  real(rkind), dimension(nx,ny) :: ufav,vfav,wfav,tfav
  real(rkind), dimension(np)    :: fvec, yvec
  real(rkind), dimension(ny)    :: uvd,duvd
- real(rkind), dimension(nx) :: d99_vec,deltav_vec,utau_vec,tauw_vec
+ real(rkind), dimension(nx) :: d99_vec,deltav_vec,utau_vec
  real(rkind), dimension(naux,ny) :: vaux
  real(rkind), dimension(ny) :: yt,yvd,yv,uv,ut
  real(rkind) :: uwall, dudyw, d2udyw, rmuw, rnuw,tauw,rhow,ttw,deltav,pdyn
@@ -91,7 +91,6 @@ module postpro_bl
    d99_vec(i)    = delta99
    deltav_vec(i) = deltav
    utau_vec(i)   = utau
-   tauw_vec(i)   = tauw
 !
 !  Integral boundary layer thicknesses
 !
@@ -152,11 +151,11 @@ module postpro_bl
    delta99 = d99_vec(i)
    deltav  = deltav_vec(i)
    utau    = utau_vec(i)
-!
+   tauw    = rhow*utau**2
 !
 ! Compute compressibility transformations
 !
-   vaux(1,:) = wstat(i,:,1)/rhow
+   vaux(1,:) = wstat(i,:, 1)/rhow
    vaux(2,:) = wstat(i,:,21)/rnuw
    vaux(3,:) = wstat(i,:,20)/rmuw
 !
@@ -181,12 +180,12 @@ module postpro_bl
     up     = ufav(i,j)/utau
     uvdp   = uvd(j)/utau
     duvd(j) = y(j)*duvd(j)/utau
-    u2p  = abs(wstat(i,j,16)-wstat(i,j,1)*ufav(i,j)*ufav(i,j))/tauw_vec(i)
-    v2p  = abs(wstat(i,j,17)-wstat(i,j,1)*vfav(i,j)*vfav(i,j))/tauw_vec(i)
-    w2p  = abs(wstat(i,j,18)-wstat(i,j,1)*wfav(i,j)*wfav(i,j))/tauw_vec(i)
+    u2p  = abs(wstat(i,j,16)-wstat(i,j,1)*ufav(i,j)*ufav(i,j))/tauw
+    v2p  = abs(wstat(i,j,17)-wstat(i,j,1)*vfav(i,j)*vfav(i,j))/tauw
+    w2p  = abs(wstat(i,j,18)-wstat(i,j,1)*wfav(i,j)*wfav(i,j))/tauw
     uvp    =        (wstat(i,j,19)/wstat(i,j,1)-ufav(i,j)*vfav(i,j)) /utau**2
     rhofac = sqrt(wstat(i,j,1)/rhow)
-    prmsp  = sqrt(abs(wstat(i,j,11)-wstat(i,j,5)**2))/tauw_vec(i)
+    prmsp  = sqrt(abs(wstat(i,j,11)-wstat(i,j,5)**2))/tauw
     ytp    = yt(j)/deltav
     yvp    = yt(j)/deltav
     utp    = ut(j)/utau
