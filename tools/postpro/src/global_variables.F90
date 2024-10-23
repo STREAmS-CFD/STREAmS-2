@@ -3,7 +3,7 @@ module global_variables
 use parameters
 !
 implicit none
-integer, parameter         :: nv = 68
+integer, parameter         :: nv = 70
 !
 integer                    :: nx,ny
 integer                    :: ng
