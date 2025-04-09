@@ -1,0 +1,20 @@
+#----------------------------------------------------------------------
+# SUPPORTED COMPILE: nv-cuda, nv, intel, gnu, ibmxl, cray-cuda, amdflang
+# SUPPORTED MODES  : opt, debug [default=debug]
+# SUPPORTED PRECISIONS (PREC) : single, double [default=double]
+#----------------------------------------------------------------------
+EQUATION = "singleideal"
+BACKEND  = "ompc"
+COMPILE  = "amdflang"
+MODE     = "opt"
+PREC     = "double"
+CUDA_VER =
+MPI_CMD  = ftn -fopenmp 
+MPI_BACKEND =
+
+define LOAD
+module load LUMI/24.03 partition/C ;
+module load PrgEnv-amd/8.5.0 craype-x86-milan
+endef
+export LOAD
+

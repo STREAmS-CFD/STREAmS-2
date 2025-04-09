@@ -1,0 +1,19 @@
+#----------------------------------------------------------------------
+# SUPPORTED COMPILE: nv-cuda, nv, intel, gnu, ibmxl, cray-cuda, amdflang
+# SUPPORTED MODES  : opt, debug [default=debug]
+# SUPPORTED PRECISIONS (PREC) : single, double [default=double]
+#----------------------------------------------------------------------
+EQUATION = "singleideal"
+BACKEND  = "cpu"
+COMPILE  = "intel"
+MODE     = "opt"
+PREC     = "double"
+CUDA_VER =
+MPI_CMD  = 
+MPI_BACKEND = -xSAPPHIRERAPIDS
+
+define LOAD
+module load intel-oneapi-compilers/2023.2.1 ;
+module load intel-oneapi-mpi/2021.10.0
+endef
+export LOAD

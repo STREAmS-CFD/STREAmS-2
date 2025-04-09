@@ -1,0 +1,43 @@
+#----------------------------------------------------------------------
+# SUPPORTED COMPILE: hip
+# SUPPORTED MODES  : opt, debug [default=debug]
+# SUPPORTED PRECISIONS (PREC) : single, double [default=double]
+#----------------------------------------------------------------------
+EQUATION = "singleideal"
+BACKEND  = "amd"
+COMPILE  = "hip"
+MODE     = "opt"
+PREC     = "double"
+CATALYST = "v2"
+
+define LOAD
+module load LUMI/24.03 partition/G rocm/6.0.3 PrgEnv-gnu/8.5.0 ;
+export CATALYST_INSTALL_PREFIX=<fill catalyst installation dir> ;
+When submitting add: ;
+export MPICH_GPU_SUPPORT_ENABLED=1
+export LD_LIBRARY_PATH=<fill with gcc-runtime lib dir>:$LD_LIBRARY_PATH
+export CATALYST_IMPLEMENTATION_PATHS="<catalyst implementation path under paraview>/lib64/catalyst"
+export CATALYST_IMPLEMENTATION_NAME="paraview"
+endef
+export LOAD
+
+# Add the following variables in bashrc
+# export HIPFORT_COMPILER=ftn
+# export GPU_ARCH=gfx90a
+# export HIP_PLATFORM=amd
+# export ROCM_PATH=/opt/rocm-6.0.3/
+# export MPICH_GPU_SUPPORT_ENABLED=1
+# export HIPFORT=<fill hipfort installation dir>
+
+HIPFC = ftn
+HIPCC = hipcc -fPIC --offload-arch=$(GPU_ARCH)
+INCLUDE   = -I$(MPICH_DIR)/include -I$(HIPFORT)/include/hipfort/amdgcn/
+FCLIBS    = -L$(MPICH_DIR)/lib -lmpi -L${CRAY_MPICH_ROOTDIR}/gtl/lib -lmpi_gtl_hsa -Wl,--copy-dt-needed-entries -L$(HIPFORT)/lib/ -lhipfort-amdgcn -Wl,-rpath,<fill with gcc-runtime lib dir>
+
+ifeq (${CATALYST},"v2")
+#-------------------------------------------------------------------------------------------------------
+# INSITU COMPILATION - CATALYST2
+#-------------------------------------------------------------------------------------------------------
+CATALYST_INCLUDE := -I${CATALYST_INSTALL_PREFIX}/include/catalyst-2.0 -I${CATALYST_INSTALL_PREFIX}/include/catalyst-2.0/conduit
+CATALYST_LDFLAGS := -Wl,-rpath,${CATALYST_INSTALL_PREFIX}/lib64 ${CATALYST_INSTALL_PREFIX}/lib64/libcatalyst.so.3 ${CATALYST_INSTALL_PREFIX}/lib64/libcatalyst_fortran.so -Wl,-rpath,${CATALYST_INSTALL_PREFIX}/lib64/catalyst/
+endif

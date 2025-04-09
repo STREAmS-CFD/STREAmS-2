@@ -1,0 +1,28 @@
+#----------------------------------------------------------------------
+# SUPPORTED COMPILE: hip
+# SUPPORTED MODES  : opt, debug [default=debug]
+# SUPPORTED PRECISIONS (PREC) : single, double [default=double]
+#----------------------------------------------------------------------
+EQUATION = "singleideal"
+BACKEND  = "amd"
+COMPILE  = "hip-amdflang"
+MODE     = "opt"
+PREC     = "double"
+CGAL     = "no"
+CATALYST = "no"
+
+CC_var        = amdclang
+CFLAGS_var    = -O2
+CXX_var       = amdclang++
+CXXFLAGS_var  = -O2
+
+HIPFC = ftn 
+HIPC  = amdclang
+HIPCC = amdclang -x hip -fPIC --offload-arch=gfx942
+INCLUDE   = -I$(CRAY_ROCM_DIR)/include/hipfort/amdgcn  #-I$(MPICH_DIR)/include
+FCLIBS    = -L$(MPICH_DIR)/lib -lmpi -L$(CRAY_ROCM_DIR)/hipfort/lib -lhipfort-amdgcn -lamdhip64 -lstdc++ -lgcc
+
+define LOAD
+module load PrgEnv-amd/8.5.0 rocm/6.2.2
+endef
+export LOAD

@@ -1,0 +1,449 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>STREAmS – Curvilinear flow cases &mdash; STREAmS 2.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=60dbed4a"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            STREAmS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="quick-start.html">Compiling and running</a></li>
+<li class="toctree-l1"><a class="reference internal" href="flow_cases.html">STREAmS – Cartesian flow cases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input.html">Setting input</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Understanding output files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="postprocessing.html">Post-processing data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery of STREAmS results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="how_to_cite.html">How to cite STREAmS</a></li>
+<li class="toctree-l1"><a class="reference internal" href="references.html">References</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">STREAmS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">STREAmS – Curvilinear flow cases</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/manual/curv_flow_cases.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="streams-curvilinear-flow-cases">
+<h1>STREAmS – Curvilinear flow cases<a class="headerlink" href="#streams-curvilinear-flow-cases" title="Link to this heading"></a></h1>
+<p>STREAmS has been extended to carry out DNS of compressible flow
+over curvilinear geometries, including the following:</p>
+<ul class="simple">
+<li><p>compressible curved channel flow,</p></li>
+<li><p>external compressible flow on C-meshes (e.g. flow over an airfoil),</p></li>
+<li><p>spatially developing boundary layer on curved walls (e.g. flow over compression corners).</p></li>
+</ul>
+<section id="governing-equations-in-generalized-curvilinear-coordinates">
+<h2>Governing equations in generalized curvilinear coordinates<a class="headerlink" href="#governing-equations-in-generalized-curvilinear-coordinates" title="Link to this heading"></a></h2>
+<p>The Cartesian coordinates (<span class="math notranslate nohighlight">\(x_i\)</span>) of a body-fitted grid are transformed
+into boundary-conforming curvilinear coordinates (<span class="math notranslate nohighlight">\(\xi_j\)</span>)
+through the mapping <span class="math notranslate nohighlight">\(x_i(\xi_j)\)</span>, with <span class="math notranslate nohighlight">\(i, j = 1, 2, 3\)</span>.
+Thus, the boundary surface is composed of segments of coordinate surfaces <span class="math notranslate nohighlight">\(\xi_j = const\)</span>.
+Assuming a stationary grid and using the same reference quantities
+for non-dimensionalization as those defined in the Cartesian coordinates, the compressible
+Navier–Stokes equations in generalized curvilinear coordinates
+for a calorically or thermally perfect, heat-conducting gas read:</p>
+<div class="math notranslate nohighlight">
+\[\frac{1}{J}\frac{\partial \rho}{\partial t} +
+\frac{\partial \rho \hat{u}_j}{\partial \xi_j}  = 0\]</div>
+<div class="math notranslate nohighlight">
+\[ \frac{1}{J}\frac{\partial \rho u_i}{\partial t} +
+ \frac{\partial \rho u_i \hat{u}_j}{\partial \xi_j} =
+-\frac{\partial p \hat{J}_{ji}}{\partial \xi_j} +
+ \frac{\partial \sigma_{ik} \hat{J}_{jk}}{\partial \xi_j}\]</div>
+<div class="math notranslate nohighlight">
+\[\frac{1}{J}\frac{\partial \rho E}{\partial t} +
+\frac{\partial \rho \hat{u}_j H}{\partial \xi_j} =
+-\frac{\partial q_i \hat{J}_{ji}}{\partial \xi_j}+
+\frac{\partial \sigma_{ik} u_k \hat{J}_{ji}}{\partial \xi_j}\]</div>
+<div class="math notranslate nohighlight">
+\[p = \rho \, R \, T\]</div>
+<p>where <span class="math notranslate nohighlight">\(u_i\)</span> is velocity component in the <span class="math notranslate nohighlight">\(i^{\mathrm{th}}\)</span>
+Cartesian direction, <span class="math notranslate nohighlight">\(\hat{u}_j=u_i \hat{J}_{j i}\)</span>  the velocity
+component in the <span class="math notranslate nohighlight">\(j^{\mathrm{th}}\)</span>
+curvilinear direction, with <span class="math notranslate nohighlight">\(\hat{J}_{j i}=J_{j i}/J\)</span> being
+the Jacobian matrix of the coordinate transformation <span class="math notranslate nohighlight">\(x_i(\xi_j)\)</span>,
+normalized by its determinant <span class="math notranslate nohighlight">\(J\)</span>.
+The constitutive equations defining the viscous stress tensor and heat flux vector
+are identical as those expressed Cartesian coordinates.</p>
+<p>In the most general case,
+the elements of the Jacobian matrix, <span class="math notranslate nohighlight">\(J_{j i}=\partial \xi_j / \partial x_i\)</span>,
+of the coordinate transformation <span class="math notranslate nohighlight">\(\xi_j(x_i)\)</span>, are obtained by inverting
+the Jacobian matrix of the inverse transformation <span class="math notranslate nohighlight">\(x_i(\xi_j)\)</span>.
+That is:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\left[\begin{array}{lll}
+\xi_x &amp; \xi_y &amp; \xi_z \\
+\eta_x &amp; \eta_y &amp; \eta_z \\
+\zeta_x &amp; \zeta_y &amp; \zeta_z
+\end{array}\right]=\left[\begin{array}{lll}
+x_{\xi} &amp; x_\eta &amp; x_\zeta \\
+y_{\xi} &amp; y_\eta &amp; y_\zeta \\
+z_{\xi} &amp; z_\eta &amp; z_\zeta
+\end{array}\right]^{-1}.\end{split}\]</div>
+<p>For the particular cases available in STREAmS,
+only two-dimensional curvilinear coordinates are considered, where</p>
+<div class="math notranslate nohighlight">
+\[\zeta = z.\]</div>
+<p>It must be noted that it is still possible to stretch the mesh in the
+spanwise direction.
+Arbitrary two-dimensional conformal/non-conformal grids can be handled
+by the solver.
+To understand how to write an 2D mesh file please
+go to the <span class="xref std std-ref">mesh</span> section in the documentation.
+A description of the specific setup adopted for the various flow cases,
+for which a tutorial is present, is reported in the following.</p>
+</section>
+<section id="compressible-curved-channel-flow">
+<h2>Compressible curved channel flow<a class="headerlink" href="#compressible-curved-channel-flow" title="Link to this heading"></a></h2>
+<a class="reference internal image-reference" href="../_images/Curv_cha_case.png"><img alt="../_images/Curv_cha_case.png" src="../_images/Curv_cha_case.png" style="width: 600px;" />
+</a>
+<p>The computational domain is bounded by sectors of concentric cylinders,
+as shown in the figure, and wall curvature is defined by the radius of curvature,
+<span class="math notranslate nohighlight">\(r_c\)</span>, measured at the channel centreline.
+The height of the computational domain is equal to <span class="math notranslate nohighlight">\(2\,h^*\)</span>,
+where <span class="math notranslate nohighlight">\(h^*\)</span> thus indicates the half-height of the channel.
+The curvilinear coordinate system is aligned such that <span class="math notranslate nohighlight">\(\xi=\theta\)</span> is the
+azimuthal (streamwise) direction, <span class="math notranslate nohighlight">\(\eta=r\)</span> is the radial (wall-normal) direction,
+and <span class="math notranslate nohighlight">\(\zeta=z\)</span> is the axial (spanwise) direction.
+The velocity components along the streamwise, wall-normal and spanwise directions are denoted
+by <span class="math notranslate nohighlight">\(\tilde{u},\,\tilde{v},\,\tilde{w}\)</span>, respectively.
+The flow is driven by an azimuthal mean-pressure gradient, <span class="math notranslate nohighlight">\((\partial P/\partial \theta)/r\)</span>.</p>
+<p><em>Bulk quantites</em> are indicated with <span class="math notranslate nohighlight">\(B\)</span> subscript and are defined as:</p>
+<ul class="simple">
+<li><p>bulk density</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\rho^*_B = \frac{1}{V^*} \int_{V^*} \rho^*\, \mathrm{d}V^*\]</div>
+<ul class="simple">
+<li><p>bulk velocity</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[U^*_B = \frac{1}{\rho^*_B\,V^*} \int_{V^*} \rho^*\,\tilde{u}^*\, \mathrm{d}V^*\]</div>
+<ul class="simple">
+<li><p>bulk temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[T^*_B = \frac{1}{\rho^*_B\,U^*_B\,V^*} \int_{V^*} \rho^*\,\tilde{u}^*\,T^*\, \mathrm{d}V^*\]</div>
+<p>where <span class="math notranslate nohighlight">\(V^*\)</span> is the volume of the computational domain,
+<span class="math notranslate nohighlight">\(\rho^*\)</span> is the density,
+<span class="math notranslate nohighlight">\(\tilde{u}^*\)</span> is the streamwise velocity,
+and <span class="math notranslate nohighlight">\(T^*\)</span> is the temperature.</p>
+<p>Since wall curvature breaks the symmetry of the mean velocity profile, the wall friction
+changes when evaluated at the inner or outer wall. A global friction velocity
+can be defined based on the mean-pressure gradient.
+Inner, outer and global friction velocities are defined as:</p>
+<div class="math notranslate nohighlight">
+\[u_{\tau, i}=\sqrt{\left.\nu \frac{\partial U}{\partial r}\right|_{r_i}}, \quad u_{\tau, o}=\sqrt{\left.\nu \frac{\partial U}{\partial r}\right|_{r_o}}, \quad u_{\tau, g}=\sqrt{\frac{u_{\tau, i}^2 r_i^2+u_{\tau, o}^2 r_o^2}{2 r_c^2}},\]</div>
+<p>where <span class="math notranslate nohighlight">\(U\)</span> is the average of <span class="math notranslate nohighlight">\(\tilde{u}\)</span> over time and the two homogeneous directions,
+and the subscripts <span class="math notranslate nohighlight">\(i\)</span> and <span class="math notranslate nohighlight">\(o\)</span> denote the inner and outer wall, respectively.</p>
+<p>Relevant <em>non-dimensional parameters</em> for the compressible channel flow case are:</p>
+<ul class="simple">
+<li><p>friction Reynolds number</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re_\tau = \frac{u^*_{\tau,g}\,h^*}{\nu^*_w}\]</div>
+<ul class="simple">
+<li><p>bulk Reynolds number based on the bulk temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re_B = \frac{\rho^*_B\,U^*_B\,h^*}{\mu^*(T^*_B)}\]</div>
+<ul class="simple">
+<li><p>bulk Reynolds number based on the wall temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re^w_B = \frac{\rho^*_B\,U^*_B\,h^*}{\mu^*(T^*_w)}\]</div>
+<ul class="simple">
+<li><p>bulk Mach number based on the bulk temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[M_B = \frac{U^*_B}{\sqrt{\gamma\,R^*\,T^*_B}}\]</div>
+<ul class="simple">
+<li><p>bulk Mach number based on the wall temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[M^w_B = \frac{U^*_B}{\sqrt{\gamma\,R^*\,T^*_w}}\]</div>
+<ul class="simple">
+<li><p>non-dimensional temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\Theta = \frac{T^*_w - T^*_B}{T^*_r - T^*_B}\]</div>
+<p>where <span class="math notranslate nohighlight">\(u^*_{\tau,g}\)</span> is the global friction velocity,
+<span class="math notranslate nohighlight">\(\nu^*_w\)</span> is the kinematic viscosity at the wall,
+<span class="math notranslate nohighlight">\(\mu^*(T^*)\)</span> is the dynamic viscosity at temperature <span class="math notranslate nohighlight">\(T^*\)</span>,
+<span class="math notranslate nohighlight">\(T^*_w\)</span> is the wall temperature,
+<span class="math notranslate nohighlight">\(\gamma = C^*_p/C^*_v\)</span> is the heat capacity ratio,
+and <span class="math notranslate nohighlight">\(T^*_r\)</span> is the recovery temperature, defined as</p>
+<div class="math notranslate nohighlight">
+\[T^*_r = T_B^* \, \left(1 + \frac{\gamma-1}{2}\, r\, M^2_B \right)\]</div>
+<p><span class="math notranslate nohighlight">\(r = Pr^{1/3}\)</span> being the recovery factor.</p>
+<p>For channel flow computations, the <em>primary reference quantities</em> are:</p>
+<table class="docutils align-center" id="id5">
+<caption><span class="caption-text">Primary reference quantities for channel flow case</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(R^*\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(\rho^*_R\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(T^*_R\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(L^*_R\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(R^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(\rho_B^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(T_w^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(h^*\)</span></p></td>
+</tr>
+</tbody>
+</table>
+<p>The other reference quantities are derived as explained in the previous section.
+Note that, as a consequence of this choice, the non-dimensional bulk velocity is <strong>not</strong> equal to one, but rather:</p>
+<div class="math notranslate nohighlight">
+\[U_B = \frac{U_B^*}{U^*_R} = \frac{U_B^*}{\sqrt{R^* T_w^*}} = \sqrt{\gamma} M_B^w \,.\]</div>
+<p>Furthermore, the non dimensional viscosity at the reference temperature is:</p>
+<div class="math notranslate nohighlight">
+\[\mu(T=1) = \frac{\mu^*(T_w^*)}{\rho_B^* h^* \sqrt{R^* T_w^*}} \frac{U_B^*}{U_B^*} = \frac{\sqrt{\gamma} M_B^w}{Re_B^w}\,.\]</div>
+<p>Simulations of the compressible plane channel flow are carried out imposing a <strong>constant flow rate</strong>,
+implying that both the <strong>bulk density and velocity are constant in time</strong>.
+Furthermore, the <strong>wall temperature is constant</strong> during the simulation.</p>
+<p>For what concerns the bulk temperature, STREAmS can run channel flow simulations according to two possible options
+(see <a class="reference internal" href="input.html#inputfile"><span class="std std-ref">input</span></a> section):</p>
+<p>– <em>Freely-evolving bulk temperature.</em> This <em>classic</em> setup, see <span id="id1">[<a class="reference internal" href="references.html#id7" title="G. N. Coleman, J. Kim, and R. D. Moser. A numerical study of turbulent supersonic isothermal-wall channel flow. Journal of Fluid Mechanics, 305:159–183, December 1995. URL: https://doi.org/10.1017/s0022112095004587, doi:10.1017/s0022112095004587.">2</a>]</span> and <span id="id2">[<a class="reference internal" href="references.html#id6" title="D. Modesti and S. Pirozzoli. Reynolds and Mach number effects in compressible turbulent channel flow. International Journal of Heat and Fluid Flow, 59:33–49, June 2016. URL: https://doi.org/10.1016/j.ijheatfluidflow.2016.01.007, doi:10.1016/j.ijheatfluidflow.2016.01.007.">9</a>]</span>,
+corresponds to the case of a channel where the bulk temperature
+continuously increases up to the achievement of balance between aerodynamic heating and wall heat transfer.
+In this case, the user must supply the code with the desired values of <span class="math notranslate nohighlight">\(M_B^w\)</span> and <span class="math notranslate nohighlight">\(Re_B^w\)</span>
+in the input file.</p>
+<p>– <em>Fixed bulk temperature.</em> In this case, see <span id="id3">[<a class="reference internal" href="references.html#id5" title="D. Modesti, S. Sathyanarayana, F. Salvadore, and M. Bernardini. Direct numerical simulation of supersonic turbulent flows over rough surfaces. Journal of Fluid Mechanics, May 2022. URL: https://doi.org/10.1017/jfm.2022.393, doi:10.1017/jfm.2022.393.">10</a>]</span>,
+the bulk temperature is kept constant in time thanks to the use of a bulk cooling term added to the total energy equation.
+The user must supply the code with the desired values of <span class="math notranslate nohighlight">\(M_B\)</span>, <span class="math notranslate nohighlight">\(Re_B\)</span>, and <span class="math notranslate nohighlight">\(\Theta\)</span>
+in the input file.</p>
+<p>Concerning curvilinear flow cases, this is the curbed channel is the only one in which the computational
+grid is directly generated by STREAmS. An estimate of the friction Reynolds number must be specified
+in the input file to impose a suitable value of near-wall grid spacing in the radial direction.</p>
+</section>
+<section id="external-compressible-flow-on-c-meshes-airfoil">
+<h2>External compressible flow on C-meshes - Airfoil<a class="headerlink" href="#external-compressible-flow-on-c-meshes-airfoil" title="Link to this heading"></a></h2>
+<a class="reference internal image-reference" href="../_images/Airfoil_case.png"><img alt="../_images/Airfoil_case.png" src="../_images/Airfoil_case.png" style="width: 600px;" />
+</a>
+<p>The new version of STREAmS allows the user to perform simulations of a compressible flow over an airfoil wing.
+The computational grid, as sketched in the figure, must have a <cite>C</cite>-topology,
+and can be generated using the open-source code Construct2D <span id="id4">[<a class="reference internal" href="references.html#id3" title="Daniel Prosser. Construct2d. 2018. URL: https://sourceforge.net/projects/construct2d/.">14</a>]</span>
+starting from the airfoil geometry. The two-dimensional grid in the x-y plane, with radius <span class="math notranslate nohighlight">\(R\)</span>,
+is then extruded in the z direction.</p>
+<p>Relevant <em>non-dimensional parameters</em> for the airfoil flow are:</p>
+<ul class="simple">
+<li><p>free-stream Reynolds number</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re_\infty = \frac{U_{\infty}^*\, c^*}{\nu_\infty^*}\]</div>
+<ul class="simple">
+<li><p>free-stream Mach number</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[M_\infty = \frac{U_\infty^*}{\sqrt{\gamma_\infty\,R^*\,T_\infty^*}}\]</div>
+<ul class="simple">
+<li><p>non-dimensional temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\Theta = \frac{T^*_w - T^*_{\infty}}{T^*_r - T^*_{\infty}}\]</div>
+<ul class="simple">
+<li><p>Eckert number</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Ec = \frac{(\gamma -1 ) \, M^2_\infty \, T^*_\infty}{T^*_r - T^*_w}\]</div>
+<p>where
+<span class="math notranslate nohighlight">\(c^*\)</span> is the airfoil chord length,
+<span class="math notranslate nohighlight">\(\nu^*\)</span> is the kinematic viscosity,
+<span class="math notranslate nohighlight">\(T^*_r\)</span> is the recovery temperature and the subscript <span class="math notranslate nohighlight">\(\infty\)</span> indicates that quantities
+are referred to free-stream conditions.</p>
+<p>For airfoil flow computations, the <em>primary reference quantities</em> are:</p>
+<table class="docutils align-center" id="id6">
+<caption><span class="caption-text">Primary reference quantities for boundary layer flow case</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(R^*\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(\rho^*_R\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(T^*_R\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(L^*_R\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(R^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(\rho_\infty^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(T_\infty^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(c^*\)</span></p></td>
+</tr>
+</tbody>
+</table>
+<p>The other reference quantities are derived as explained in the first section.
+Note that, as a consequence of this choice, the non-dimensional free-stream velocity is <strong>not</strong> equal to one, but rather:</p>
+<div class="math notranslate nohighlight">
+\[U_\infty = \frac{U_\infty^*}{U^*_R} = \frac{U_\infty^*}{\sqrt{R^* T_\infty^*}} = \sqrt{\gamma} M_\infty\,.\]</div>
+<p>Furthermore, the non dimensional viscosity at the reference temperature is:</p>
+<div class="math notranslate nohighlight">
+\[\mu(T=1) = \frac{\mu^*(T_\infty^*)}{\rho_\infty^* c^* \sqrt{R^* T_\infty^*}} \frac{U_\infty^*}{U_\infty^*}
+= \frac{\sqrt{\gamma} M_\infty}{Re_\infty}\,.\]</div>
+</section>
+<section id="spatially-developing-boundary-layer-on-curved-walls-compression-corner-sbli">
+<h2>Spatially developing boundary layer on curved walls - Compression corner SBLI<a class="headerlink" href="#spatially-developing-boundary-layer-on-curved-walls-compression-corner-sbli" title="Link to this heading"></a></h2>
+<a class="reference internal image-reference" href="../_images/Ramp_case.png"><img alt="../_images/Ramp_case.png" src="../_images/Ramp_case.png" style="width: 600px;" />
+</a>
+<p>Simulations of the shock wave/boundary layer interaction on a compression corner
+can also be simulated. Similarly to the airfoil flow case,
+the required input is a two-dimensional grid, which consists of a flat plate followed by a corner
+where the compression ramp begins with a certain deflection angle. The grid in
+the x-y plane is then extruded in the third dimension.</p>
+<p>An inviscid representation of the shock system is sketched in the figure,
+where <span class="math notranslate nohighlight">\(x_c\)</span> is the corner location. The flow deflection angle (<span class="math notranslate nohighlight">\(\theta\)</span>)
+is defined by the ramp geometry, and the angle of the oblique shock (<span class="math notranslate nohighlight">\(\beta\)</span>)
+in the inviscid limit is given by the Theta-Beta-Mach analytic relation.</p>
+<p>Relevant <em>non-dimensional parameters</em> for the compressible boundary layer over a compression ramp are:</p>
+<ul class="simple">
+<li><p>friction Reynolds number</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re_\tau = \frac{u_\tau^*\,\delta_0^*}{\nu_w^*}\]</div>
+<ul class="simple">
+<li><p>Reynolds number based on the boundary layer thickness and the free-stream viscosity</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re_\delta = \frac{U_{\infty}^*\, \delta_0^*}{\nu_\infty^*}\]</div>
+<ul class="simple">
+<li><p>Reynolds number based on the momentum thickness and the wall viscosity</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re_{\delta_2} = \frac{\rho_\infty^*\, U_\infty^*\, \theta_0^*}{\mu_w^*}\]</div>
+<ul class="simple">
+<li><p>Reynolds number based on the momentum thickness and the free-stream viscosity</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Re_\theta = \frac{U_{\infty}^*\, \theta_0^*}{\nu_\infty^*}\]</div>
+<ul class="simple">
+<li><p>free-stream Mach number</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[M_\infty = \frac{U_\infty^*}{\sqrt{\gamma_\infty\,R^*\,T_\infty^*}}\]</div>
+<ul class="simple">
+<li><p>non-dimensional temperature</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[\Theta = \frac{T^*_w - T^*_{\infty}}{T^*_r - T^*_{\infty}}\]</div>
+<ul class="simple">
+<li><p>Eckert number</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[Ec = \frac{(\gamma -1 ) \, M^2_\infty \, T^*_\infty}{T^*_r - T^*_w}\]</div>
+<p>where <span class="math notranslate nohighlight">\(u_\tau^*\)</span> is the friction velocity,
+<span class="math notranslate nohighlight">\(\delta_0^*\)</span> is the boundary layer thickness (based on 99% of the free-stream velocity) at the inflow,
+<span class="math notranslate nohighlight">\(\theta_0^*\)</span> is the boundary layer momentum thickness at the inflow,
+<span class="math notranslate nohighlight">\(\nu_w^*\)</span> and <span class="math notranslate nohighlight">\(\mu^*_w\)</span> are the kinematic and dynamic viscosity at the wall respectively,
+<span class="math notranslate nohighlight">\(T^*_r\)</span> is the recovery temperature and the subscript <span class="math notranslate nohighlight">\(\infty\)</span> indicates that quantities are referred to free-stream
+conditions.</p>
+<p>The <em>primary reference quantities</em> are:</p>
+<table class="docutils align-center" id="id7">
+<caption><span class="caption-text">Primary reference quantities for compression ramp flow case</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p><span class="math notranslate nohighlight">\(R^*\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(\rho^*_R\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(T^*_R\)</span></p></th>
+<th class="head"><p><span class="math notranslate nohighlight">\(L^*_R\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(R^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(\rho_\infty^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(T_\infty^*\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(\delta_0^*\)</span></p></td>
+</tr>
+</tbody>
+</table>
+<p>The other reference quantities are derived as explained in the first section.
+Note that, as a consequence of this choice, the non-dimensional free-stream velocity is <strong>not</strong> equal to one, but rather:</p>
+<div class="math notranslate nohighlight">
+\[U_\infty = \frac{U_\infty^*}{U^*_R} = \frac{U_\infty^*}{\sqrt{R^* T_\infty^*}} = \sqrt{\gamma} M_\infty\,.\]</div>
+<p>Furthermore, the non dimensional viscosity at the reference temperature is:</p>
+<div class="math notranslate nohighlight">
+\[\mu(T=1) = \frac{\mu^*(T_\infty^*)}{\rho_\infty^* \delta_0^* \sqrt{R^* T_\infty^*}} \frac{U_\infty^*}{U_\infty^*} = \frac{\sqrt{\gamma} M_\infty}{Re_\delta}\,.\]</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matteo Bernardini, Davide Modesti, Francesco Salvadore, Segio Pirozzoli.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

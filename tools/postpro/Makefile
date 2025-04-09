@@ -12,7 +12,8 @@ endif
 
 ifeq (${COMPILE},"gnu")
     FC = gfortran
-    OLEVEL = -O3
+    #OLEVEL = -O0 -fbounds-check -g -fbacktrace -fdump-core -ffpe-trap=zero,invalid,overflow
+    OLEVEL = -O3 -g
     MODULE_FLAG = -J
 endif
 
@@ -22,7 +23,7 @@ RM = rm -f
 # Base code
 #----------------------------------------------------------------------
 MAIN = src/main.o
-OBJ_FILES = src/parameters.o src/global_variables.o src/uty.o src/reader.o src/derivatives.o src/comp_transform.o src/postpro_cha.o src/postpro_bl.o 
+OBJ_FILES = src/parameters.o src/locint.o src/global_variables.o src/uty.o src/reader.o src/derivatives.o src/comp_transform.o src/postpro_cha.o src/postpro_bl.o src/postpro_chacurv.o src/postpro_airfoil.o src/postpro_ramp.o
 
 OBJ_MODS = third-party/cfgio/string_conv_mod.o third-party/cfgio/cfgio_mod.o
 OBJS = $(OBJ_MODS) $(OBJ_FILES) $(MAIN)

@@ -151,4 +151,46 @@ module derivatives
   d2f0 = sol(3)
 !
  end subroutine interpolate
+!
+ subroutine vander(x,w,q,n)
+  implicit none
+  integer, intent(in) :: n
+  real(rkind), dimension(n), intent(in)  :: x,q
+  real(rkind), dimension(n), intent(out) :: w
+  real(rkind), dimension(n)              :: c
+  integer :: i,j,k,k1
+  real(rkind) :: xx,t,b,s
+!
+  if (n==1) then
+   w(1) = q(1)
+  else
+   do i=1,n
+    c(i) = 0._rkind
+   enddo
+   c(n)= -x(1)
+   do i=2,n
+    xx =-x(i)
+    do j=n+1-i,n-1
+     c(j)=c(j)+xx*c(j+1)
+    enddo
+    c(n)=c(n)+xx
+   enddo
+   do i=1,n
+    xx = x(i)
+    t  = 1._rkind
+    b  = 1._rkind
+    s  = q(n)
+    k  = n
+    do j=2,n
+     k1 = k-1
+     b  = c(k)+xx*b
+     s  = s+q(k1)*b
+     t  = xx*t+b
+     k  = k1
+    enddo
+    w(i) = s/t
+   enddo
+  endif
+ end subroutine vander
+
 end module

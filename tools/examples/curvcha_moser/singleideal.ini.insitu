@@ -1,0 +1,138 @@
+; Input file for STREAmS 2.0                                                                   
+; This file provides typical parameters for the simulation of a curvilinear channel.          
+; Parameters are selected only for demonstration purposes, not for a production run.         
+
+[grid]
+grid_dim = 2 
+domain_size_x = 12.   
+domain_size_y = 2.    
+domain_size_z = 4.18879020479    
+nxmax = 216    
+nymax = 72    
+nzmax = 144    
+ng = 4      
+metrics_order = 8      
+grid_type = 3
+dyptarget = 0.2     
+jbgrid = 32     
+nywr = 140    
+lywr = 2.    
+ysmoosteps = 50     
+
+[curvi]
+l0_ducros = 1.0       
+R_curv = 79.0 
+angle = 0.16 
+Reynolds_friction = 180. 
+enable_forces_runtime = 1  
+theta_threshold = 100000  
+alpha_airfoil = 0. 
+xtr1 = 0.1 
+xtr2 = 0.3 
+a_tr = -0.3 
+xtw1 = 0.15 
+xtw2 = 0.45 
+a_tw = -0.5 
+teshk = -0.3 
+kx_tw = 0.0 
+om_tw = 0.0 
+thic = 0.0 
+enable_limiter = 0 
+rho_lim = 0.021 
+tem_lim = 0.59 
+
+[bc]                  
+xmin = 0               
+xmax = 0               
+ymin = 6               
+ymax = 6               
+zmin = 0               
+zmax = 0               
+xmin_nr = 0            
+xmax_nr = 0            
+ymin_nr = 0            
+ymax_nr = 0            
+zmin_nr = 0            
+zmax_nr = 0            
+x_recyc = 40.          
+correct_bound_ord = 0  
+
+[mpi]                
+x_split = 2          
+y_split = 1          
+z_split = 2          
+
+[controls]
+restart_type = 0       
+cfl = 0.8              
+iter_dt_recompute = 1  
+num_iter = 4000000      
+
+[numerics]
+ep_order = 8            
+nkeep = -1            
+visc_order = 8            
+conservative_viscous = 0  
+weno_scheme = 4           
+weno_version = 0          
+sensor_threshold = 1.9999  
+rk_type = 1             
+rand_type = 2             
+mode_async = 0           : 0 -> synchrouns communication pattern, 1 -> async 
+
+[flow]
+flow_init = 4           
+Mach = 0.1          
+Reynolds = 2610.        
+theta_wall = -2.5        
+xshock_imp = 80.         
+shock_angle = 34.1143762  
+T_ref = 220.        
+
+[fluid]
+gam = 1.4         
+Prandtl = 0.72        
+visc_model = 2           
+rfac_type = 0            
+vt_exp = 0.76        
+s_suth = 110.4       
+calorically_perfect = 1  
+indx_cp_l = -2         
+indx_cp_r = 4          
+cp_coeff = 1.009950160D+04,-1.968275610D+02,5.009155110D+00,-5.761013730D-03,1.066859930D-05,-7.940297970D-09,2.185231910D-12  
+
+[output]
+print_control = 1      
+dtsave_restart = 50.   
+dtsave = 0.02          
+dtstat = 1.00          
+dtslice = 500.          
+enable_stat_3d = 0     
+enable_plot3d = 1      
+enable_vtk = 0         
+igslice = 0            
+jgslice = 0            
+kgslice = 0            
+debug_memory = 0       
+io_type_w = 2 
+io_type_r = 2 
+save_stat_z = 1 
+enable_slice_plot3d = 1 
+dtslice_p3d = 1. 
+igslice_p3d = 0            
+jgslice_p3d = 15,40            
+kgslice_p3d = 1           
+dtprobe = 1.             
+save_stat_z = 1     
+enable_stat_time = 0     
+
+[insitu]
+enable_insitu = 1
+insitu_platform = catalyst-v2 
+;vtkpipeline = gridwriter.py 
+vtkpipeline = chacurvsimple.py 
+dt_insitu = 1. 
+aux_list = 1,2,3,4 
+add_list = 3,4 
+perc_ny_cut = -1.0  
+freeze_intervals = 100000000,1 

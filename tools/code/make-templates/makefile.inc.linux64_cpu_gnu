@@ -1,0 +1,17 @@
+#----------------------------------------------------------------------
+# SUPPORTED COMPILE: nv-cuda, nv, intel, gnu, ibmxl, cray-cuda
+# SUPPORTED MODES  : opt, debug [default=debug]
+# SUPPORTED PRECISIONS (PREC) : single, double [default=double]
+#----------------------------------------------------------------------
+EQUATION = "singleideal"
+BACKEND  = "cpu"
+COMPILE  = "gnu"
+MODE     = "opt"
+PREC     = "double"
+CUDA_VER =
+MPI_CMD  = 
+
+define LOAD
+This is the standard Linux makefile. Please make sure gfortran, gcc and mpif90 commands are available.
+endef
+export LOAD

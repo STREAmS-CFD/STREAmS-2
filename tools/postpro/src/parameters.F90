@@ -8,5 +8,7 @@ integer, parameter :: rkind = REAL32
 #else
 integer, parameter :: rkind = REAL64
 #endif
+
+real(rkind) :: pi=acos(-1.d0)
 !
 end module parameters
