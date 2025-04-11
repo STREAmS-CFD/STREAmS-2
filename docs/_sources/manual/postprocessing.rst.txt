@@ -403,7 +403,7 @@ The files ``stat_nnnnn.dat`` contain the boundary layer profiles in the followin
 22. :math:`\overline{\tau}_{12}/\tau_w,\quad` Reynolds shear stress component 12, scaled by density, in viscous units
 23. :math:`\rho_{rms}/(\rho_w\gamma M_\tau^2),\quad` density rms
 24. :math:`T_{rms}/(T_w\gamma M_\tau^2),\quad` temperature rms
-25. :math:`p_{rms}/\tau_w,\quad` pressure rms in wall units 
+25. :math:`p_{rms}/p_0,\quad` pressure rms in outer units
 
 ^^^^^^^^^^^^^^^^
 Airfoil
@@ -498,4 +498,4 @@ The files ``stat_nnnnn.dat`` contain the boundary layer profiles in the followin
 22. :math:`\overline{\tau}_{12}/\tau_w,\quad` Reynolds shear stress component 12, scaled by density, in viscous units
 23. :math:`\rho_{rms}/(\rho_w\gamma M_\tau^2),\quad` density rms
 24. :math:`T_{rms}/(T_w\gamma M_\tau^2),\quad` temperature rms
-25. :math:`p_{rms}/\tau_w,\quad` pressure rms in wall units 
+25. :math:`p_{rms}/p_0,\quad` pressure rms in outer units 

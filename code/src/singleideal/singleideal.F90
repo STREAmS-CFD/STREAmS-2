@@ -2254,7 +2254,7 @@ contains
           write(chstore(1:4), '(I4.4)') itav
           open(unit=12,file='AVGZ/airfoil_coeffs_'//chstore//'.dat',form='formatted')
           do i=ite,itu
-            write(12,100) xc2_vecg(i),cf_vecg(i),cp_vecg(i),pw_vecg(i),tauw_vecg(i)
+            write(12,101) xc2_vecg(i),cf_vecg(i),cp_vecg(i),pw_vecg(i),tauw_vecg(i)
           enddo
           close(12)
         endif
@@ -2287,7 +2287,10 @@ contains
         endif
       endassociate
     endif
+
     100 format(I0,2X,200ES20.10)
+    101 format(200ES20.10)
+
   endsubroutine compute_airfoil_forces
 
   subroutine compute_stats_c2(self)

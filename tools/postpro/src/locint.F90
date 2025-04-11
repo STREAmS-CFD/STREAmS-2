@@ -11,6 +11,8 @@
       dimension v(4,2) ! vertici del quadrato
       dimension p(4)   ! valore in quei vertici della variabile da interpolare
       dimension xst(2) ! è dove voglio la funzione
+
+      idebug = 0
 !
 !     assumo che i lati a i cost siano quelli più diritti, e trovo theta
 !     come angolo medio tra theta1 e theta2 formati dai singoli lati

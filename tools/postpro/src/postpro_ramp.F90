@@ -329,7 +329,6 @@ module postpro_ramp
     uvp  = abs(rhoutvt_bl(j)-wstat_bl(j,1)*utfav_bl(j)*vtfav_bl(j))/tauw
 
     rhofac = sqrt(wstat_bl(j,1)/rhow)
-    prmsp  = sqrt(abs(wstat_bl(j,11)-wstat_bl(j,5)**2))/tauw
     ytp    = yt(j)/deltav
     yvp    = yv(j)/deltav
     utp    = ut(j)/utau
@@ -342,7 +341,7 @@ module postpro_ramp
     Mtau    = utau/sqrt(gam*ttw)
     rhormsp = (sqrt(wstat_bl(j, 7)-wstat_bl(j,1)**2))/(rhow*gam*Mtau**2)
     trmsp   = (sqrt(wstat_bl(j,26)/wstat_bl(j,1)-tfav_bl(j)**2))/(ttw*gam*Mtau**2)
-    prmsp    = sqrt(abs(wstat_bl(j,11)-wstat_bl(j,5)**2))/tauw
+    prmsp   = sqrt(abs(wstat_bl(j,11)-wstat_bl(j,5)**2))
     mum     = wstat_bl(j,20)
 
     !             1     2    3            4          5           6         7   8   9
@@ -354,7 +353,7 @@ module postpro_ramp
     !              19  20  21  22
                   u2p,v2p,w2p,uvp, &
     !              23      24     25
-                  rhormsp,trmsp,prmsp
+                  rhormsp,trmsp,prmsp/p0
    enddo
    close(15)
 !

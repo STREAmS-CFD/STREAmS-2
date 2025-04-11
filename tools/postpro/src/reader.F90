@@ -374,7 +374,6 @@ contains
         !normx = dxdetan(i,j)/(dxdetan(i,j)**2+dydetan(i,j)**2)**0.5
         !normy = dydetan(i,j)/(dxdetan(i,j)**2+dydetan(i,j)**2)**0.5
         !print*,'metrics normal = ',normx,normy,normx**2+normy**2
-        !STOP
 
         ! sets points along normal
         points_bl(1,:) = [xg(i,1),yg(i,1)]
@@ -388,7 +387,6 @@ contains
         ! interpolate quantities along bl line
         wstat_bl(1,:) = wstat(i,1,:)
         !print*,'wstat wall: ',wstat(i,1,1:5)
-        !STOP
         ii = i
         jj = 1
         do i_bl=2,npoints_bl
@@ -401,19 +399,18 @@ contains
             i2     = iend
             j1     = max(jj-10,1)
             j2     = min(jj+10,ny)
-            call localizzaz_tank(i1,i2,j1,j2,xnf(:,istart:iend,1:ny), &
+            call solid_search(i1,i2,j1,j2,xnf(:,istart:iend,1:ny), &
                                  istart,iend,ny,0,xst,ii,jj,ierr,iprint)
             if (ierr.ne.0) then
-                !!print*, 'Fast approach failed for i_bl,xst()', i_bl,xst
+                print*, 'Fast approach failed for i_bl,xst()', i_bl,xst
                 istart = 1
                 iend   = nx
                 i1     = istart
                 i2     = iend
                 j1     = 1
                 j2     = ny 
-                call localizzaz_tank(i1,i2,j1,j2,xnf(:,1:nx,1:ny), &
+                call solid_search(i1,i2,j1,j2,xnf(:,1:nx,1:ny), &
                                   istart,iend,ny,0,xst,ii,jj,ierr,iprint)
-                !print*,' carroarmato xst,ii,jj:',xst,ii,jj,ierr
             else
                 !print*,'tank xst,ii,jj:',xst,ii,jj
             endif
@@ -431,7 +428,6 @@ contains
                 call int_quasibil(v_loc,p_loc,xst,p_int)
                 wstat_bl(i_bl,iv) = p_int
             enddo
-            !STOP
         enddo
    endsubroutine extract_bl
 
