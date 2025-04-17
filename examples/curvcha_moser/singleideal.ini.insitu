@@ -26,7 +26,6 @@ angle = 0.16
 Reynolds_friction = 180. 
 enable_forces_runtime = 1  
 theta_threshold = 100000  
-alpha_airfoil = 0. 
 xtr1 = 0.1 
 xtr2 = 0.3 
 a_tr = -0.3 
@@ -88,6 +87,7 @@ theta_wall = -2.5
 xshock_imp = 80.         
 shock_angle = 34.1143762  
 T_ref = 220.        
+aoa = 0. 
 
 [fluid]
 gam = 1.4         
