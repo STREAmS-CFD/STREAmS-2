@@ -92,6 +92,7 @@ module streams_equation_singleideal_object
     integer :: restart_from_flow
     integer :: istore
     integer :: itav, itslice_p3d
+    integer :: it_elaps_skip
     integer :: enable_plot3d, enable_vtk
     integer :: enable_slice_plot3d, slice_plot3d_j1, slice_plot3d_j2
     real(rkind) :: residual_rhou,vmax
@@ -366,6 +367,8 @@ contains
     if (self%cfg%has_key("flow","aoa")) then
       call self%cfg%get("flow","aoa",self%aoa)
     endif
+    self%aoa = self%aoa*pi/180._rkind
+
     self%l0_ducros = self%l0
     if (self%flow_init == 5) then
       if (self%cfg%has_key("curvi","l0_ducros")) then
@@ -487,14 +490,17 @@ contains
     self%nkeep = 0
     if (self%cfg%has_key("numerics","nkeep")) then
       call self%cfg%get("numerics","nkeep",self%nkeep)
-      if(self%grid%grid_dim == 2 .and. self%nkeep /= -1) call fail_input_any("nkeep >= 0 not support&
-      &ed for curvilinear grids. Only -1 supported")
+      if(self%grid%grid_dim == 2 .and. self%nkeep /= -1) then
+        call fail_input_any("nkeep >= 0 not supported for curvilinear grids. Only -1 supported")
+      endif
     endif
     call self%cfg%get("numerics","weno_scheme",self%weno_scheme)
     if(.not. any(self%weno_scheme == [1,2,3,4])) call fail_input_any("weno_scheme must be 1, 2, 3 or 4")
     call self%cfg%get("numerics","weno_version",self%weno_version)
     if(.not. any(self%weno_version == [0,1])) call fail_input_any("weno_version must be 0, or 1")
-    if(self%weno_scheme /= 3 .and. self%weno_version == 1) call fail_input_any("weno_version 1 supported only for weno_scheme = 3")
+    if(self%weno_scheme /= 3 .and. self%weno_version == 1) then
+      call fail_input_any("weno_version 1 supported only for weno_scheme = 3")
+    endif
     self%flux_splitting = 0
     if (self%cfg%has_key("numerics","flux_splitting")) then
       call self%cfg%get("numerics","flux_splitting",self%flux_splitting)
@@ -569,6 +575,7 @@ contains
     if(mod(nzmax, mpi_split_z) /= 0) call fail_input_any("nzmax not muplitple of mpi_split_z")
 
     call self%field%initialize(self%grid, self%nv, mpi_splits, save_metrics_2d)
+    if(self%field%nx<ng .or. (self%field%nz<ng.and.self%field%nz>1)) call fail_input_any("decomp nx (nz) must be > ng")
 
     call self%alloc()
 
@@ -905,6 +912,7 @@ contains
       if (self%enable_sponge > 1) then
         allocate(self%wfar_glob(self%grid%nxmax,self%nv))
         inquire(file='wfar.bin', exist=wfar_check)
+        call mpi_barrier(mpi_comm_world, ierr)
         if (wfar_check) then
           if (self%masterproc) write(*,*) 'Reading far-field solution from file'
           open(11,file='wfar.bin',form='unformatted')
@@ -2273,12 +2281,11 @@ contains
         call MPI_REDUCE(tA, tAglo, 1, mpi_prec, MPI_SUM, 0, mp_cartx, iermpi)
 
         if(masterproc) then
-          al = aoa*pi/180._rkind
           pdyn = 0.5_rkind*u0*u0
-          lift = ( Nglo*cos(al)- Aglo*sin(al))/pdyn
-          drag = ( Nglo*sin(al)+ Aglo*cos(al))/pdyn
-          pres = (pNglo*sin(al)+pAglo*cos(al))/pdyn
-          fric = (tNglo*sin(al)+tAglo*cos(al))/pdyn
+          lift = ( Nglo*cos(aoa)- Aglo*sin(aoa))/pdyn
+          drag = ( Nglo*sin(aoa)+ Aglo*cos(aoa))/pdyn
+          pres = (pNglo*sin(aoa)+pAglo*cos(aoa))/pdyn
+          fric = (tNglo*sin(aoa)+tAglo*cos(aoa))/pdyn
           write(*,*) 'Lift =',lift,' Drag =',drag
           write(*,*) 'Pressure =',pres,' Friction =',fric
           open(unit=30,file='airfoil_forces.dat',position='append')
@@ -2804,11 +2811,11 @@ contains
       ptot0 = p0 * (1._rkind+gm1h*Mach**2)**(gam/gm1)
 
       winf(1) = rho0
-      winf(2) = rho0*u0*cos(aoa*pi/180._rkind)
-      winf(3) = rho0*u0*sin(aoa*pi/180._rkind)
+      winf(2) = rho0*u0*cos(aoa)
+      winf(3) = rho0*u0*sin(aoa)
       winf(4) = 0._rkind
       winf(5) = rho0*etot0
-      if(self%masterproc) write(*,*) 'Angle of attack:', aoa
+      if(self%masterproc) write(*,*) 'Angle of attack:', aoa*180._rkind/pi
       if (abs(u0)<tol_iter) then
         mu0 = c0*rho0*l0/Reynolds
         u0 = c0
@@ -5285,7 +5292,6 @@ contains
 
     endassociate
   endsubroutine write_psd_tspec
-
 
 
 

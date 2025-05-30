@@ -394,7 +394,7 @@ contains
 
         call update_flux_kernel(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, gamdt)
         if (channel_case) call self%force_rhs()
-        if (flow_init == 5 .and. enable_sponge > 0) call self%sponge()
+        if (grid_dim == 2 .and. enable_sponge > 0) call self%sponge()
         call update_field_kernel(nx, ny, nz, ng, nv, self%base_omp%w_gpu, self%fln_gpu, self%fluid_mask_gpu)
         if (grid_dim == 2 .and. enable_limiter > 0) call self%limiter()
         if (channel_case) call self%force_var()
@@ -529,9 +529,9 @@ contains
 
         call update_flux_kernel(nx, ny, nz, nv, self%fl_gpu, self%fln_gpu, gamdt)
         if (channel_case) call self%force_rhs()
-        if (flow_init == 5 .and. enable_sponge > 0) call self%sponge()
+        if (grid_dim == 2 .and. enable_sponge > 0) call self%sponge()
         call update_field_kernel(nx, ny, nz, ng, nv, self%base_omp%w_gpu, self%fln_gpu, self%fluid_mask_gpu)
-        if(grid_dim == 2 .and. enable_limiter > 0) call self%limiter()
+        if (grid_dim == 2 .and. enable_limiter > 0) call self%limiter()
         if (channel_case) call self%force_var()
         call self%update_ghost(do_swap=0) ! apply boundary conditions on physical ghost nodes
 
@@ -1434,7 +1434,7 @@ contains
     &ount_weno_control , icyc => self%equation_base%icyc , icyc0 => self%equation_base%icyc0,&
     & ifilter => self%equation_base%ifilter)
 
-      if(flow_init == 5 .and. enable_forces_runtime > 0) then
+      if(grid_dim == 2 .and. enable_forces_runtime > 0) then
         call self%compute_airfoil_forces_runtime()
       endif
       if (count_weno_control >0) then
@@ -1521,7 +1521,7 @@ contains
       ta = ta/nzmax
 
       if(self%masterproc) then
-        al = aoa*pi/180._rkind
+        al = aoa
         pdyn = 0.5_rkind*u0*u0
         lift_af = ( n*cos(al)- a*sin(al))/pdyn
         drag_af = ( n*sin(al)+ a*cos(al))/pdyn
@@ -1646,8 +1646,6 @@ contains
       call self%compute_dt()
       if (self%masterproc) write(*,*) 'dt =', self%equation_base%dt
       if (self%masterproc) write(*,*) 'dt*u0/l0 =', self%equation_base%dt*self%equation_base%u0/self%equation_base%l0
-      call mpi_barrier(mpi_comm_world, self%error) ; timing(1) = mpi_wtime()
-
       if(self%equation_base%rand_type == 0) then
         call init_crandom_f(0,reproducible=.true.)
         if (self%masterproc) write(*,*) 'random numbers disabled'
@@ -1658,6 +1656,8 @@ contains
         call init_crandom_f(self%myrank+1,reproducible=.true.)
         if (self%masterproc) write(*,*) 'random numbers reproducible'
       endif
+
+      call mpi_barrier(mpi_comm_world, self%error) ; timing(1) = mpi_wtime()
 
       icyc_loop = icyc
       integration: do
@@ -2253,7 +2253,7 @@ contains
               ii = self%equation_base%islice_p3d(i)
               do m=1,self%equation_base%num_aux_slice
                 mm = self%equation_base%list_aux_slice(m)
-                self%ierr = omp_target_memcpy_f(self%equation_base%w_aux(i,:,:,mm) ,&
+                self%ierr = omp_target_memcpy_f(self%equation_base%w_aux(ii,:,:,mm) ,&
                 & self%w_aux_gpu((ii)-(1-ng)+1,:,:,(mm)-(1)+1),0,0,self%base_omp%myhost,self%base_omp%mydev)
               enddo
             enddo
@@ -2263,7 +2263,7 @@ contains
               jj = self%equation_base%jslice_p3d(j)
               do m=1,self%equation_base%num_aux_slice
                 mm = self%equation_base%list_aux_slice(m)
-                self%ierr = omp_target_memcpy_f(self%equation_base%w_aux(:,j,:,mm) ,&
+                self%ierr = omp_target_memcpy_f(self%equation_base%w_aux(:,jj,:,mm) ,&
                 & self%w_aux_gpu(:,(jj)-(1-ng)+1,:,(mm)-(1)+1),0,0,self%base_omp%myhost,self%base_omp%mydev)
               enddo
               if(jj == 1) then
@@ -2280,7 +2280,7 @@ contains
               kk = self%equation_base%kslice_p3d(k)
               do m=1,self%equation_base%num_aux_slice
                 mm = self%equation_base%list_aux_slice(m)
-                self%ierr = omp_target_memcpy_f(self%equation_base%w_aux(:,:,k,mm) ,&
+                self%ierr = omp_target_memcpy_f(self%equation_base%w_aux(:,:,kk,mm) ,&
                 & self%w_aux_gpu(:,:,(kk)-(1-ng)+1,(mm)-(1)+1),0,0,self%base_omp%myhost,self%base_omp%mydev)
               enddo
             enddo

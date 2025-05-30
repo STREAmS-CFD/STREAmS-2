@@ -60,6 +60,20 @@ template <typename I, typename E, typename S> __device__ __forceinline__ bool lo
     } \
   }
 
+#ifdef INCLUDE_KERNELS
+#define ___I3_REDN_3D(i,j,k) (((i)-(1))+((nx)-(1)+1)*((j)-(1))+((nx)-(1)+1)*((ny)-(1)+1)*((k)-(1)))
+__global__ void  reduce_init_kernel(int nx,int ny,int nz,real *redn_3d_gpu){
+//Kernel for initialization of reductions
+int i;int j;int k;
+i = __GIDX(x,1);
+j = __GIDX(y,1);
+k = __GIDX(z,1);
+if(loop_cond(i,nx,1)&&loop_cond(j,ny,1)&&loop_cond(k,nz,1)){
+redn_3d_gpu[___I3_REDN_3D(i,j,k)]=0.0;
+}
+}
+#endif
+
 // Hipcub reduction implementation
 // Taken directly from GPUFORT
 // https://github.com/ROCmSoftwarePlatform/gpufort/blob/main/include/gpufort_reductions.h

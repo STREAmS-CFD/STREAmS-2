@@ -1,4 +1,5 @@
 #include <hip/hip_runtime.h>
+#define INCLUDE_KERNELS
 #include "../hip_utils.h"  
 #include "../amd_arrays.h"
 
@@ -100,6 +101,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((eul_imax)-(eul_imin)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((count_weno_kernel1_count_weno_x),grid,block,0,stream,nv,nv_aux,nx,ny,nz,ng,eul_imin,eul_imax,eul_jmin,eul_jmax,eul_kmin,eul_kmax,weno_scheme,sensor_threshold,ep_ord_change_gpu,w_aux_gpu,count_weno_x,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, count_weno_x);
 
@@ -143,6 +148,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((eul_jmax)-(eul_jmin)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((count_weno_kernel2_count_weno_y),grid,block,0,stream,nv,nv_aux,nx,ny,nz,ng,eul_imin,eul_imax,eul_jmin,eul_jmax,eul_kmin,eul_kmax,weno_scheme,sensor_threshold,ep_ord_change_gpu,w_aux_gpu,count_weno_y,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, count_weno_y);
 
@@ -185,6 +194,10 @@ void count_weno_kernel3_wrapper(hipStream_t stream,int nv,int nv_aux,int nx,int 
 dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((eul_kmax)-(eul_kmin)+1,block.z));
 
+
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
 
 hipLaunchKernelGGL((count_weno_kernel3_count_weno_z),grid,block,0,stream,nv,nv_aux,nx,ny,nz,ng,eul_imin,eul_imax,eul_jmin,eul_jmax,eul_kmin,eul_kmax,weno_scheme,sensor_threshold,ep_ord_change_gpu,w_aux_gpu,count_weno_z,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, count_weno_z);
@@ -241,6 +254,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((eul_imax)-(eul_imin)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((count_weno_c2_kernel1_count_weno_x),grid,block,0,stream,nv,nv_aux,nx,ny,nz,ng,eul_imin,eul_imax,eul_jmin,eul_jmax,eul_kmin,eul_kmax,l_base,weno_scheme,sensor_threshold,ep_ord_change_gpu,lmax_tag_gpu,wall_tag_gpu,w_aux_gpu,count_weno_x,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, count_weno_x);
 
@@ -292,6 +309,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((eul_jmax)-(eul_jmin)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((count_weno_c2_kernel2_count_weno_y),grid,block,0,stream,nv,nv_aux,nx,ny,nz,ng,eul_imin,eul_imax,eul_jmin,eul_jmax,eul_kmin,eul_kmax,l_base,weno_scheme,sensor_threshold,ep_ord_change_gpu,lmax_tag_gpu,wall_tag_gpu,w_aux_gpu,count_weno_y,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, count_weno_y);
 
@@ -335,6 +356,10 @@ void count_weno_c2_kernel3_wrapper(hipStream_t stream,int nv,int nv_aux,int nx,i
 dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((eul_kmax)-(eul_kmin)+1,block.z));
 
+
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
 
 hipLaunchKernelGGL((count_weno_c2_kernel3_count_weno_z),grid,block,0,stream,nv,nv_aux,nx,ny,nz,ng,eul_imin,eul_imax,eul_jmin,eul_jmax,eul_kmin,eul_kmax,l_base,weno_scheme,sensor_threshold,ep_ord_change_gpu,lmax_tag_gpu,wall_tag_gpu,w_aux_gpu,count_weno_z,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, count_weno_z);
@@ -690,6 +715,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((force_rhs_1_kernel_bulk_1),grid,block,0,stream,nx,ny,nz,ng,fluid_mask_gpu,yn_gpu,fln_gpu,w_gpu,w_aux_gpu,bulk_1,bulk_2,bulk_3,bulk_4,bulk_5,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, bulk_1);
 
@@ -839,6 +868,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((force_rhs_1_c2_kernel_bulk_1),grid,block,0,stream,nx,ny,nz,ng,fluid_mask_gpu,yn_gpu,fln_gpu,dcsidxnc2_gpu,dcsidync2_gpu,jac_gpu,w_gpu,w_aux_gpu,bulk_1,bulk_2,bulk_3,bulk_4,bulk_5,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, bulk_1);
 
@@ -948,6 +981,10 @@ void force_var_1_kernel_wrapper(hipStream_t stream,int nx,int ny,int nz,int ng,i
 dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
+
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
 
 hipLaunchKernelGGL((force_var_1_kernel_bulk_5),grid,block,0,stream,nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect,t0,tol_iter_nr,bulkt,fluid_mask_gpu,yn_gpu,fln_gpu,w_gpu,w_aux_gpu,cv_coeff_gpu,bulk_5,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, bulk_5);
@@ -1113,6 +1150,10 @@ void force_var_1_c2_kernel_wrapper(hipStream_t stream,int nx,int ny,int nz,int n
 dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
+
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
 
 hipLaunchKernelGGL((force_var_1_c2_kernel_bulk_5),grid,block,0,stream,nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect,t0,tol_iter_nr,bulkt,fluid_mask_gpu,yn_gpu,fln_gpu,w_gpu,w_aux_gpu,cv_coeff_gpu,jac_gpu,dcsidxnc2_gpu,dcsidync2_gpu,bulk_5,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, bulk_5);
@@ -2381,6 +2422,10 @@ void limiter_kernel1_wrapper(hipStream_t stream,int nx,int ny,int nz,int ng,int 
 dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
+
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
 
 hipLaunchKernelGGL((limiter_kernel1_n_limited_rho),grid,block,0,stream,nx,ny,nz,ng,iblock,kblock,calorically_perfect,indx_cp_l,indx_cp_r,t0,tol_iter_nr,rho_lim,tem_lim,rho_lim_rescale,tem_lim_rescale,w_gpu,w_aux_gpu,cv_coeff_gpu,n_limited_rho,n_limited_tem,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, n_limited_rho);
@@ -5789,6 +5834,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((compute_residual_kernel_residual_rhou),grid,block,0,stream,nx,ny,nz,ng,nv,dt,fluid_mask_gpu,fln_gpu,residual_rhou,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, residual_rhou);
 
@@ -6100,6 +6149,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((1)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((compute_airfoil_forces_runtime_kernel_n),grid,block,0,stream,nx,ny,nz,ng,nv,p0,u0,rgas0,wall_tag_gpu,w_aux_gpu,meta_gpu,csimod_gpu,dxdcsic2_gpu,dydcsic2_gpu,n,a,pn,pa,tn,ta,redn_3d_gpu);
 reduce<real, reduce_op_add>(redn_3d_gpu, nz*ny*nx, n);
 
@@ -6204,6 +6257,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((compute_rho_t_p_minmax_kernel1_rhomin),grid,block,0,stream,nx,ny,nz,ng,rgas0,fluid_mask_gpu,w_aux_gpu,rhomin,tmin,pmin,redn_3d_gpu);
 reduce<real, reduce_op_min>(redn_3d_gpu, nz*ny*nx, rhomin);
 
@@ -6297,6 +6354,10 @@ void compute_rho_t_p_minmax_kernel2_wrapper(hipStream_t stream,int nx,int ny,int
 dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
+
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
 
 hipLaunchKernelGGL((compute_rho_t_p_minmax_kernel2_rhomax),grid,block,0,stream,nx,ny,nz,ng,rgas0,fluid_mask_gpu,w_aux_gpu,rhomax,tmax,pmax,redn_3d_gpu);
 reduce<real, reduce_op_max>(redn_3d_gpu, nz*ny*nx, rhomax);
@@ -6765,6 +6826,10 @@ void compute_dt_kernel_wrapper(hipStream_t stream,int nx,int ny,int nz,int ng,in
 dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
+
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
 
 hipLaunchKernelGGL((compute_dt_kernel_dtxi_max),grid,block,0,stream,nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect,rgas0,t0,prandtl,fluid_mask_gpu,w_gpu,w_aux_gpu,cp_coeff_gpu,dcsidx_gpu,detady_gpu,dzitdz_gpu,dcsidxs_gpu,detadys_gpu,dzitdzs_gpu,dtxi_max,dtyi_max,dtzi_max,dtxv_max,dtyv_max,dtzv_max,dtxk_max,dtyk_max,dtzk_max,redn_3d_gpu);
 reduce<real, reduce_op_max>(redn_3d_gpu, nz*ny*nx, dtxi_max);
@@ -7306,6 +7371,10 @@ dim3 block(THREE_X,THREE_Y,THREE_Z);
 dim3 grid(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
 
 
+dim3 block0(THREE_X,THREE_Y,THREE_Z);
+dim3 grid0(divideAndRoundUp((nx)-(1)+1,block.x),divideAndRoundUp((ny)-(1)+1,block.y),divideAndRoundUp((nz)-(1)+1,block.z));
+hipLaunchKernelGGL((reduce_init_kernel),grid0,block0,0,stream,nx,ny,nz,redn_3d_gpu);
+
 hipLaunchKernelGGL((compute_dt_c2_kernel_dtxi_max),grid,block,0,stream,nx,ny,nz,ng,indx_cp_l,indx_cp_r,calorically_perfect,rgas0,t0,prandtl,fluid_mask_gpu,w_gpu,w_aux_gpu,cp_coeff_gpu,dzitdz_gpu,dzitdzs_gpu,dcsidxnc2_gpu,dcsidync2_gpu,detadxnc2_gpu,detadync2_gpu,mcsi_gpu,meta_gpu,dtxi_max,dtyi_max,dtzi_max,dtxv_max,dtyv_max,dtzv_max,dtxk_max,dtyk_max,dtzk_max,redn_3d_gpu);
 reduce<real, reduce_op_max>(redn_3d_gpu, nz*ny*nx, dtxi_max);
 
@@ -7462,12 +7531,11 @@ zz = z_gpu[__I1_Z(k)];
 hzi = sin(2.0*pi*lamz *zz+phiz );
 hzi1 = sin(2.0*pi*lamz1*zz+phiz1);
 gzt = asl*((1-bt)*hzi+bt*hzi1);
-fz=exp(-((((xx-x0tr)/lamx))*(((xx-x0tr)/lamx)))-((((yy-y0tr)/lamy))*(((yy-y0tr)/lamy))));
-fz = fz*gzt*w_gpu[__I4_W(i,j,k,1)];
+fz=gzt*exp(-((((xx-x0tr)/lamx))*(((xx-x0tr)/lamx)))-((((yy-y0tr)/lamy))*(((yy-y0tr)/lamy))));
 fzx = 0.0;
 fzy = fz;
-fl_gpu[__I4_FL(i,j,k,2)] = fl_gpu[__I4_FL(i,j,k,2)] - fzx;
-fl_gpu[__I4_FL(i,j,k,3)] = fl_gpu[__I4_FL(i,j,k,3)] - fzy;
+fl_gpu[__I4_FL(i,j,k,2)] = fl_gpu[__I4_FL(i,j,k,2)] - fzx*w_gpu[__I4_W(i,j,k,1)];
+fl_gpu[__I4_FL(i,j,k,3)] = fl_gpu[__I4_FL(i,j,k,3)] - fzy*w_gpu[__I4_W(i,j,k,1)];
 fl_gpu[__I4_FL(i,j,k,5)] = fl_gpu[__I4_FL(i,j,k,5)] -(fzx*w_gpu[__I4_W(i,j,k,2)]+fzy*w_gpu[__I4_W(i,j,k,3)]);
 }
 
@@ -7508,12 +7576,11 @@ zz = z_gpu[__I1_Z(k)];
 hzi = sin(2.0*pi*lams *zz+phis);
 hzi1 = sin(2.0*pi*lams1*zz+phis1);
 gzt = asl*((1-bt)*hzi+bt*hzi1);
-fz=exp(-((((xx-x0ts)/lamx))*(((xx-x0ts)/lamx)))-((((yy-y0ts)/lamy))*(((yy-y0ts)/lamy))));
-fz = fz*gzt*w_gpu[__I4_W(i,j,k,1)];
+fz=gzt*exp(-((((xx-x0ts)/lamx))*(((xx-x0ts)/lamx)))-((((yy-y0ts)/lamy))*(((yy-y0ts)/lamy))));
 fzx = 0.0;
 fzy = fz;
-fl_gpu[__I4_FL(i,j,k,2)] = fl_gpu[__I4_FL(i,j,k,2)] - fzx;
-fl_gpu[__I4_FL(i,j,k,3)] = fl_gpu[__I4_FL(i,j,k,3)] - fzy;
+fl_gpu[__I4_FL(i,j,k,2)] = fl_gpu[__I4_FL(i,j,k,2)] - fzx*w_gpu[__I4_W(i,j,k,1)];
+fl_gpu[__I4_FL(i,j,k,3)] = fl_gpu[__I4_FL(i,j,k,3)] - fzy*w_gpu[__I4_W(i,j,k,1)];
 fl_gpu[__I4_FL(i,j,k,5)] = fl_gpu[__I4_FL(i,j,k,5)] -(fzx*w_gpu[__I4_W(i,j,k,2)]+fzy*w_gpu[__I4_W(i,j,k,3)]);
 }
 

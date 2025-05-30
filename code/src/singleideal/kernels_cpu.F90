@@ -7037,12 +7037,11 @@ contains
             hzi = sin(2._rkind*pi*lamz *zz+phiz )
             hzi1 = sin(2._rkind*pi*lamz1*zz+phiz1)
             gzt = asl*((1-bt)*hzi+bt*hzi1)
-            fz = exp(-((xx-x0tr)/lamx)**2-((yy-y0tr)/lamy)**2)
-            fz = fz*gzt*w_cpu(i,j,k,1)
+            fz = gzt*exp(-((xx-x0tr)/lamx)**2-((yy-y0tr)/lamy)**2)
             fzx = 0._rkind
             fzy = fz
-            fl_cpu(i,j,k,2) = fl_cpu(i,j,k,2) - fzx
-            fl_cpu(i,j,k,3) = fl_cpu(i,j,k,3) - fzy
+            fl_cpu(i,j,k,2) = fl_cpu(i,j,k,2) - fzx*w_cpu(i,j,k,1)
+            fl_cpu(i,j,k,3) = fl_cpu(i,j,k,3) - fzy*w_cpu(i,j,k,1)
             fl_cpu(i,j,k,5) = fl_cpu(i,j,k,5) -(fzx*w_cpu(i,j,k,2)+fzy*w_cpu(i,j,k,3))
           endif
         enddo
@@ -7078,12 +7077,11 @@ contains
             hzi = sin(2._rkind*pi*lams *zz+phis)
             hzi1 = sin(2._rkind*pi*lams1*zz+phis1)
             gzt = asl*((1-bt)*hzi+bt*hzi1)
-            fz = exp(-((xx-x0ts)/lamx)**2-((yy-y0ts)/lamy)**2)
-            fz = fz*gzt*w_cpu(i,j,k,1)
+            fz = gzt*exp(-((xx-x0ts)/lamx)**2-((yy-y0ts)/lamy)**2)
             fzx = 0._rkind
             fzy = fz
-            fl_cpu(i,j,k,2) = fl_cpu(i,j,k,2) - fzx
-            fl_cpu(i,j,k,3) = fl_cpu(i,j,k,3) - fzy
+            fl_cpu(i,j,k,2) = fl_cpu(i,j,k,2) - fzx*w_cpu(i,j,k,1)
+            fl_cpu(i,j,k,3) = fl_cpu(i,j,k,3) - fzy*w_cpu(i,j,k,1)
             fl_cpu(i,j,k,5) = fl_cpu(i,j,k,5) -(fzx*w_cpu(i,j,k,2)+fzy*w_cpu(i,j,k,3))
           endif
         enddo

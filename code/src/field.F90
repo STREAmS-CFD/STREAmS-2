@@ -482,9 +482,12 @@ contains
       else
         z(:) = 0._rkind
       endif
-
-      self%yn = self%grid%yn
-
+      !
+      jj = ny*ncoords(2)
+      do j=1,ny+1
+        self%yn(j) = self%grid%yn(jj+j)
+      enddo
+      !
       ii = nx*ncoords(1)
       do i=1,nx
         dcsidx (i) = 1._rkind/(dxg(ii+i))
@@ -694,18 +697,18 @@ contains
 
     tol = 1E-10
 
-    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%grid%ng, yn => self%grid%yn,&
-    & nxmax => self%grid%nxmax, volume => self%volume, c => self%grid%metrics_cd1, cc => self%grid%metric&
-    &s_cd2, xg => self%grid%xg, yg => self%grid%yg, xc2 => self%xc2, yc2 => self%yc2, wall_tagg => self%g&
-    &rid%wall_tagg, ite => self%grid%ite, itu => self%grid%itu, wall_tag => self%wall_tag,&
-    & nymax => self%grid%nymax, ile => self%grid%ile, icl => self%grid%icl, icu => self%grid%icu,&
-    & xwall => self%grid%xwall, ywall => self%grid%ywall, ileftx => self%ileftx, irightx=>self%irightx,&
-    & ncoords => self%ncoords, ite_rank_x => self%ite_rank_x, itu_rank_x => self%itu_rank_x,&
-    & icl_rank_x => self%icl_rank_x, icu_rank_x => self%icu_rank_x, ile_l => self%ile_l,&
-    & ile_rank_x => self%ile_rank_x, ite_l => self%ite_l, itu_l => self%itu_l, nrank => self%myrank,&
-    & icl_l => self%icl_l, icu_l => self%icu_l, mp_cart => self%mp_cart, R_curv => self%grid%R_curv,&
-    & nblocks => self%nblocks, angle => self%grid%angle, mp_cartx => self%mp_cartx, iermpi => self%mpi_er&
-    &r, masterproc => self%masterproc)
+    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%grid%ng, nxmax => self%grid%nx&
+    &max, volume => self%volume, c => self%grid%metrics_cd1, cc => self%grid%metrics_cd2,&
+    & xg => self%grid%xg, yg => self%grid%yg, xc2 => self%xc2, yc2 => self%yc2, wall_tagg => self%grid%wa&
+    &ll_tagg, ite => self%grid%ite, itu => self%grid%itu, wall_tag => self%wall_tag, nymax => self%grid%n&
+    &ymax, ile => self%grid%ile, icl => self%grid%icl, icu => self%grid%icu, xwall => self%grid%xwall,&
+    & ywall => self%grid%ywall, ileftx => self%ileftx, irightx=>self%irightx, ncoords => self%ncoords,&
+    & ite_rank_x => self%ite_rank_x, itu_rank_x => self%itu_rank_x, icl_rank_x => self%icl_rank_x,&
+    & icu_rank_x => self%icu_rank_x, ile_l => self%ile_l, ile_rank_x => self%ile_rank_x,&
+    & ite_l => self%ite_l, itu_l => self%itu_l, nrank => self%myrank, icl_l => self%icl_l,&
+    & icu_l => self%icu_l, mp_cart => self%mp_cart, R_curv => self%grid%R_curv, nblocks => self%nblocks,&
+    & angle => self%grid%angle, mp_cartx => self%mp_cartx, iermpi => self%mpi_err, masterproc => self%mas&
+    &terproc)
 
       !xwall, ywall, yg (without ghosts)
       call mpi_allgather(xc2(1:nx,1),nx,mpi_prec,xwall(1:nxmax),nx,mpi_prec,mp_cartx,iermpi)
@@ -717,26 +720,29 @@ contains
       call self%bcswap_xy()
 
       !Set ghost nodes in i direction (extrapolation)
-      if(ncoords(1) == 0) then
-        do j=1,nymax
-          do i=1,ng
-            xc2(1-i,j) = 2._rkind*xc2(2-i,j)-xc2(3-i,j)
-            yc2(1-i,j) = 2._rkind*yc2(2-i,j)-yc2(3-i,j)
-            !mirror xc2(1-i,j) = 2._rkind*xc2(1,j)-xc2(1+i,j)
-            !mirror yc2(1-i,j) = 2._rkind*yc2(1,j)-yc2(1+i,j)
+      if (.not. self%grid%is_xyz_periodic(1)) then
+        if(ncoords(1) == 0) then
+          do j=1,nymax
+            do i=1,ng
+              xc2(1-i,j) = 2._rkind*xc2(2-i,j)-xc2(3-i,j)
+              yc2(1-i,j) = 2._rkind*yc2(2-i,j)-yc2(3-i,j)
+              !mirror xc2(1-i,j) = 2._rkind*xc2(1,j)-xc2(1+i,j)
+              !mirror yc2(1-i,j) = 2._rkind*yc2(1,j)-yc2(1+i,j)
+            enddo
           enddo
-        enddo
-      endif
-      if(ncoords(1) == nblocks(1)-1) then
-        do j=1,nymax
-          do i=1,ng
-            xc2(nx+i,j) = 2._rkind*xc2(nx+i-1,j)-xc2(nx+i-2,j)
-            yc2(nx+i,j) = 2._rkind*yc2(nx+i-1,j)-yc2(nx+i-2,j)
+        endif
+        if(ncoords(1) == nblocks(1)-1) then
+          do j=1,nymax
+            do i=1,ng
+              xc2(nx+i,j) = 2._rkind*xc2(nx+i-1,j)-xc2(nx+i-2,j)
+              yc2(nx+i,j) = 2._rkind*yc2(nx+i-1,j)-yc2(nx+i-2,j)
+            enddo
           enddo
-        enddo
+        endif
       endif
 
       !xwall, ywall, xg: extend i-ghosts
+      !TODO: extrapolation should be avoided for x-periodic cases (OGRID)
       do i=1,ng
         xwall(1-i) = 2._rkind*xwall(2-i)-xwall(3-i)
         ywall(1-i) = 2._rkind*ywall(2-i)-ywall(3-i)
@@ -923,9 +929,9 @@ contains
     real(rkind), dimension(self%nx) :: etaxl, etaml, metal
     real(rkind), dimension(self%grid%nxmax) :: etaxg, etamg, metag
 
-    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%grid%ng, yn => self%grid%yn,&
-    & nxmax => self%grid%nxmax, volume => self%volume, c => self%grid%metrics_cd1, cc => self%grid%metric&
-    &s_cd2, xc2 => self%xc2, yc2 => self%yc2, xc2g => self%grid%xc2g, yc2g => self%grid%yc2g,&
+    associate(nx => self%nx, ny => self%ny, nz => self%nz, ng => self%grid%ng, nxmax => self%grid%nx&
+    &max, volume => self%volume, c => self%grid%metrics_cd1, cc => self%grid%metrics_cd2,&
+    & xc2 => self%xc2, yc2 => self%yc2, xc2g => self%grid%xc2g, yc2g => self%grid%yc2g,&
     & wall_tagg => self%grid%wall_tagg, ite => self%grid%ite, itu => self%grid%itu, wall_tag => self%wall&
     &_tag, nymax => self%grid%nymax, ile => self%grid%ile, icl => self%grid%icl, icu => self%grid%icu,&
     & xwall => self%grid%xwall, ywall => self%grid%ywall, dcsidxnc2 => self%dcsidxnc2,&
@@ -1130,7 +1136,6 @@ contains
       do k=1,nz
         do j=1,ny
           do i=1,nx
-            !r = R_curv+0.5_rkind*(yn(j)+yn(j+1))
             vol = vol + 1/jac(i,j)
           enddo
         enddo
@@ -1255,10 +1260,6 @@ contains
       !enddo
 
     endassociate
-
-    !Copied to field yn since it is used in singleideal
-    self%yn = self%grid%yn
-    !
   endsubroutine gen_grid_cha_curv
 
   subroutine save_metrics_p3d(self)

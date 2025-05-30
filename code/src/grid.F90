@@ -263,18 +263,19 @@ contains
       if (self%masterproc) print*,'-- Curvilinear x-y grid --'
 
       self%domain_size(1:2) = 1._rkind ! dummy values
-      if (self%grid_type == GRID_BL) then
-        call self%generate_grid_uniform_z()
+
+      call self%generate_grid_uniform_z()
+      if (self%grid_type == GRID_FROMFILE) then
+        if(self%grid2d_par == 0) call self%read_gridc2()
+      elseif (self%grid_type == GRID_BL) then
         if(self%grid2d_par == 0) call self%read_gridc2()
       elseif (self%grid_type == GRID_CHA) then
         self%dyp_target = grid_vars(1)
         self%Retaucha = grid_vars(2)
         self%angle = grid_vars(3)
         self%R_curv = grid_vars(4)
-        call self%generate_grid_uniform_z()
         if(self%grid2d_par == 0) call self%generate_grid_cha_curv(grid_vars(1), grid_vars(2), grid_vars(3), grid_vars(4))
       elseif (self%grid_type == GRID_AIRFOIL) then
-        call self%generate_grid_uniform_z()
         if(self%grid2d_par == 0) call self%generate_grid_airfoil()
       endif
 
@@ -328,10 +329,6 @@ contains
       ynf = yn(nymaxwr+1)
       do j=1,nymaxwr+ng+1
         yn(j) = yn(j)/ynf*rlywr
-      enddo
-      !
-      do j=1,ng
-        yg(1-j) = -yg(1+j)
       enddo
       !
     endassociate
@@ -1048,17 +1045,31 @@ contains
       print*,'CHECK x/y min: ',minval(xc2g),minval(yc2g)
       print*,'CHECK x/y max: ',maxval(xc2g),maxval(yc2g)
 
-      !Set ghost nodes in i direction (extrapolation)
-      do j=1,nymax ! nyg
-        do i=1,ng
-          xc2g(1-i,j) = 2._rkind*xc2g(2-i,j)-xc2g(3-i,j)
-          yc2g(1-i,j) = 2._rkind*yc2g(2-i,j)-yc2g(3-i,j)
-          xc2g(nxmax+i,j) = 2._rkind*xc2g(nxmax+i-1,j)-xc2g(nxmax+i-2,j)
-          yc2g(nxmax+i,j) = 2._rkind*yc2g(nxmax+i-1,j)-yc2g(nxmax+i-2,j)
+      if (self%is_xyz_periodic(1)) then
+        !Set ghost nodes in i direction (periodicity)
+        do j=1,nymax ! nyg
+          do i=1,ng
+            xc2g(1-i,j) = xc2g(nxmax-i+1,j)
+            yc2g(1-i,j) = yc2g(nxmax-i+1,j)
+            xc2g(nxmax+i,j) = xc2g(i,j)
+            yc2g(nxmax+i,j) = yc2g(i,j)
+          enddo
+          xc2g(nxmax+ng+1,j) = xc2g(ng+1,j)
+          yc2g(nxmax+ng+1,j) = yc2g(ng+1,j)
         enddo
-        xc2g(nxmax+ng+1,j) = 2._rkind*xc2g(nxmax+ng,j)-xc2g(nxmax+ng-1,j)
-        yc2g(nxmax+ng+1,j) = 2._rkind*yc2g(nxmax+ng,j)-yc2g(nxmax+ng-1,j)
-      enddo
+      else
+        !Set ghost nodes in i direction (extrapolation)
+        do j=1,nymax ! nyg
+          do i=1,ng
+            xc2g(1-i,j) = 2._rkind*xc2g(2-i,j)-xc2g(3-i,j)
+            yc2g(1-i,j) = 2._rkind*yc2g(2-i,j)-yc2g(3-i,j)
+            xc2g(nxmax+i,j) = 2._rkind*xc2g(nxmax+i-1,j)-xc2g(nxmax+i-2,j)
+            yc2g(nxmax+i,j) = 2._rkind*yc2g(nxmax+i-1,j)-yc2g(nxmax+i-2,j)
+          enddo
+          xc2g(nxmax+ng+1,j) = 2._rkind*xc2g(nxmax+ng,j)-xc2g(nxmax+ng-1,j)
+          yc2g(nxmax+ng+1,j) = 2._rkind*yc2g(nxmax+ng,j)-yc2g(nxmax+ng-1,j)
+        enddo
+      endif
       !
       !Set ghost nodes in j direction at outer boundary
       do j=1,ng
