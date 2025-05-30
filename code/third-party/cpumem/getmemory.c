@@ -1,3 +1,5 @@
+#ifdef __linux__
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <sys/sysinfo.h>
@@ -14,3 +16,12 @@ void getmemory(long int* totmem, long int* avmem) {
     *totmem = get_phys_pages()   * sysconf(_SC_PAGESIZE);
     *avmem  = get_avphys_pages() * sysconf(_SC_PAGESIZE);
 }
+
+#else
+
+void getmemory(long int* totmem, long int* avmem) {
+    *totmem = 0L;
+    *avmem  = 0L;
+}
+
+#endif
