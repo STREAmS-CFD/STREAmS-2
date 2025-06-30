@@ -8,13 +8,14 @@ BACKEND  = "gpu"
 COMPILE  = "nv-cuda"
 MODE     = "opt"
 PREC     = "double"
-CUDA_VER = 12.3
+CUDA_VER = ""
 MPI_CMD  = 
 CGAL     = "no"
 CATALYST = "no"
 
 define LOAD
-module load nvhpc/24.3 ;
-module load openmpi/4.1.6--nvhpc--24.3 ;
+module load profile/global ;
+module load nvhpc/25.3 ;
+module load hpcx-mpi/2.19 ;
 endef
 export LOAD

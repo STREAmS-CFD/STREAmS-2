@@ -95,7 +95,8 @@ module postpro_airfoil
  integer :: i,j,m,j99,ii,jvort
  real(rkind), dimension(3,3) :: sig
  real(rkind), dimension(npoints_bl) :: ufav_bl,vfav_bl,wfav_bl,tfav_bl,utfav_bl,vtfav_bl,rhout2_bl,rhovt2_bl,rhoutvt_bl
- real(rkind), dimension(nx) :: rmutil,d99_vec,deltav_vec,utau_vec,rhow_vec,ttw_vec,dudyw_vec,rmuw_vec,jvortical
+ real(rkind), dimension(nx) :: d99_vec,deltav_vec,utau_vec,rhow_vec,ttw_vec,dudyw_vec,rmuw_vec,jvortical
+ real(rkind), dimension(nx,ny) :: rmutil,utilde
  real(rkind), dimension(naux,npoints_bl) :: vaux
  real(rkind), dimension(npoints_bl) :: yt,yvd,yv,uv,ut,uvd,yh,uh,uinv,dutfav_bl_dy
  real(rkind) :: uwall,dudyw,d2udyw,rmuw,rnuw,tauw,rhow,ttw,deltav,pdyn,dthre
@@ -114,7 +115,7 @@ module postpro_airfoil
 !
 ! Mean boundary layer properties
 !
-  udel = 0.99_rkind*u0 
+  udel = 0.99_rkind*u0 ! this is an approximation, to do: compute udel as utilde at BL edge  
   gg    = 2*gam/(gam-1)
   al    = aoa*pi/180._rkind
   uref  = u0*cos(al)
@@ -122,94 +123,131 @@ module postpro_airfoil
   sqgmr = u0/Reynolds
   cv13  = 7.1**3
 !
-  inquire(file='eddy.dat', exist=filecheck)
+  inquire(file='mutilde.bin', exist=filecheck)
+  print*, 'Searching for RANS results (mu_tilde)'
   if (filecheck) then
-     open(11,file='eddy.dat',form='formatted')
-     do i=1,nx
-      read(11,*) rmutil(i)
-     enddo
+     open(11,file='mutilde.bin',form='unformatted')
+     read(11) rmutil
      close(11)
+     print*, 'Read mutilde.bin'
+
+     utilde(:,:) = wstat(:,:,13)/wstat(:,:,1)*dxdcsi(:,:) + wstat(:,:,14)/wstat(:,:,1)*dydcsi(:,:)
+     utilde(:,:) = utilde(:,:) / csimod(:,:)
 
      open(13,file='POSTPRO/wake_rans.dat',form='formatted')
+     open(unit=123, file="POSTPRO/eta_rans.q", form="unformatted", access="stream")
+     write(123) nx,ny,1,1
+     do j=1,ny
+       do i=1,nx
+         rnutil = rmutil(i,j)/wstat(i,j,1)
+         rnuw   = wstat(i,j,20)/wstat(i,j,1)
+         chi3   = (rnutil/rnuw)**3
+         fv1    = chi3/(chi3+cv13)
+         rnut   = rnutil*fv1
+         if (j==1) then 
+           ueta =-1.5_rkind*utilde(i,j)+2._rkind*utilde(i,j+1)-0.5_rkind*utilde(i,j+2)
+         elseif (j==ny) then 
+           ueta = 0._rkind
+         else
+           ueta = 0.5_rkind*(utilde(i,j+1)-utilde(i,j-1))
+         endif
+         uy     = ueta*meta(i,j)
+         epsi   = rnut*uy**2 ! dissipation ≈ production
+         if (epsi==0.) epsi=epsi+1e-9
+         eta    =(rnuw**3/epsi)**0.25
+         write(123) eta
+         if (j==20.and.i>itu) write(13,100) xg(i,j),yg(i,j),eta,utilde(i,j),uy,rnut,rnuw,epsi
+       enddo
+     enddo
+     close(123)
+     close(13)
+
+     !open(13,file='POSTPRO/wake_rans.dat',form='formatted')
+     !do i=itu+1,nx,ix_out
+     ! call extract_bl(i)
+     ! do j=1,4
+     !     ufav_bl(j)  = wstat_bl(j,13)/wstat_bl(j,1)
+     !     vfav_bl(j)  = wstat_bl(j,14)/wstat_bl(j,1)
+     !     utfav_bl(j) = (ufav_bl(j)*dxdcsi(i,1)+vfav_bl(j)*dydcsi(i,1))/csimod(i,1) ! csi tangent wall
+     !     vtfav_bl(j) = (ufav_bl(j)*detadx(i,1)+vfav_bl(j)*detady(i,1))/meta(i,1) ! csi normal wall
+     ! enddo
+     ! dudyw  = -22._rkind*utfav_bl(1)+36._rkind*utfav_bl(2)-18._rkind*utfav_bl(3)+ 4._rkind*utfav_bl(4)
+     ! dyw    = -22._rkind*0.000_rkind+36._rkind*delta_bl(1)-18._rkind*delta_bl(2)+ 4._rkind*delta_bl(3)
+     ! dudyw  = dudyw / dyw
+
+     ! rnutil = rmutil(i,1)/wstat_bl(1,1)
+     ! rnuw   = wstat_bl(1,20)/wstat_bl(1,1)
+     ! chi3   = (rnutil/rnuw)**3
+     ! fv1    = chi3/(chi3+cv13)
+     ! rnut   = rnutil*fv1
+     ! epsi   = rnut*dudyw**2 ! dissipation approx production
+     ! if (epsi==0.) epsi=epsi+1e-9
+     ! eta    =(rnuw**3/epsi)**0.25
+     ! write(13,100) xg(i,1),eta,rnuw,epsi,rnut,dudyw
+     !enddo
+     !close(13)
+  endif
+
+  if (it_start > 0) then 
+     open(13,file='POSTPRO/wake.dat',form='formatted')
      do i=itu+1,nx,ix_out
       call extract_bl(i)
       do j=1,4
-          ufav_bl(j)  = wstat_bl(j,13)/wstat_bl(j,1)
-          vfav_bl(j)  = wstat_bl(j,14)/wstat_bl(j,1)
-          utfav_bl(j) = (ufav_bl(j)*dxdcsi(i,1)+vfav_bl(j)*dydcsi(i,1))/csimod(i,1) ! csi tangent wall
-          vtfav_bl(j) = (ufav_bl(j)*detadx(i,1)+vfav_bl(j)*detady(i,1))/meta(i,1) ! csi normal wall
+          ufav_bl(j)    = wstat_bl(j,13)/wstat_bl(j,1)
+          vfav_bl(j)    = wstat_bl(j,14)/wstat_bl(j,1)
+          wfav_bl(j)    = wstat_bl(j,15)/wstat_bl(j,1)
+          tfav_bl(j)    = wstat_bl(j,25)/wstat_bl(j,1)
+          utfav_bl(j)   = (ufav_bl(j)*dxdcsi(i,1)+vfav_bl(j)*dydcsi(i,1))/csimod(i,1) ! csi tangent wall
+          vtfav_bl(j)   = (ufav_bl(j)*detadx(i,1)+vfav_bl(j)*detady(i,1))/meta(i,1)   ! csi normal
+          rhout2_bl(j)  = (wstat_bl(j,16)*dxdcsi(i,1)**2+wstat_bl(j,17)*dydcsi(i,1)**2+ &
+                          2._rkind*wstat_bl(j,19)*dxdcsi(i,1)*dydcsi(i,1))/csimod(i,1)**2
+          rhovt2_bl(j)  = (wstat_bl(j,16)*detadx(i,1)**2+wstat_bl(j,17)*detady(i,1)**2+ &
+                          2._rkind*wstat_bl(j,19)*detadx(i,1)*detady(i,1))/meta(i,1)**2
+          rhoutvt_bl(j) = (wstat_bl(j,16)*dxdcsi(i,1)*detadx(i,1)+wstat_bl(j,17)*dydcsi(i,1)*detady(i,1)+ &
+                          wstat_bl(j,19)*(dxdcsi(i,1)*detady(i,1)+dydcsi(i,1)*detadx(i,1)))/ &
+                          csimod(i,1)/meta(i,1)
       enddo
+
       dudyw  = -22._rkind*utfav_bl(1)+36._rkind*utfav_bl(2)-18._rkind*utfav_bl(3)+ 4._rkind*utfav_bl(4)
       dyw    = -22._rkind*0.000_rkind+36._rkind*delta_bl(1)-18._rkind*delta_bl(2)+ 4._rkind*delta_bl(3)
       dudyw  = dudyw / dyw
 
-      rnutil = rmutil(i)/wstat_bl(1,1)
-      rnuw   = wstat_bl(1,20)/wstat_bl(1,1)
-      chi3   = (rnutil/rnuw)**3
-      fv1    = chi3/(chi3+cv13)
-      rnut   = rnutil*fv1
-      epsi   = rnut*dudyw**2 ! dissipation ≈ production
-      eta    =(rnuw**3/epsi)**0.25
-      write(13,100) xg(i,1),eta,rnuw,epsi,rnut,dudyw
+      uvp  = rhoutvt_bl(1) -wstat_bl(1,1)*utfav_bl(1)*vtfav_bl(1)
+      rnuw = wstat_bl(1,20)/wstat_bl(1,1)
+      epsi = wstat_bl(1,57) + wstat_bl(1,58) + wstat_bl(1,59) + wstat_bl(1,60)
+
+      !uu = wstat(i,1,2) 
+      !vv = wstat(i,1,3) 
+      ucsi = 0.5_rkind*(wstat(i+1,1,2)-wstat(i-1,1,2))
+      vcsi = 0.5_rkind*(wstat(i+1,1,3)-wstat(i-1,1,3))
+      ueta =-1.5_rkind*wstat_bl(1,2)+2._rkind*wstat_bl(2,2)-0.5_rkind*wstat_bl(3,2)
+      veta =-1.5_rkind*wstat_bl(1,3)+2._rkind*wstat_bl(2,3)-0.5_rkind*wstat_bl(3,3)
+      ux = ucsi*dcsidx(i,1) + ueta*detadx(i,1)
+      vx = vcsi*dcsidx(i,1) + veta*detadx(i,1)
+      uy = ucsi*dcsidy(i,1) + ueta*detady(i,1)
+      vy = vcsi*dcsidy(i,1) + veta*detady(i,1)
+
+      sig(1,1) = wstat_bl(1,43)
+      sig(1,2) = wstat_bl(1,44)
+      sig(1,3) = wstat_bl(1,45)
+      sig(2,2) = wstat_bl(1,46)
+      sig(2,3) = wstat_bl(1,47)
+      sig(3,3) = wstat_bl(1,48)
+
+      wx=0.; wy=0.; wz=0.; uz=0.; vz=0.;
+      eps11 = sig(1,1)*ux+sig(1,2)*uy+sig(1,3)*uz
+      eps22 = sig(2,1)*vx+sig(2,2)*vy+sig(2,3)*vz
+      eps33 = sig(3,1)*wx+sig(3,2)*wy+sig(3,3)*wz 
+      eps12 = sig(1,1)*vx+sig(1,2)*(ux+vy)+sig(2,2)*uy+sig(1,3)*vz+sig(2,3)*uz
+
+      epsi = epsi - eps11 - eps22 - eps33 - eps12
+     !prod = abs(uvp*uy) 
+      if (epsi==0.) epsi=epsi+1e-9
+
+      write(13,100) xg(i,1),yg(i,1),epsi,(rnuw**3/epsi)**0.25
      enddo
      close(13)
   endif
-
-  open(13,file='POSTPRO/wake.dat',form='formatted')
-  do i=itu+1,nx,ix_out
-   call extract_bl(i)
-   do j=1,4
-       ufav_bl(j)    = wstat_bl(j,13)/wstat_bl(j,1)
-       vfav_bl(j)    = wstat_bl(j,14)/wstat_bl(j,1)
-       wfav_bl(j)    = wstat_bl(j,15)/wstat_bl(j,1)
-       tfav_bl(j)    = wstat_bl(j,25)/wstat_bl(j,1)
-       utfav_bl(j)   = (ufav_bl(j)*dxdcsi(i,1)+vfav_bl(j)*dydcsi(i,1))/csimod(i,1) ! csi tangent wall
-       vtfav_bl(j)   = (ufav_bl(j)*detadx(i,1)+vfav_bl(j)*detady(i,1))/meta(i,1)   ! csi normal
-       rhout2_bl(j)  = (wstat_bl(j,16)*dxdcsi(i,1)**2+wstat_bl(j,17)*dydcsi(i,1)**2+ &
-                       2._rkind*wstat_bl(j,19)*dxdcsi(i,1)*dydcsi(i,1))/csimod(i,1)**2
-       rhovt2_bl(j)  = (wstat_bl(j,16)*detadx(i,1)**2+wstat_bl(j,17)*detady(i,1)**2+ &
-                       2._rkind*wstat_bl(j,19)*detadx(i,1)*detady(i,1))/meta(i,1)**2
-       rhoutvt_bl(j) = (wstat_bl(j,16)*dxdcsi(i,1)*detadx(i,1)+wstat_bl(j,17)*dydcsi(i,1)*detady(i,1)+ &
-                       wstat_bl(j,19)*(dxdcsi(i,1)*detady(i,1)+dydcsi(i,1)*detadx(i,1)))/ &
-                       csimod(i,1)/meta(i,1)
-   enddo
-
-   dudyw  = -22._rkind*utfav_bl(1)+36._rkind*utfav_bl(2)-18._rkind*utfav_bl(3)+ 4._rkind*utfav_bl(4)
-   dyw    = -22._rkind*0.000_rkind+36._rkind*delta_bl(1)-18._rkind*delta_bl(2)+ 4._rkind*delta_bl(3)
-   dudyw  = dudyw / dyw
-
-   uvp  = rhoutvt_bl(1) -wstat_bl(1,1)*utfav_bl(1)*vtfav_bl(1)
-   rnuw = wstat_bl(1,20)/wstat_bl(1,1)
-   prod = abs(uvp*dudyw) 
-   epsi = wstat_bl(1,57) + wstat_bl(1,58) + wstat_bl(1,59) + wstat_bl(1,60)
-
-   ucsi = 0.5_rkind*(wstat(i+1,1,2)-wstat(i-1,1,2)) ! using wstat since j=1
-   vcsi = 0.5_rkind*(wstat(i+1,1,3)-wstat(i-1,1,3)) ! using wstat since j=1
-   ueta =-1.5_rkind*wstat_bl(1,2)+2._rkind*wstat_bl(2,2)-0.5_rkind*wstat_bl(3,2)
-   veta =-1.5_rkind*wstat_bl(1,3)+2._rkind*wstat_bl(2,3)-0.5_rkind*wstat_bl(3,3)
-   ux = ucsi*dcsidx(i,1) + ueta*detadx(i,1)
-   vx = vcsi*dcsidx(i,1) + veta*detadx(i,1)
-   uy = ucsi*dcsidy(i,1) + ueta*detady(i,1)
-   vy = vcsi*dcsidy(i,1) + veta*detady(i,1)
-
-   sig(1,1) = wstat_bl(1,43)
-   sig(1,2) = wstat_bl(1,44)
-   sig(1,3) = wstat_bl(1,45)
-   sig(2,2) = wstat_bl(1,46)
-   sig(2,3) = wstat_bl(1,47)
-   sig(3,3) = wstat_bl(1,48)
-
-   wx=0.; wy=0.; wz=0.; uz=0.; vz=0.;
-   eps11 = sig(1,1)*ux+sig(1,2)*uy+sig(1,3)*uz
-   eps22 = sig(2,1)*vx+sig(2,2)*vy+sig(2,3)*vz
-   eps33 = sig(3,1)*wx+sig(3,2)*wy+sig(3,3)*wz 
-   eps12 = sig(1,1)*vx+sig(1,2)*(ux+vy)+sig(2,2)*uy+sig(1,3)*vz+sig(2,3)*uz
-
-   epsi = epsi - eps11 - eps22 - eps33 - eps12
-
-   write(13,100) xg(i,1),yg(i,1),epsi,(rnuw**3/epsi)**0.25
-  enddo
-  close(13)
 
   open(10,file='POSTPRO/bl_pressure.dat',form='formatted')
   do i=ite+1,ile-1,ix_out
@@ -287,6 +325,7 @@ module postpro_airfoil
     endif
    enddo
 
+   print*,'u0, l0: ',u0, l0
    print*,'jvort, j99: ',jvort, j99
    !-----------------------------------------------------------
    !-----------------------------------------------------------
@@ -394,12 +433,12 @@ module postpro_airfoil
    call extract_bl(i)
 
    do j=1,npoints_bl
-       ufav_bl(j)  = wstat_bl(j,13)/wstat_bl(j,1)
-       vfav_bl(j)  = wstat_bl(j,14)/wstat_bl(j,1)
-       wfav_bl(j)  = wstat_bl(j,15)/wstat_bl(j,1)
-       tfav_bl(j)  = wstat_bl(j,25)/wstat_bl(j,1)
-       utfav_bl(j) = (ufav_bl(j)*dxdcsi(i,1)+vfav_bl(j)*dydcsi(i,1))/csimod(i,1) ! csi tangent wall
-       vtfav_bl(j) = (ufav_bl(j)*detadx(i,1)+vfav_bl(j)*detady(i,1))/meta(i,1) ! csi normal wall
+      ufav_bl(j)  = wstat_bl(j,13)/wstat_bl(j,1)
+      vfav_bl(j)  = wstat_bl(j,14)/wstat_bl(j,1)
+      wfav_bl(j)  = wstat_bl(j,15)/wstat_bl(j,1)
+      tfav_bl(j)  = wstat_bl(j,25)/wstat_bl(j,1)
+      utfav_bl(j) = (ufav_bl(j)*dxdcsi(i,1)+vfav_bl(j)*dydcsi(i,1))/csimod(i,1) ! csi tangent wall
+      vtfav_bl(j) = (ufav_bl(j)*detadx(i,1)+vfav_bl(j)*detady(i,1))/meta(i,1) ! csi normal wall
    enddo
 
    dudyw  = -22._rkind*utfav_bl(1)+36._rkind*utfav_bl(2)-18._rkind*utfav_bl(3)+4._rkind*utfav_bl(4)
@@ -431,7 +470,6 @@ module postpro_airfoil
 
    prms = sqrt(abs(wstat_bl(1,11)-wstat_bl(1,5)**2))/pdyn
    ppw   = rhow*ttw 
-
    cpcoeff = (ppw-p0)/pdyn
 
    !-----------------------------------------------------------
@@ -446,7 +484,6 @@ module postpro_airfoil
     vorty2 = wstat_bl(j,23)
     vortz2 = wstat_bl(j,24)
     omag = sqrt(vortx2+vorty2+vortz2)
-    !print*,'omag: ',omag,vortx2,vorty2,vortz2,omag_factor*u0/l0
     if (omag < omag_factor*u0/l0) then
      jvort = j
      exit
@@ -462,8 +499,6 @@ module postpro_airfoil
      exit
     endif
    enddo
-
-   print*,'u0, l0: ',u0, l0
    print*,'jvort, j99: ',jvort, j99
    !-----------------------------------------------------------
    !-----------------------------------------------------------
@@ -666,7 +701,7 @@ module postpro_airfoil
     !              19  20  21  22
                   u2p,v2p,w2p,uvp, &
     !              23      24     25
-                  rhormsp,trmsp,prms/p0
+                  rhormsp,trmsp,prms/pdyn
    enddo
    close(15)
   enddo

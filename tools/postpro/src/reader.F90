@@ -71,7 +71,7 @@ contains
         nstatloc = size(ixstat)
         call post_cfg%get("postpro","stat_0_1",stat_0_1)
         call post_cfg%get("postpro","npoints_bl",npoints_bl)
-        allocate(delta_bl(npoints_bl-1))
+        allocate(delta_bl(npoints_bl))
         call post_cfg%get("postpro","ix_ramp_skip",ix_ramp_skip)
         call post_cfg%get("postpro","ix_out",ix_out)
 
@@ -189,9 +189,8 @@ contains
         enddo
         enddo
 
-        !delta_bl(1:npoints_bl-1) = abs(yg(1,2:npoints_bl)-yg(1,1))
         delta_bl = 0._rkind
-        do j=1,npoints_bl-1
+        do j=1,npoints_bl
          deltax2     = (xg(1,j+1)-xg(1,j))**2 
          deltay2     = (yg(1,j+1)-yg(1,j))**2 
          if (j==1) then
@@ -326,31 +325,6 @@ contains
         do ii=1,n_vars
             i_var = plot3d_vars(ii)
             wstattemp(:,:) = wstat(:,:,i_var)
-            !REMOVE if(grid_dim == 1) then
-            !REMOVE     wstattemp(:,:) = wstat(i_var,:,:)
-            !REMOVE elseif(grid_dim == 2) then
-            !REMOVE     wstattemp(:,:) = wstat(:,:,i_var)
-            !REMOVE     if(i_var == 2) then
-            !REMOVE         do j=1,ny
-            !REMOVE         do i=1,nx
-            !REMOVE             num = wstat(i,j,3)*(dxdetan(i,j)/dcsidxn(i,j)-1._rkind)
-            !REMOVE             den = dcsidyn(i,j)*dxdetan(i,j)/dcsidxn(i,j)-dydetan(i,j)
-            !REMOVE             vtemp(i,j) = num/den
-            !REMOVE             wstattemp(i,j) = (wstat(i,j,3)-vtemp(i,j)*dydetan(i,j))/dxdetan(i,j)
-            !REMOVE         enddo
-            !REMOVE         enddo
-            !REMOVE     endif
-            !REMOVE     if(i_var == 3) then
-            !REMOVE         do j=1,ny
-            !REMOVE         do i=1,nx
-            !REMOVE             num = wstat(i,j,3)*(dxdetan(i,j)/dcsidxn(i,j)-1._rkind)
-            !REMOVE             den = dcsidyn(i,j)*dxdetan(i,j)/dcsidxn(i,j)-dydetan(i,j)
-            !REMOVE             vtemp(i,j) = num/den
-            !REMOVE             wstattemp(i,j) = vtemp(i,j)
-            !REMOVE         enddo
-            !REMOVE         enddo
-            !REMOVE     endif
-            !REMOVE endif
             write(123) wstattemp
         enddo
         close(123)
@@ -360,7 +334,6 @@ contains
         real(rkind) :: vx,vy,normx,normy,nmod
         real(rkind) :: tol=1e-9
         integer :: i
-        !delta_bl(:) = 0.00001_rkind
         ! find normal (counterclockwise so it is external)
         vx = xg(min(i+1,nx),1)-xg(max(i-1,1),1)
         vy = yg(min(i+1,nx),1)-yg(max(i-1,1),1)
@@ -379,7 +352,6 @@ contains
         points_bl(1,:) = [xg(i,1),yg(i,1)]
         do i_bl=2,npoints_bl
             points_bl(i_bl,:) = [xg(i,1),yg(i,1)] + delta_bl(i_bl-1)*[normx,normy]
-            !print*,'PBL: ',i_bl, points_bl(i_bl,:)
         enddo
         !print*,'points_bl(:,1): ',points_bl(:,1)
         !print*,'points_bl(:,2): ',points_bl(:,2)
@@ -411,8 +383,6 @@ contains
                 j2     = ny 
                 call solid_search(i1,i2,j1,j2,xnf(:,1:nx,1:ny), &
                                   istart,iend,ny,0,xst,ii,jj,ierr,iprint)
-            else
-                !print*,'tank xst,ii,jj:',xst,ii,jj
             endif
             i_loc = ii
             j_loc = jj

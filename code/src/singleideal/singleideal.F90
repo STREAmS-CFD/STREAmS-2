@@ -1158,7 +1158,10 @@ contains
         if (ii == 5) aux_list_name(i) = "h"
         if (ii == 6) aux_list_name(i) = "T"
         if (ii == 7) aux_list_name(i) = "viscosity"
-        if (ii > 7) call MPI_ABORT(mpi_comm_world,-3,mpi_err)
+        if (ii == 8) aux_list_name(i) = "ducros"
+        if (ii == 9) aux_list_name(i) = "omegamod"
+        if (ii == 10) aux_list_name(i) = "divo3"
+        if (ii > 10) call MPI_ABORT(mpi_comm_world,-3,mpi_err)
       enddo
       do i=1,n_add_list
         ii = add_list(i)
@@ -4092,8 +4095,8 @@ contains
     real(rkind), intent(in) :: d99,mach,theta,pr,spr,rfac,gam,s2tinf,vtexp
     real(rkind), intent(inout) :: retau,retheta
     real(rkind), intent(inout) :: cf,ch,th,mtau,deltav,redelta
-    real(rkind), dimension(n+1), intent(in) :: ye
-    real(rkind), dimension(n+1), intent(out) :: ue,te,rhoe,mue
+    real(rkind), dimension(n), intent(in) :: ye
+    real(rkind), dimension(n), intent(out) :: ue,te,rhoe,mue
     logical, intent(in) :: visc_exp
 
     integer, parameter :: ny = 10000
