@@ -1,4 +1,4 @@
-Welcome to STREAmS-2 repository! 
+Welcome to STREAmS-2 repository!
 
 STREAmS performs Direct Numerical Simulations of compressible turbulent flows solving the unsteady, fully compressible Navier-Stokes equations for a perfect gas. 
 
