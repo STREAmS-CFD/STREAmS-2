@@ -1,0 +1,26 @@
+name: Mirror to GitLab codehub hlrs de
+
+on:
+  push:
+    branches:
+      - main  # o qualsiasi branch desideri sincronizzare
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GITLAB_HLRS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan codehub.hlrs.de >> ~/.ssh/known_hosts
+
+      - name: Mirror to GitLab
+        run: |
+          git remote add gitlab_hlrs git@codehub.hlrs.de:coes/excellerat-p2/uc-6/flew.git
+          git push --mirror gitlab_hlrs
+
