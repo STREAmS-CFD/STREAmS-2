@@ -24,5 +24,5 @@ jobs:
       - name: Mirror to GitLab
         run: |
           git remote add gitlab_hlrs git@codehub.hlrs.de:coes/excellerat-p2/uc-6/flew.git
-          git push --mirror gitlab_hlrs
+          git push gitlab_hlrs --all --tags --prune
 
