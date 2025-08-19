@@ -1,0 +1,40 @@
+image: ubuntu:24.10
+
+variables:
+  TZ: Europe/Rome
+  DEBIAN_FRONTEND: noninteractive 
+
+stages:
+  - make
+  - run
+
+.default-before:
+  before_script:
+    - apt-get update
+    - apt-get install -y openmpi-bin openmpi-common libopenmpi-dev gcc g++ gfortran make vim python3-dev python3
+
+make:
+  stage: make
+  extends: .default-before
+  script:
+    - cd code
+    - cp make-templates/makefile.inc.linux64_cpu_gnu makefile.inc
+    - make
+  artifacts:
+    paths:
+      - code/streams_2.exe
+    expire_in: 1 hour
+
+run:
+  stage: run
+  extends: .default-before
+  script:
+    - cd tests
+    - cp -r ../examples/* .
+    - python3 run_all_tests.py
+  dependencies:
+    - make
+  artifacts:
+    paths:
+      - tests/tests.out
+    expire_in: 1 hour
