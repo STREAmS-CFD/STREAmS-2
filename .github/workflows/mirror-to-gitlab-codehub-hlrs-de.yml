@@ -27,5 +27,6 @@ jobs:
           git push gitlab_hlrs --all --prune
           git push gitlab_hlrs --tags
           git mv README_gitlab.md README.md
+          git pull gitlab_hlrs
           git push gitlab_hlrs
 
