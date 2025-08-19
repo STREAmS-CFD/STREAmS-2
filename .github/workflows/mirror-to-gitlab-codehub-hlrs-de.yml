@@ -24,9 +24,7 @@ jobs:
       - name: Mirror to GitLab
         run: |
           git remote add gitlab_hlrs git@codehub.hlrs.de:coes/excellerat-p2/uc-6/streams.git
+          git mv README_gitlab.md README.md
           git push gitlab_hlrs --all --prune
           git push gitlab_hlrs --tags
-          git mv README_gitlab.md README.md
-          git pull gitlab_hlrs
-          git push gitlab_hlrs
 
